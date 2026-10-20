@@ -414,6 +414,11 @@ final class NativeNavigationHost {
               pendingPush == nil, pushCompletion == nil, popCompletion == nil,
               let navigation = (externalNavigation ?? regularNavigation ?? self.navigation) as? NativeNavigationController else { result(false); return }
         if managedRoutes.count <= 1 {
+            // Preserve the root's actual chrome policy before UIKit takes
+            // ownership of pushes. Interactive back must hide a native bar
+            // alongside the gesture when returning to a custom Flutter header,
+            // rather than waiting for Dart to reveal the root after didShow.
+            content.hidesNativeNavigationBar = navigation.isNavigationBarHidden
             managedRoutes = [NativeRouteState(identifier: parent, content: content, page: page)]
             managedNavigation = navigation
             navigation.usesManagedRoutes = true

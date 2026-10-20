@@ -30,3 +30,7 @@ The requested red custom header now extends its background across the native Duo
 Reviewed the expanded landscape Duo initial portfolio, bottom scroll position, drawer, Preferences push and return after this change. MCP still addresses the inactive cover in expanded mode, so debugger callbacks drove those interactions and simctl captured display 3. Also reviewed regular iPhone rendering. The final header change has not been rechecked in folded posture.
 
 The regular iPhone header also fills the top safe area, with light status icons. Drawer status styling switches to dark over its light background. Reviewed initial and scrolled regular iPhone states plus the open drawer, and installed the update on the physical phone.
+
+## Native return transition
+
+Before the first managed push, the native host now records whether the root navigation bar is hidden. UIKit applies that policy during the interactive return instead of briefly showing a native title over the custom header and waiting for Flutter's route update. Reviewed a recording of the native Back-button return on regular iPhone: the detail title exits before the red header is fully revealed. Simulator-injected swipes did not initiate a native pop, so interactive completion/cancellation remains unverified.
