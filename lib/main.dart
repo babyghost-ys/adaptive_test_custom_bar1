@@ -438,32 +438,35 @@ class Portfolio extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: List.generate(
           5,
-          (i) => GestureDetector(
-            onTap: () => context.read<InvestmentBloc>().add(RangeSelected(i)),
-            child: Semantics(
-              button: true,
-              selected: i == state.range,
-              label: [
-                'One day',
-                'One week',
-                'One month',
-                'One year',
-                'All time',
-              ][i],
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 17,
-                  vertical: 10,
-                ),
-                decoration: BoxDecoration(
-                  color: i == state.range ? ink : Colors.transparent,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: label(
-                  ['1D', '1W', '1M', '1Y', 'ALL'][i],
-                  size: 12,
-                  color: i == state.range ? Colors.white : muted,
-                  weight: FontWeight.w600,
+          (i) => Expanded(
+            child: GestureDetector(
+              onTap: () => context.read<InvestmentBloc>().add(RangeSelected(i)),
+              child: Semantics(
+                button: true,
+                selected: i == state.range,
+                label: [
+                  'One day',
+                  'One week',
+                  'One month',
+                  'One year',
+                  'All time',
+                ][i],
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 0,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: i == state.range ? ink : Colors.transparent,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  alignment: Alignment.center,
+                  child: label(
+                    ['1D', '1W', '1M', '1Y', 'ALL'][i],
+                    size: 12,
+                    color: i == state.range ? Colors.white : muted,
+                    weight: FontWeight.w600,
+                  ),
                 ),
               ),
             ),

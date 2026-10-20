@@ -412,8 +412,16 @@ final class SearchTabView: NSObject, FlutterPlatformView, UITabBarControllerDele
                 }
             }
         }
+        // UIKit can already shrink the hosted Flutter surface beside Duo's
+        // control rail. Only report the safe area still inside that surface.
+        let flutterView = pages.indices.contains(tabs.selectedIndex)
+            ? pages[tabs.selectedIndex].flutter?.view : nil
+        let frame = flutterView.map { $0.convert($0.bounds, to: window) } ?? window.bounds
+        let safeFrame = window.bounds.inset(by: window.safeAreaInsets)
         let result: [String: Any] = [
-            "safeTop": Double(window.safeAreaInsets.top),
+            "safeLeft": Double(max(0, safeFrame.minX - frame.minX)),
+            "safeRight": Double(max(0, frame.maxX - safeFrame.maxX)),
+            "safeTop": Double(max(0, safeFrame.minY - frame.minY)),
             "bottom": Double(bottom), "top": top.map { Double($0) } as Any? ?? NSNull(),
             "synchronousSearchChrome": true, "regions": []
         ]

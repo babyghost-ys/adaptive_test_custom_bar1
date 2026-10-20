@@ -28,6 +28,8 @@ class _SearchTabsState extends State<IOS26SearchTabScaffold> {
   MethodChannel? _channel;
   double _bottomInset = 0;
   double _safeTop = 0;
+  double? _safeLeft;
+  double? _safeRight;
   double? _searchTopInset;
   double _scrollOffset = 0;
 
@@ -97,6 +99,8 @@ class _SearchTabsState extends State<IOS26SearchTabScaffold> {
         final data = call.arguments as Map;
         final bottom = (data['bottom'] as num).toDouble();
         final safeTop = (data['safeTop'] as num?)?.toDouble() ?? 0;
+        final safeLeft = (data['safeLeft'] as num?)?.toDouble();
+        final safeRight = (data['safeRight'] as num?)?.toDouble();
         // Reports for other tabs omit the search inset. Retain its last
         // measurement so the next search frame does not start at a different
         // origin while UIKit is still presenting the field and keyboard.
@@ -106,12 +110,16 @@ class _SearchTabsState extends State<IOS26SearchTabScaffold> {
         if (_ready &&
             bottom == _bottomInset &&
             top == _searchTopInset &&
-            safeTop == _safeTop)
+            safeTop == _safeTop &&
+            safeLeft == _safeLeft &&
+            safeRight == _safeRight)
           return;
         setState(() {
           _ready = true;
           _bottomInset = bottom;
           _safeTop = safeTop;
+          _safeLeft = safeLeft;
+          _safeRight = safeRight;
           _searchTopInset = top;
         });
     }
@@ -153,6 +161,8 @@ class _SearchTabsState extends State<IOS26SearchTabScaffold> {
     final metrics = MediaQuery.of(context);
     final isSearch = _searchSelected;
     final padding = metrics.padding.copyWith(
+      left: _safeLeft ?? metrics.padding.left,
+      right: _safeRight ?? metrics.padding.right,
       top: isSearch
           ? (_searchTopInset ?? metrics.padding.top)
           : math.max(metrics.padding.top, _safeTop),

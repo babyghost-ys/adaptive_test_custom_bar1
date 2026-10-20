@@ -16,3 +16,9 @@ Run with `flutter run`. iOS bundle ID: `com.peterleung.meridian`.
 Built and ran on iPhone 17 Pro (iOS 27.0) and iPhone Duo (iOS 27.1). Inspected initial and scrolled layouts, drawer/account selection, native tabs, asset details, watchlist changes, and native back navigation. The copied package now restores the window top safe area when native tabs host a custom header.
 
 Expanded Duo landscape was also inspected with the drawer open and Activity at initial and bottom scroll positions. The simulator input tool targets the inactive cover display in this posture, so Flutter debugger callbacks controlled the active inner display for this review. Activity and menu rows now have the required Material ancestor. No test suites were run.
+
+## Folded Duo correction
+
+The native tab host can already narrow Flutter's surface beside the Duo rail. Safe-area reporting now measures only the remaining inset inside that surface, avoiding a second right-hand reservation. Portfolio range controls divide available width instead of overflowing with fixed padding.
+
+Rechecked all four tabs, drawer, scrolled holdings, and native detail/back navigation on folded Duo, plus the regular iPhone initial and scrolled portfolio. Installed the signed update on the physical iPhone. Expanded posture was not rechecked after this correction: the current MCP and supported simctl commands expose no fold-state switch. Earlier expanded screenshots predate this change.
