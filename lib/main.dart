@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -103,6 +104,52 @@ class _InvestmentHomeState extends State<InvestmentHome> {
     super.dispose();
   }
 
+  Future<void> _openAccounts(
+    BuildContext context,
+    InvestmentState state,
+    double width,
+  ) async {
+    if (defaultTargetPlatform != TargetPlatform.iOS) {
+      drawerKey.currentState?.openDrawer();
+      return;
+    }
+    final selection =
+        await const MethodChannel(
+          'adaptive_platform_ui/navigation',
+        ).invokeMethod<String>('presentDrawer', {
+          'width': math.min(320, width * 0.82),
+          'title': 'MERIDIAN',
+          'subtitle': 'Demo investing',
+          'selected': state.account,
+          'items': [
+            {
+              'id': 'account:0',
+              'title': 'All accounts',
+              'symbol': 'square.grid.2x2.fill',
+            },
+            {'id': 'account:1', 'title': 'Personal', 'symbol': 'person'},
+            {'id': 'account:2', 'title': 'Retirement', 'symbol': 'leaf'},
+            {'id': 'account:3', 'title': 'Tax-free', 'symbol': 'shield'},
+            {
+              'id': 'preferences',
+              'title': 'Preferences',
+              'symbol': 'slider.horizontal.3',
+            },
+            {'id': 'statements', 'title': 'Statements', 'symbol': 'doc.text'},
+          ],
+        });
+    if (!mounted || selection == null) return;
+    if (selection.startsWith('account:')) {
+      context.read<InvestmentBloc>().add(
+        AccountSelected(int.parse(selection.split(':').last)),
+      );
+    } else if (selection == 'preferences') {
+      openPage(context, 'Preferences', const PreferencesContent());
+    } else if (selection == 'statements') {
+      openPage(context, 'Statements', const StatementsContent());
+    }
+  }
+
   @override
   Widget build(
     BuildContext context,
@@ -125,13 +172,8 @@ class _InvestmentHomeState extends State<InvestmentHome> {
                 label: menuOpen ? 'Close accounts' : 'Open accounts',
                 tintColor: Colors.white,
                 spacerAfter: ToolbarSpacerType.flexible,
-                onPressed: () {
-                  if (menuOpen) {
-                    drawerKey.currentState?.closeDrawer();
-                  } else {
-                    drawerKey.currentState?.openDrawer();
-                  }
-                },
+                onPressed: () =>
+                    _openAccounts(context, state, constraints.maxWidth),
               ),
               AdaptiveAppBarAction(
                 title: 'PL',
@@ -141,19 +183,21 @@ class _InvestmentHomeState extends State<InvestmentHome> {
               ),
             ],
           ),
-          tabBarHidden: menuOpen,
+          drawerScrimColor: const Color(0x73000000),
           onDrawerChanged: (open) => setState(() => menuOpen = open),
+          drawerEnableOpenDragGesture:
+              defaultTargetPlatform != TargetPlatform.iOS,
           drawer: Drawer(
-            backgroundColor: paper,
+            elevation: 32,
+            shadowColor: const Color(0xCC000000),
+            backgroundColor: const Color(0xFFEEEDE7),
+            shape: const RoundedRectangleBorder(),
             width: math.min(320, constraints.maxWidth * 0.82),
-            child: ValueListenableBuilder<double?>(
-              valueListenable: navigation.navigationBarBottom,
-              builder: (context, top, _) => Padding(
-                padding: EdgeInsets.only(
-                  top: top ?? MediaQuery.paddingOf(context).top,
-                ),
+            child: AnnotatedRegion<SystemUiOverlayStyle>(
+              value: SystemUiOverlayStyle.dark,
+              child: ColoredBox(
+                color: const Color(0xFFEEEDE7),
                 child: SafeArea(
-                  top: false,
                   child: AccountMenu(
                     state: state,
                     onSelect: (i) {

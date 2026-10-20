@@ -91,7 +91,9 @@ final class NativeNavigationContent: UIViewController {
     }
     var hidesNativeNavigationBar = false
     override var shouldAutomaticallyForwardAppearanceMethods: Bool { false }
-    override var childForStatusBarStyle: UIViewController? { flutter }
+    var drawerStatusBarStyle: UIStatusBarStyle?
+    override var childForStatusBarStyle: UIViewController? { drawerStatusBarStyle == nil ? flutter : nil }
+    override var preferredStatusBarStyle: UIStatusBarStyle { drawerStatusBarStyle ?? super.preferredStatusBarStyle }
     override var childForStatusBarHidden: UIViewController? { flutter }
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
         flutter?.supportedInterfaceOrientations ?? super.supportedInterfaceOrientations
@@ -234,7 +236,7 @@ final class NativeNavigationContent: UIViewController {
     }
 }
 
-private final class NativeNavigationController: UINavigationController, UINavigationControllerDelegate {
+private final class NativeNavigationController: UINavigationController, UINavigationControllerDelegate, UIGestureRecognizerDelegate {
     private let navigationSafeAreaBackground: UIView = {
         let background = UIView()
         background.isUserInteractionEnabled = false
@@ -256,7 +258,16 @@ private final class NativeNavigationController: UINavigationController, UINaviga
     private func updatePopGestures() {
         let enabled = usesManagedRoutes && routePopEnabled
         interactivePopGestureRecognizer?.isEnabled = enabled
-        if #available(iOS 26.0, *) { interactiveContentPopGestureRecognizer?.isEnabled = enabled }
+        if enabled { interactivePopGestureRecognizer?.delegate = self }
+        if #available(iOS 26.0, *) {
+            interactiveContentPopGestureRecognizer?.isEnabled = enabled
+            if enabled { interactiveContentPopGestureRecognizer?.delegate = self }
+        }
+    }
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard usesManagedRoutes, routePopEnabled, viewControllers.count > 1,
+              !transitioningBetweenRoutes, transitionCoordinator == nil else { return false }
+        return true
     }
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -500,6 +511,21 @@ final class NativeNavigationHost {
             guard let host = installed else { result(false); return }
             let args = call.arguments as? [String: Any] ?? [:]
             switch call.method {
+            case "presentDrawer":
+                guard host.accountDrawer == nil, let window = host.window else { result(nil); return }
+                let drawerContent = host.content
+                if window.safeAreaInsets.top > 0 {
+                    drawerContent.drawerStatusBarStyle = .darkContent
+                    drawerContent.setNeedsStatusBarAppearanceUpdate()
+                }
+                let drawer = NativeAccountDrawer(parameters: args) { [weak host] selection in
+                    drawerContent.drawerStatusBarStyle = nil
+                    drawerContent.setNeedsStatusBarAppearanceUpdate()
+                    host?.accountDrawer = nil
+                    result(selection)
+                }
+                host.accountDrawer = drawer
+                drawer.present(in: window)
             case "preparePush": host.prepareNativePush(args, result: result)
             case "preparePop": host.prepareNativePop(args); result(nil)
             case "syncStack": host.synchronizeNativeStack(args, result: result)
@@ -927,6 +953,7 @@ final class NativeNavigationHost {
 
     /// Whether a Flutter sheet or dialog covers the current page.
     private var covered = false
+    private var accountDrawer: NativeAccountDrawer?
 
     /// UIKit resets a bar's tint adjustment when first responders change
     /// (a text field in the sheet taking focus), so this is reapplied on
@@ -1129,7 +1156,12 @@ final class NativeNavigationHost {
             if let page { remember(page) }
         } else {
             pendingBackPage = nil
+            // A scaffold may reuse one toolbar anchor across all regular tabs.
+            // Keep it attached while Dart updates the selected title; a new
+            // tab-specific anchor can still replace it when one is supplied.
             page = contentPages[ObjectIdentifier(next)]?.page
+                ?? (previousExternal == nil && previousPage?.nativeNeedsBack == false ? previousPage : nil)
+            if let page { remember(page) }
         }
         tabs?.setContentScrollView(next.scroll, for: .bottom)
         if tabs != nil { navigation.setNavigationBarHidden(true, animated: false) }
