@@ -103,6 +103,10 @@ class _InvestmentHomeState extends State<InvestmentHome> {
             final wide = constraints.maxWidth >= 620;
             return AdaptiveScaffold(
               backgroundColor: paper,
+              customHeaderBackgroundColor: menuOpen
+                  ? Color.alphaBlend(Colors.black54, red)
+                  : red,
+              customHeaderHeight: 64,
               scaffoldKey: drawerKey,
               useFixedToolbar: false,
               tabBarHidden: menuOpen,
@@ -110,30 +114,33 @@ class _InvestmentHomeState extends State<InvestmentHome> {
               drawer: Drawer(
                 backgroundColor: paper,
                 width: math.min(320, constraints.maxWidth * 0.82),
-                child: SafeArea(
-                  child: Column(
-                    children: [
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: IconButton(
-                          tooltip: 'Close accounts',
-                          icon: const Icon(Icons.close),
-                          onPressed: () =>
-                              drawerKey.currentState?.closeDrawer(),
+                child: AnnotatedRegion<SystemUiOverlayStyle>(
+                  value: SystemUiOverlayStyle.dark,
+                  child: SafeArea(
+                    child: Column(
+                      children: [
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: IconButton(
+                            tooltip: 'Close accounts',
+                            icon: const Icon(Icons.close),
+                            onPressed: () =>
+                                drawerKey.currentState?.closeDrawer(),
+                          ),
                         ),
-                      ),
-                      Expanded(
-                        child: AccountMenu(
-                          state: state,
-                          onSelect: (i) {
-                            context.read<InvestmentBloc>().add(
-                              AccountSelected(i),
-                            );
-                            drawerKey.currentState?.closeDrawer();
-                          },
+                        Expanded(
+                          child: AccountMenu(
+                            state: state,
+                            onSelect: (i) {
+                              context.read<InvestmentBloc>().add(
+                                AccountSelected(i),
+                              );
+                              drawerKey.currentState?.closeDrawer();
+                            },
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -165,90 +172,99 @@ class _InvestmentHomeState extends State<InvestmentHome> {
                   ),
                 ],
               ),
-              body: SafeArea(
-                bottom: false,
-                child: Column(
-                  children: [
-                    AnnotatedRegion<SystemUiOverlayStyle>(
-                      value: SystemUiOverlayStyle.dark,
-                      child: Container(
-                        height: 64,
-                        color: red,
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        child: Row(
-                          children: [
-                            IconButton(
-                              tooltip: 'Open accounts',
-                              onPressed: () =>
-                                  drawerKey.currentState?.openDrawer(),
-                              icon: const Icon(
-                                Icons.menu_rounded,
+              body: Builder(
+                builder: (context) => SafeArea(
+                  top: false,
+                  bottom: false,
+                  child: Column(
+                    children: [
+                      AnnotatedRegion<SystemUiOverlayStyle>(
+                        value: MediaQuery.paddingOf(context).top > 0
+                            ? SystemUiOverlayStyle.light
+                            : SystemUiOverlayStyle.dark,
+                        child: Container(
+                          height: 64 + MediaQuery.paddingOf(context).top,
+                          color: red,
+                          padding: EdgeInsets.only(
+                            left: 12,
+                            right: 12,
+                            top: MediaQuery.paddingOf(context).top,
+                          ),
+                          child: Row(
+                            children: [
+                              IconButton(
+                                tooltip: 'Open accounts',
+                                onPressed: () =>
+                                    drawerKey.currentState?.openDrawer(),
+                                icon: const Icon(
+                                  Icons.menu_rounded,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              label(
+                                [
+                                  'Portfolio',
+                                  'Markets',
+                                  'Watchlist',
+                                  'Activity',
+                                ][state.tab],
+                                size: 21,
                                 color: Colors.white,
+                                weight: FontWeight.w600,
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            label(
-                              [
-                                'Portfolio',
-                                'Markets',
-                                'Watchlist',
-                                'Activity',
-                              ][state.tab],
-                              size: 21,
-                              color: Colors.white,
-                              weight: FontWeight.w600,
-                            ),
-                            const Spacer(),
-                            if (wide)
-                              Padding(
-                                padding: const EdgeInsets.only(right: 20),
-                                child: label(
-                                  'MERIDIAN',
-                                  size: 13,
-                                  color: Colors.white70,
-                                  weight: FontWeight.w700,
+                              const Spacer(),
+                              if (wide)
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 20),
+                                  child: label(
+                                    'MERIDIAN',
+                                    size: 13,
+                                    color: Colors.white70,
+                                    weight: FontWeight.w700,
+                                  ),
                                 ),
-                              ),
-                            Semantics(
-                              button: true,
-                              label: 'Profile',
-                              child: GestureDetector(
-                                onTap: () => openPage(
-                                  context,
-                                  'Profile',
-                                  const ProfileContent(),
-                                ),
-                                child: const CircleAvatar(
-                                  radius: 17,
-                                  backgroundColor: Color(0xFFD2626D),
-                                  child: Text(
-                                    'PL',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w600,
+                              Semantics(
+                                button: true,
+                                label: 'Profile',
+                                child: GestureDetector(
+                                  onTap: () => openPage(
+                                    context,
+                                    'Profile',
+                                    const ProfileContent(),
+                                  ),
+                                  child: const CircleAvatar(
+                                    radius: 17,
+                                    backgroundColor: Color(0xFFD2626D),
+                                    child: Text(
+                                      'PL',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
                                   ),
                                 ),
                               ),
-                            ),
-                            const SizedBox(width: 8),
+                              const SizedBox(width: 8),
+                            ],
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: IndexedStack(
+                          index: state.tab,
+                          children: [
+                            Portfolio(state: state),
+                            const Markets(),
+                            Watchlist(state: state),
+                            const Activity(),
                           ],
                         ),
                       ),
-                    ),
-                    Expanded(
-                      child: IndexedStack(
-                        index: state.tab,
-                        children: [
-                          Portfolio(state: state),
-                          const Markets(),
-                          Watchlist(state: state),
-                          const Activity(),
-                        ],
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             );
@@ -440,6 +456,7 @@ class Portfolio extends StatelessWidget {
           5,
           (i) => Expanded(
             child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
               onTap: () => context.read<InvestmentBloc>().add(RangeSelected(i)),
               child: Semantics(
                 button: true,
@@ -451,21 +468,25 @@ class Portfolio extends StatelessWidget {
                   'One year',
                   'All time',
                 ][i],
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 0,
-                    vertical: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    color: i == state.range ? ink : Colors.transparent,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  alignment: Alignment.center,
-                  child: label(
-                    ['1D', '1W', '1M', '1Y', 'ALL'][i],
-                    size: 12,
-                    color: i == state.range ? Colors.white : muted,
-                    weight: FontWeight.w600,
+                child: Center(
+                  heightFactor: 1,
+                  child: Container(
+                    constraints: const BoxConstraints(maxWidth: 64),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 0,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: i == state.range ? ink : Colors.transparent,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    alignment: Alignment.center,
+                    child: label(
+                      ['1D', '1W', '1M', '1Y', 'ALL'][i],
+                      size: 12,
+                      color: i == state.range ? Colors.white : muted,
+                      weight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ),

@@ -50,6 +50,9 @@ final class SearchTabView: NSObject, FlutterPlatformView, UITabBarControllerDele
     private var searchIndex = -1
     private var lastNotifiedIndex = -1
     private var previousContentIndex = 0
+    private let headerExtension = UIView()
+    private var headerHeight: CGFloat = 0
+    private var headerColor: UIColor?
     private var hidden = false
     private var disposed = false
     private var layingOut = false
@@ -231,6 +234,14 @@ final class SearchTabView: NSObject, FlutterPlatformView, UITabBarControllerDele
                                          green: CGFloat((argb >> 8) & 255) / 255,
                                          blue: CGFloat(argb & 255) / 255,
                                          alpha: CGFloat((argb >> 24) & 255) / 255)
+        }
+        headerHeight = CGFloat((args["headerHeight"] as? NSNumber)?.doubleValue ?? 0)
+        headerColor = (args["headerColor"] as? NSNumber).map { value in
+            let argb = value.int64Value
+            return UIColor(red: CGFloat((argb >> 16) & 255) / 255,
+                           green: CGFloat((argb >> 8) & 255) / 255,
+                           blue: CGFloat(argb & 255) / 255,
+                           alpha: CGFloat((argb >> 24) & 255) / 255)
         }
         let wasHidden = hidden
         hidden = args["hidden"] as? Bool ?? false
@@ -418,6 +429,22 @@ final class SearchTabView: NSObject, FlutterPlatformView, UITabBarControllerDele
             ? pages[tabs.selectedIndex].flutter?.view : nil
         let frame = flutterView.map { $0.convert($0.bounds, to: window) } ?? window.bounds
         let safeFrame = window.bounds.inset(by: window.safeAreaInsets)
+        // Extend only the custom header background into the native side lane.
+        // No controls are recreated and this view never receives touches.
+        let edge = VerticalBarEdgeStreamHandler.edge(of: container)
+        if headerHeight > 0, let headerColor, edge == "left" || edge == "right" {
+            let contentLeft = max(frame.minX, safeFrame.minX)
+            let contentRight = min(frame.maxX, safeFrame.maxX)
+            let x = edge == "right" ? contentRight : window.bounds.minX
+            let width = edge == "right" ? window.bounds.maxX - x : contentLeft - x
+            headerExtension.isUserInteractionEnabled = false
+            headerExtension.accessibilityElementsHidden = true
+            headerExtension.backgroundColor = headerColor
+            headerExtension.frame = CGRect(x: x, y: safeFrame.minY, width: max(0, width), height: headerHeight)
+            if headerExtension.superview !== window { window.addSubview(headerExtension) }
+        } else {
+            headerExtension.removeFromSuperview()
+        }
         let result: [String: Any] = [
             "safeLeft": Double(max(0, safeFrame.minX - frame.minX)),
             "safeRight": Double(max(0, frame.maxX - safeFrame.maxX)),
@@ -541,6 +568,7 @@ final class SearchTabView: NSObject, FlutterPlatformView, UITabBarControllerDele
     private func detach() {
         guard !disposed else { return }
         disposed = true
+        headerExtension.removeFromSuperview()
         search.delegate = nil
         search.searchResultsUpdater = nil
         search.searchBar.delegate = nil

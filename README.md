@@ -22,3 +22,11 @@ Expanded Duo landscape was also inspected with the drawer open and Activity at i
 The native tab host can already narrow Flutter's surface beside the Duo rail. Safe-area reporting now measures only the remaining inset inside that surface, avoiding a second right-hand reservation. Portfolio range controls divide available width instead of overflowing with fixed padding.
 
 Rechecked all four tabs, drawer, scrolled holdings, and native detail/back navigation on folded Duo, plus the regular iPhone initial and scrolled portfolio. Installed the signed update on the physical iPhone. Expanded posture was not rechecked after this correction: the current MCP and supported simctl commands expose no fold-state switch. Earlier expanded screenshots predate this change.
+
+## Continuous custom header
+
+The requested red custom header now extends its background across the native Duo side lane. Native status and tab controls keep their system placement and interaction. The extension dims with the drawer and is removed on pushed routes. Range pills have a 64-point visual cap while retaining equal available touch areas.
+
+Reviewed the expanded landscape Duo initial portfolio, bottom scroll position, drawer, Preferences push and return after this change. MCP still addresses the inactive cover in expanded mode, so debugger callbacks drove those interactions and simctl captured display 3. Also reviewed regular iPhone rendering. The final header change has not been rechecked in folded posture.
+
+The regular iPhone header also fills the top safe area, with light status icons. Drawer status styling switches to dark over its light background. Reviewed initial and scrolled regular iPhone states plus the open drawer, and installed the update on the physical phone.

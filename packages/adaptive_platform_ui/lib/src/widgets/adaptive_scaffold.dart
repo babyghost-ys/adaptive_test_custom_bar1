@@ -131,6 +131,8 @@ class AdaptiveScaffold extends StatefulWidget {
     this.extendBodyBehindAppBar = false,
     this.extendBody = false,
     this.backgroundColor,
+    this.customHeaderBackgroundColor,
+    this.customHeaderHeight = 0,
     this.drawer,
     this.endDrawer,
     this.drawerScrimColor,
@@ -195,6 +197,10 @@ class AdaptiveScaffold extends StatefulWidget {
   /// contrast with it, so a dark page in a light theme keeps a readable
   /// status bar (#77).
   final Color? backgroundColor;
+
+  /// Extends an explicitly custom header behind native side chrome.
+  final Color? customHeaderBackgroundColor;
+  final double customHeaderHeight;
 
   /// A panel displayed to the side of the body, often hidden on mobile.
   /// On Android, passed directly to the Material Scaffold.
@@ -453,6 +459,8 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
     final page = nativeTabs
         ? IOS26SearchTabScaffold(
             bar: bar!,
+            headerBackgroundColor: widget.customHeaderBackgroundColor,
+            headerHeight: widget.customHeaderHeight,
             hidden:
                 widget.tabBarHidden ||
                 !(ModalRoute.of(context)?.isCurrent ?? true),
