@@ -15,6 +15,7 @@ class IOS26SearchTabScaffold extends StatefulWidget {
     required this.builder,
     required this.hidden,
     this.headerBackgroundColor,
+    this.backgroundColor,
     this.headerHeight = 0,
   });
 
@@ -22,6 +23,7 @@ class IOS26SearchTabScaffold extends StatefulWidget {
   final WidgetBuilder builder;
   final bool hidden;
   final Color? headerBackgroundColor;
+  final Color? backgroundColor;
   final double headerHeight;
 
   @override
@@ -65,6 +67,8 @@ class _SearchTabsState extends State<IOS26SearchTabScaffold> {
                 CupertinoTheme.of(context).primaryColor)
             .toARGB32(),
     'hidden': widget.hidden,
+    'pageColor': widget.backgroundColor?.toARGB32(),
+    'transitionHeaderHeight': widget.headerHeight,
     'headerColor': widget.headerBackgroundColor?.toARGB32(),
     'headerHeight': (ModalRoute.of(context)?.isCurrent ?? true)
         ? widget.headerHeight

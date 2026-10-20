@@ -748,13 +748,12 @@ class Activity extends StatelessWidget {
 }
 
 void openPage(BuildContext context, String title, Widget content) =>
-    Navigator.of(context).push(
-      CupertinoPageRoute<void>(
-        builder: (_) => AdaptiveScaffold(
-          backgroundColor: paper,
-          appBar: AdaptiveAppBar(title: title),
-          body: SafeArea(bottom: false, child: content),
-        ),
+    AdaptiveNavigator.push<void>(
+      context,
+      (_) => AdaptiveScaffold(
+        backgroundColor: paper,
+        appBar: AdaptiveAppBar(title: title),
+        body: SafeArea(bottom: false, child: content),
       ),
     );
 

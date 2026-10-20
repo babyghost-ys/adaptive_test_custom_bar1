@@ -243,6 +243,18 @@ final class SearchTabView: NSObject, FlutterPlatformView, UITabBarControllerDele
                            blue: CGFloat(argb & 255) / 255,
                            alpha: CGFloat((argb >> 24) & 255) / 255)
         }
+        let pageColor = (args["pageColor"] as? NSNumber).map { value in
+            let argb = value.int64Value
+            return UIColor(red: CGFloat((argb >> 16) & 255) / 255,
+                           green: CGFloat((argb >> 8) & 255) / 255,
+                           blue: CGFloat(argb & 255) / 255,
+                           alpha: CGFloat((argb >> 24) & 255) / 255)
+        }
+        for page in pages {
+            page.transitionHeaderColor = headerColor
+            page.transitionHeaderHeight = CGFloat((args["transitionHeaderHeight"] as? NSNumber)?.doubleValue ?? 0)
+            page.transitionPageColor = pageColor
+        }
         let wasHidden = hidden
         hidden = args["hidden"] as? Bool ?? false
         setTabBarHidden(hidden || (usesToolbarSearch && search.isActive))

@@ -34,3 +34,20 @@ The regular iPhone header also fills the top safe area, with light status icons.
 ## Native return transition
 
 Before the first managed push, the native host now records whether the root navigation bar is hidden. UIKit applies that policy during the interactive return instead of briefly showing a native title over the custom header and waiting for Flutter's route update. Reviewed a recording of the native Back-button return on regular iPhone: the detail title exits before the red header is fully revealed. Simulator-injected swipes did not initiate a native pop, so interactive completion/cancellation remains unverified.
+
+Follow-up from the user's Duo swipe recording: native bar configuration is now frozen between `willShow` and `didShow`, so Flutter page updates cannot re-show the departing bar during a pop. Returning to the custom-header root hides the native bar without a separate trailing animation; a cancelled interaction restores the source controller's bar policy. Inspected Duo Back-button video frames: no AAPL title overlaps the returning red header. Regular iPhone push/Back and returned safe-area layout were also inspected. Both simulator builds succeeded and the signed update was installed on the physical iPhone. Injected swipe input still did not initiate interactive navigation, so gesture completion/cancellation remains visually unverified.
+
+
+The preceding transition changes did not address the app's actual route path: `openPage` was still pushing `CupertinoPageRoute`, so Flutter animated the content independently of UIKit's title and Back button. All app detail pushes now call `AdaptiveNavigator.push`, giving UIKit ownership of the content transition as well as its navigation bar. Previous Back-button checks did not establish interactive gesture correctness. Rebuilt and checked native push/Back on regular iPhone and folded Duo; simulator gesture injection still produces no interactive pop.
+
+## Interactive handoff cleanup
+
+The shared Flutter surface now transfers after the navigation transition coordinator completes and UIKit has had its cleanup turn, rather than directly inside `didShow`. No fixed-duration timer or private view manipulation is used. The plugin's bundled `axe` CLI with 2-pixel touch spacing successfully drives native gestures (earlier MCP gesture attempts did not). Inspected a recorded full-content swipe from VOO back to scrolled holdings on regular iPhone: rounded transition corners settle during the finishing animation, with no multi-second persistence observed. Also exercised short cancelled and completed swipes on folded Duo. Physical-device reproduction of the original duration remains unverified.
+
+## White corner exposure
+
+The earlier cleanup timing change did not solve the physical-phone report. LLDB inspection during a slow native swipe located the rounding on UIKit's transition cards, not the Flutter view or retained snapshot. Runtime logs then showed the custom-header root incorrectly had `hidesNativeNavigationBar == false`. Root policy now derives from its explicit custom-header configuration, and the public transition coordinator's container receives matching header/page backing colors. Native detail anchors also update their controller's bar policy for cancelled swipes. Reviewed the regular iPhone swipe recording: the returning header no longer exposes a white top-right wedge after the outgoing detail leaves. Rebuilt Duo and checked return/cancellation. No private UIKit views are modified.
+
+Cancelled-swipe restoration is applied after the coordinator's completion, rather than at interaction-end (UIKit can still reverse visibility afterward). Final Duo cancellation screenshot confirms both AAPL title and native Back button restored.
+
+The native scroll view's top edge effect is disabled when the page declares a solid custom header. This removes the pale wash and contrasting red strip seen during swipe-back. Reviewed NVIDIA-to-Markets swipe video on regular iPhone, plus Duo return. Native detail edge effects and tab materials remain system-controlled.

@@ -78,6 +78,17 @@ final class NativeNavigationContent: UIViewController {
         }
     }
     var coordinatesManagedTransition = false
+    var transitionHeaderColor: UIColor?
+    var transitionPageColor: UIColor?
+    var transitionHeaderHeight: CGFloat = 0 {
+        didSet {
+            if #available(iOS 26.0, *) {
+                // A solid custom header already separates content from the
+                // status area; native scroll-edge shading washes out its red.
+                backingScroll.topEdgeEffect.isHidden = transitionHeaderHeight > 0
+            }
+        }
+    }
     var hidesNativeNavigationBar = false
     override var shouldAutomaticallyForwardAppearanceMethods: Bool { false }
     override var childForStatusBarStyle: UIViewController? { flutter }
@@ -225,8 +236,12 @@ final class NativeNavigationContent: UIViewController {
 
 private final class NativeNavigationController: UINavigationController, UINavigationControllerDelegate {
     var completedLayout: (() -> Void)?
+    private let transitionHeaderBackdrop = UIView()
+    private weak var backdropContent: NativeNavigationContent?
+    private weak var backdropContainer: UIView?
     var requestedBack: (() -> Void)?
     var completedNavigation: ((UINavigationController, UIViewController) -> Void)?
+    private(set) var transitioningBetweenRoutes = false
     var usesManagedRoutes = false {
         didSet { updatePopGestures() }
     }
@@ -255,11 +270,84 @@ private final class NativeNavigationController: UINavigationController, UINaviga
     }
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        layoutTransitionBackdrop()
         completedLayout?()
+    }
+    private func layoutTransitionBackdrop() {
+        guard let content = backdropContent,
+              let color = content.transitionHeaderColor,
+              content.transitionHeaderHeight > 0 else {
+            transitionHeaderBackdrop.removeFromSuperview()
+            return
+        }
+        let container = backdropContainer ?? view!
+        container.backgroundColor = content.transitionPageColor ?? .systemBackground
+        transitionHeaderBackdrop.backgroundColor = color
+        transitionHeaderBackdrop.isUserInteractionEnabled = false
+        transitionHeaderBackdrop.accessibilityElementsHidden = true
+        let headerFrame = CGRect(x: 0, y: 0, width: view.bounds.width,
+                                 height: view.safeAreaInsets.top + content.transitionHeaderHeight)
+        transitionHeaderBackdrop.frame = view.convert(headerFrame, to: container)
+        if transitionHeaderBackdrop.superview !== container {
+            container.insertSubview(transitionHeaderBackdrop, at: 0)
+        }
+    }
+    func navigationController(_ navigationController: UINavigationController,
+                              willShow viewController: UIViewController, animated: Bool) {
+        guard usesManagedRoutes else { return }
+        transitioningBetweenRoutes = true
+        let hidesBar = (viewController as? NativeNavigationContent)?.hidesNativeNavigationBar ?? false
+        // UIKit rounds its transition cards. The surface exposed behind a
+        // custom-header root must use that page's colors, not system white.
+        backdropContent = hidesBar ? viewController as? NativeNavigationContent : nil
+        backdropContainer = transitionCoordinator?.containerView
+        layoutTransitionBackdrop()
+        // The root owns a Flutter header. Finish the native bar handoff now:
+        // Duo's detached title otherwise outlives the interactive content slide.
+        // Keep Flutter rebuilds from restoring the outgoing bar mid-transition.
+        setNavigationBarHidden(hidesBar, animated: hidesBar ? false : animated)
+        if let coordinator = transitionCoordinator {
+            let source = coordinator.viewController(forKey: .from) as? NativeNavigationContent
+            let sourceHidesBar = source?.transitionHeaderHeight ?? 0 > 0
+            coordinator.animate(alongsideTransition: nil) { [weak self] context in
+                guard context.isCancelled else { return }
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    self.transitioningBetweenRoutes = false
+                    self.backdropContent = sourceHidesBar ? source : nil
+                    self.layoutTransitionBackdrop()
+                    self.setNavigationBarHidden(sourceHidesBar, animated: false)
+                }
+            }
+        }
     }
     func navigationController(_ navigationController: UINavigationController,
                               didShow viewController: UIViewController, animated: Bool) {
-        completedNavigation?(navigationController, viewController)
+        if usesManagedRoutes {
+            backdropContent = (viewController as? NativeNavigationContent)?.hidesNativeNavigationBar == true
+                ? viewController as? NativeNavigationContent : nil
+            layoutTransitionBackdrop()
+            setNavigationBarHidden(
+                (viewController as? NativeNavigationContent)?.hidesNativeNavigationBar ?? false,
+                animated: false)
+        }
+        // didShow can precede UIKit's interactive-transition cleanup. Moving
+        // the shared Flutter surface here can carry its temporary rounded mask
+        // into the restored page. Keep the retained destination visible until
+        // the coordinator finishes, then transfer the live surface next turn.
+        let finish: () -> Void = { [weak self, weak viewController] in
+            DispatchQueue.main.async { [weak self, weak viewController] in
+                guard let self, let viewController,
+                      self.topViewController === viewController else { return }
+                self.transitioningBetweenRoutes = false
+                self.completedNavigation?(self, viewController)
+            }
+        }
+        if let coordinator = transitionCoordinator,
+           coordinator.animate(alongsideTransition: nil, completion: { _ in finish() }) {
+            return
+        }
+        finish()
     }
 }
 
@@ -418,7 +506,8 @@ final class NativeNavigationHost {
             // ownership of pushes. Interactive back must hide a native bar
             // alongside the gesture when returning to a custom Flutter header,
             // rather than waiting for Dart to reveal the root after didShow.
-            content.hidesNativeNavigationBar = navigation.isNavigationBarHidden
+            content.hidesNativeNavigationBar = content.transitionHeaderHeight > 0 ||
+                page == nil || navigation.isNavigationBarHidden
             managedRoutes = [NativeRouteState(identifier: parent, content: content, page: page)]
             managedNavigation = navigation
             navigation.usesManagedRoutes = true
@@ -596,6 +685,11 @@ final class NativeNavigationHost {
                 restoreAppearance()
                 layout()
                 completion(true)
+            } else if let page {
+                // A cancelled interactive pop keeps this route. Restore its
+                // native item after UIKit finishes reversing bar visibility.
+                configure(page)
+                layout()
             }
             return
         }
@@ -1090,8 +1184,12 @@ final class NativeNavigationHost {
         guard pendingPush == nil, !preparingPop else { return }
         guard externalNavigation == nil else { return }
         let navigation = regularNavigation ?? self.navigation
+        guard (navigation as? NativeNavigationController)?.transitioningBetweenRoutes != true else { return }
         let source = page.nativeNavigationItem
         let destinationController: UIViewController = tabs == nil ? rootContent : content
+        // The platform anchor may arrive after routeShown. Once it supplies
+        // a native bar, cancellation must restore that bar on this controller.
+        (destinationController as? NativeNavigationContent)?.hidesNativeNavigationBar = false
         let destination = destinationController.navigationItem
         let changesSearchOwner = destination.searchController !== source.searchController
         if changesSearchOwner, let previousSearch = destination.searchController,

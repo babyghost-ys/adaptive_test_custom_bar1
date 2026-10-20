@@ -461,6 +461,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
             bar: bar!,
             headerBackgroundColor: widget.customHeaderBackgroundColor,
             headerHeight: widget.customHeaderHeight,
+            backgroundColor: widget.backgroundColor,
             hidden:
                 widget.tabBarHidden ||
                 !(ModalRoute.of(context)?.isCurrent ?? true),
