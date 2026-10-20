@@ -1238,6 +1238,10 @@ final class NativeNavigationHost {
             assign(destination, \.searchBarPlacementAllowsToolbarIntegration,
                    source.searchBarPlacementAllowsToolbarIntegration)
         }
+        assign(destination, \.standardAppearance, source.standardAppearance)
+        assign(destination, \.scrollEdgeAppearance, source.scrollEdgeAppearance)
+        assign(destination, \.compactAppearance, source.compactAppearance)
+        assign(destination, \.compactScrollEdgeAppearance, source.compactScrollEdgeAppearance)
         assign(destination, \.title, source.title)
         assign(destination, \.leftBarButtonItems, source.leftBarButtonItems)
         assign(destination, \.rightBarButtonItems, source.rightBarButtonItems)

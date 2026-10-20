@@ -468,7 +468,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
             builder: (context) => _buildPage(context, omitBottomBar: true),
           )
         : _buildPage(context);
-    final bg = widget.backgroundColor;
+    final bg = widget.appBar?.navigationBarColor ?? widget.backgroundColor;
     if (bg == null || bg.a < 0.5) return page;
     // A page that sets its own background keeps the status bar legible
     // over it, whatever the app theme says: light icons on a dark page and
@@ -548,6 +548,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
           actions: widget.appBar?.actions,
           leading: widget.appBar?.leading,
           tintColor: widget.appBar?.tintColor,
+          navigationBarColor: widget.appBar?.navigationBarColor,
           titleWidget: _buildIOS26TitleOverlay(),
           minimizeBehavior: widget.minimizeBehavior,
           enableBlur: widget.enableBlur,

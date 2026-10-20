@@ -20,6 +20,7 @@ class IOS26NativeToolbar extends StatefulWidget {
     this.onActionTap,
     this.titleWidget,
     this.tintColor,
+    this.navigationBarColor,
     this.height = 44.0,
     this.showNativeView = true,
     this.showsGradient = true,
@@ -47,6 +48,9 @@ class IOS26NativeToolbar extends StatefulWidget {
   /// which colors all UIBarButtonItem instances.
   /// If null, the system default tint color is used.
   final Color? tintColor;
+
+  /// Opaque native navigation background, including its scroll-edge appearance.
+  final Color? navigationBarColor;
 
   final double height;
   final bool showNativeView;
@@ -82,6 +86,7 @@ class _IOS26NativeToolbarState extends State<IOS26NativeToolbar> {
   bool? _lastCovered;
   bool? _lastIsDark;
   int? _lastTint;
+  int? _lastNavigationBarColor;
   List<AdaptiveAppBarAction>? _lastActions;
 
   bool get _isDark => CupertinoTheme.of(context).brightness == Brightness.dark;
@@ -263,6 +268,15 @@ class _IOS26NativeToolbarState extends State<IOS26NativeToolbar> {
       send('tint', 'setStyle', {'tint': tint}, () => _lastTint = previous);
     }
 
+    final barColor = widget.navigationBarColor?.toARGB32();
+    if (force || _lastNavigationBarColor != barColor) {
+      final previous = _lastNavigationBarColor;
+      _lastNavigationBarColor = barColor;
+      send('navigationBarColor', 'setNavigationBarColor', {
+        'navigationBarColor': barColor,
+      }, () => _lastNavigationBarColor = previous);
+    }
+
     // MethodChannel preserves send order. Do not serialize new ownership
     // behind old replies or write acknowledged values back over newer intent.
     await Future.wait(requests);
@@ -334,6 +348,7 @@ class _IOS26NativeToolbarState extends State<IOS26NativeToolbar> {
           : 0.0,
       if (!widget.showsGradient) 'showsGradient': false,
       if (widget.tintColor != null) 'tint': _colorToARGB(widget.tintColor!),
+      'navigationBarColor': widget.navigationBarColor?.toARGB32(),
     };
 
     return SizedBox(

@@ -25,6 +25,7 @@ class AdaptiveAppBar {
     this.leading,
     this.useNativeToolbar = true,
     this.tintColor,
+    this.navigationBarColor,
     this.titleWidget,
     this.cupertinoNavigationBar,
     this.appBar,
@@ -84,6 +85,9 @@ class AdaptiveAppBar {
   /// If null, the system default tint color is used.
   final Color? tintColor;
 
+  /// Opaque native navigation background, including its scroll-edge appearance.
+  final Color? navigationBarColor;
+
   /// Custom iOS navigation bar, including AdaptiveNavigationSearchBar.
   ///
   /// When provided and [useNativeToolbar] is false, this custom navigation bar will be used
@@ -110,6 +114,7 @@ class AdaptiveAppBar {
     Widget? leading,
     bool? useNativeToolbar,
     Color? tintColor,
+    Color? navigationBarColor,
     Widget? titleWidget,
     PreferredSizeWidget? cupertinoNavigationBar,
     PreferredSizeWidget? appBar,
@@ -123,6 +128,7 @@ class AdaptiveAppBar {
       leading: leading ?? this.leading,
       useNativeToolbar: useNativeToolbar ?? this.useNativeToolbar,
       tintColor: tintColor ?? this.tintColor,
+      navigationBarColor: navigationBarColor ?? this.navigationBarColor,
       titleWidget: titleWidget ?? this.titleWidget,
       cupertinoNavigationBar:
           cupertinoNavigationBar ?? this.cupertinoNavigationBar,

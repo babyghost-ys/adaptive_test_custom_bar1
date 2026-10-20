@@ -95,51 +95,67 @@ class InvestmentHome extends StatefulWidget {
 class _InvestmentHomeState extends State<InvestmentHome> {
   final drawerKey = GlobalKey<ScaffoldState>();
   bool menuOpen = false;
+  final navigation = AdaptiveNavigationScrollController();
+
+  @override
+  void dispose() {
+    navigation.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) =>
       BlocBuilder<InvestmentBloc, InvestmentState>(
         builder: (context, state) => LayoutBuilder(
           builder: (context, constraints) {
-            final wide = constraints.maxWidth >= 620;
             return AdaptiveScaffold(
               backgroundColor: paper,
-              customHeaderBackgroundColor: menuOpen
-                  ? Color.alphaBlend(Colors.black54, red)
-                  : red,
-              customHeaderHeight: 64,
               scaffoldKey: drawerKey,
-              useFixedToolbar: false,
+              appBar: AdaptiveAppBar(
+                title: ['Portfolio', 'Markets', 'Watchlist', 'Activity'][state.tab],
+                scrollController: navigation,
+                navigationBarColor: red,
+                tintColor: Colors.white,
+                actions: [
+                  AdaptiveAppBarAction(
+                    iosSymbol: menuOpen ? 'xmark' : 'line.3.horizontal',
+                    icon: menuOpen ? Icons.close : Icons.menu_rounded,
+                    label: menuOpen ? 'Close accounts' : 'Open accounts',
+                    tintColor: ink,
+                    spacerAfter: ToolbarSpacerType.flexible,
+                    onPressed: () {
+                      if (menuOpen) {
+                        drawerKey.currentState?.closeDrawer();
+                      } else {
+                        drawerKey.currentState?.openDrawer();
+                      }
+                    },
+                  ),
+                  AdaptiveAppBarAction(
+                    title: 'PL',
+                    label: 'Profile',
+                    onPressed: () => openPage(context, 'Profile', const ProfileContent()),
+                  ),
+                ],
+              ),
               tabBarHidden: menuOpen,
               onDrawerChanged: (open) => setState(() => menuOpen = open),
               drawer: Drawer(
                 backgroundColor: paper,
                 width: math.min(320, constraints.maxWidth * 0.82),
-                child: AnnotatedRegion<SystemUiOverlayStyle>(
-                  value: SystemUiOverlayStyle.dark,
-                  child: SafeArea(
-                    child: Column(
-                      children: [
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: IconButton(
-                            tooltip: 'Close accounts',
-                            icon: const Icon(Icons.close),
-                            onPressed: () =>
-                                drawerKey.currentState?.closeDrawer(),
-                          ),
-                        ),
-                        Expanded(
-                          child: AccountMenu(
-                            state: state,
-                            onSelect: (i) {
-                              context.read<InvestmentBloc>().add(
-                                AccountSelected(i),
-                              );
-                              drawerKey.currentState?.closeDrawer();
-                            },
-                          ),
-                        ),
-                      ],
+                child: ValueListenableBuilder<double?>(
+                  valueListenable: navigation.navigationBarBottom,
+                  builder: (context, top, _) => Padding(
+                    padding: EdgeInsets.only(top: top ?? MediaQuery.paddingOf(context).top),
+                    child: SafeArea(
+                      top: false,
+                      child: AccountMenu(
+                        state: state,
+                        onSelect: (i) {
+                          context.read<InvestmentBloc>().add(AccountSelected(i));
+                          drawerKey.currentState?.closeDrawer();
+                        },
+                      ),
                     ),
                   ),
                 ),
@@ -172,99 +188,16 @@ class _InvestmentHomeState extends State<InvestmentHome> {
                   ),
                 ],
               ),
-              body: Builder(
-                builder: (context) => SafeArea(
-                  top: false,
-                  bottom: false,
-                  child: Column(
-                    children: [
-                      AnnotatedRegion<SystemUiOverlayStyle>(
-                        value: MediaQuery.paddingOf(context).top > 0
-                            ? SystemUiOverlayStyle.light
-                            : SystemUiOverlayStyle.dark,
-                        child: Container(
-                          height: 64 + MediaQuery.paddingOf(context).top,
-                          color: red,
-                          padding: EdgeInsets.only(
-                            left: 12,
-                            right: 12,
-                            top: MediaQuery.paddingOf(context).top,
-                          ),
-                          child: Row(
-                            children: [
-                              IconButton(
-                                tooltip: 'Open accounts',
-                                onPressed: () =>
-                                    drawerKey.currentState?.openDrawer(),
-                                icon: const Icon(
-                                  Icons.menu_rounded,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              label(
-                                [
-                                  'Portfolio',
-                                  'Markets',
-                                  'Watchlist',
-                                  'Activity',
-                                ][state.tab],
-                                size: 21,
-                                color: Colors.white,
-                                weight: FontWeight.w600,
-                              ),
-                              const Spacer(),
-                              if (wide)
-                                Padding(
-                                  padding: const EdgeInsets.only(right: 20),
-                                  child: label(
-                                    'MERIDIAN',
-                                    size: 13,
-                                    color: Colors.white70,
-                                    weight: FontWeight.w700,
-                                  ),
-                                ),
-                              Semantics(
-                                button: true,
-                                label: 'Profile',
-                                child: GestureDetector(
-                                  onTap: () => openPage(
-                                    context,
-                                    'Profile',
-                                    const ProfileContent(),
-                                  ),
-                                  child: const CircleAvatar(
-                                    radius: 17,
-                                    backgroundColor: Color(0xFFD2626D),
-                                    child: Text(
-                                      'PL',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                            ],
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: IndexedStack(
-                          index: state.tab,
-                          children: [
-                            Portfolio(state: state),
-                            const Markets(),
-                            Watchlist(state: state),
-                            const Activity(),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+              body: SafeArea(
+                bottom: false,
+                child: IndexedStack(
+                  index: state.tab,
+                  children: [
+                    Portfolio(state: state),
+                    const Markets(),
+                    Watchlist(state: state),
+                    const Activity(),
+                  ],
                 ),
               ),
             );
@@ -752,7 +685,11 @@ void openPage(BuildContext context, String title, Widget content) =>
       context,
       (_) => AdaptiveScaffold(
         backgroundColor: paper,
-        appBar: AdaptiveAppBar(title: title),
+        appBar: AdaptiveAppBar(
+          title: title,
+          navigationBarColor: red,
+          tintColor: Colors.white,
+        ),
         body: SafeArea(bottom: false, child: content),
       ),
     );

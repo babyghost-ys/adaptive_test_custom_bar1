@@ -79,6 +79,7 @@ class iOS26ToolbarPlatformView: NSObject, FlutterPlatformView, NativeNavigationP
         verticalNavigation = params["verticalNavigation"] as? Bool ?? false
         scrollOffset = CGFloat(params["scrollOffset"] as? Double ?? 0)
         if let value = params["tint"] as? NSNumber { configuredTint = Self.colorFromARGB(value.intValue) }
+        configureNavigationAppearance(params)
         configureItems(params)
         containerView.onWindowChange = { [weak self] in
             guard let self, self.active, self.containerView.window != nil else { return }
@@ -121,6 +122,27 @@ class iOS26ToolbarPlatformView: NSObject, FlutterPlatformView, NativeNavigationP
     deinit {
         channel.setMethodCallHandler(nil)
         NativeNavigationHost.deactivate(self)
+    }
+
+    private func configureNavigationAppearance(_ params: [String: Any]) {
+        let appearance: UINavigationBarAppearance?
+        if let value = params["navigationBarColor"] as? NSNumber {
+            let style = UINavigationBarAppearance()
+            style.configureWithOpaqueBackground()
+            style.backgroundColor = Self.colorFromARGB(value.intValue)
+            style.shadowColor = .clear
+            if let tint = configuredTint {
+                style.titleTextAttributes = [.foregroundColor: tint]
+                style.largeTitleTextAttributes = [.foregroundColor: tint]
+            }
+            appearance = style
+        } else {
+            appearance = nil
+        }
+        navigationItem.standardAppearance = appearance
+        navigationItem.scrollEdgeAppearance = appearance
+        navigationItem.compactAppearance = appearance
+        navigationItem.compactScrollEdgeAppearance = appearance
     }
 
     private func configureItems(_ params: [String: Any]) {
@@ -360,6 +382,12 @@ class iOS26ToolbarPlatformView: NSObject, FlutterPlatformView, NativeNavigationP
                         }
                     }
                 }
+            }
+            result(nil)
+        case "setNavigationBarColor":
+            if let args = call.arguments as? [String: Any] {
+                configureNavigationAppearance(args)
+                NativeNavigationHost.update(self)
             }
             result(nil)
         case "setStyle":
