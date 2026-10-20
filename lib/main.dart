@@ -94,173 +94,167 @@ class InvestmentHome extends StatefulWidget {
 
 class _InvestmentHomeState extends State<InvestmentHome> {
   final drawerKey = GlobalKey<ScaffoldState>();
-  bool menuVisible = true;
+  bool menuOpen = false;
   @override
-  Widget build(
-    BuildContext context,
-  ) => BlocBuilder<InvestmentBloc, InvestmentState>(
-    builder: (context, state) => LayoutBuilder(
-      builder: (context, constraints) {
-        final wide = constraints.maxWidth >= 620;
-        return AdaptiveScaffold(
-          backgroundColor: paper,
-          scaffoldKey: drawerKey,
-          useFixedToolbar: false,
-          drawer: wide
-              ? null
-              : Drawer(
-                  backgroundColor: paper,
-                  width: 290,
-                  child: SafeArea(
-                    child: AccountMenu(
-                      state: state,
-                      onSelect: (i) {
-                        context.read<InvestmentBloc>().add(AccountSelected(i));
-                        drawerKey.currentState?.closeDrawer();
-                      },
-                    ),
-                  ),
-                ),
-          bottomNavigationBar: AdaptiveBottomNavigationBar(
-            selectedIndex: state.tab,
-            selectedItemColor: red,
-            onTap: (i) {
-              drawerKey.currentState?.closeDrawer();
-              context.read<InvestmentBloc>().add(TabSelected(i));
-            },
-            items: const [
-              AdaptiveNavigationDestination(
-                icon: 'chart.pie',
-                selectedIcon: 'chart.pie.fill',
-                label: 'Portfolio',
-              ),
-              AdaptiveNavigationDestination(
-                icon: 'chart.xyaxis.line',
-                label: 'Markets',
-              ),
-              AdaptiveNavigationDestination(
-                icon: 'star',
-                selectedIcon: 'star.fill',
-                label: 'Watchlist',
-              ),
-              AdaptiveNavigationDestination(
-                icon: 'clock.arrow.circlepath',
-                label: 'Activity',
-              ),
-            ],
-          ),
-          body: SafeArea(
-            bottom: false,
-            child: Column(
-              children: [
-                AnnotatedRegion<SystemUiOverlayStyle>(
-                  value: SystemUiOverlayStyle.dark,
-                  child: Container(
-                    height: 64,
-                    color: red,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Row(
-                      children: [
-                        IconButton(
-                          tooltip: wide ? 'Toggle accounts' : 'Open accounts',
-                          onPressed: () {
-                            if (wide) {
-                              setState(() => menuVisible = !menuVisible);
-                            } else {
-                              drawerKey.currentState?.openDrawer();
-                            }
-                          },
-                          icon: const Icon(
-                            Icons.menu_rounded,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        label(
-                          [
-                            'Portfolio',
-                            'Markets',
-                            'Watchlist',
-                            'Activity',
-                          ][state.tab],
-                          size: 21,
-                          color: Colors.white,
-                          weight: FontWeight.w600,
-                        ),
-                        const Spacer(),
-                        if (wide)
-                          Padding(
-                            padding: const EdgeInsets.only(right: 20),
-                            child: label(
-                              'MERIDIAN',
-                              size: 13,
-                              color: Colors.white70,
-                              weight: FontWeight.w700,
-                            ),
-                          ),
-                        Semantics(
-                          button: true,
-                          label: 'Profile',
-                          child: GestureDetector(
-                            onTap: () => openPage(
-                              context,
-                              'Profile',
-                              const ProfileContent(),
-                            ),
-                            child: const CircleAvatar(
-                              radius: 17,
-                              backgroundColor: Color(0xFFD2626D),
-                              child: Text(
-                                'PL',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                      ],
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+  Widget build(BuildContext context) =>
+      BlocBuilder<InvestmentBloc, InvestmentState>(
+        builder: (context, state) => LayoutBuilder(
+          builder: (context, constraints) {
+            final wide = constraints.maxWidth >= 620;
+            return AdaptiveScaffold(
+              backgroundColor: paper,
+              scaffoldKey: drawerKey,
+              useFixedToolbar: false,
+              tabBarHidden: menuOpen,
+              onDrawerChanged: (open) => setState(() => menuOpen = open),
+              drawer: Drawer(
+                backgroundColor: paper,
+                width: math.min(320, constraints.maxWidth * 0.82),
+                child: SafeArea(
+                  child: Column(
                     children: [
-                      if (wide && menuVisible)
-                        SizedBox(
-                          width: 210,
-                          child: AccountMenu(
-                            state: state,
-                            onSelect: (i) => context.read<InvestmentBloc>().add(
-                              AccountSelected(i),
-                            ),
-                          ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: IconButton(
+                          tooltip: 'Close accounts',
+                          icon: const Icon(Icons.close),
+                          onPressed: () =>
+                              drawerKey.currentState?.closeDrawer(),
                         ),
+                      ),
                       Expanded(
-                        child: IndexedStack(
-                          index: state.tab,
-                          children: [
-                            Portfolio(state: state),
-                            const Markets(),
-                            Watchlist(state: state),
-                            const Activity(),
-                          ],
+                        child: AccountMenu(
+                          state: state,
+                          onSelect: (i) {
+                            context.read<InvestmentBloc>().add(
+                              AccountSelected(i),
+                            );
+                            drawerKey.currentState?.closeDrawer();
+                          },
                         ),
                       ),
                     ],
                   ),
                 ),
-              ],
-            ),
-          ),
-        );
-      },
-    ),
-  );
+              ),
+              bottomNavigationBar: AdaptiveBottomNavigationBar(
+                selectedIndex: state.tab,
+                selectedItemColor: red,
+                onTap: (i) {
+                  drawerKey.currentState?.closeDrawer();
+                  context.read<InvestmentBloc>().add(TabSelected(i));
+                },
+                items: const [
+                  AdaptiveNavigationDestination(
+                    icon: 'chart.pie',
+                    selectedIcon: 'chart.pie.fill',
+                    label: 'Portfolio',
+                  ),
+                  AdaptiveNavigationDestination(
+                    icon: 'chart.xyaxis.line',
+                    label: 'Markets',
+                  ),
+                  AdaptiveNavigationDestination(
+                    icon: 'star',
+                    selectedIcon: 'star.fill',
+                    label: 'Watchlist',
+                  ),
+                  AdaptiveNavigationDestination(
+                    icon: 'clock.arrow.circlepath',
+                    label: 'Activity',
+                  ),
+                ],
+              ),
+              body: SafeArea(
+                bottom: false,
+                child: Column(
+                  children: [
+                    AnnotatedRegion<SystemUiOverlayStyle>(
+                      value: SystemUiOverlayStyle.dark,
+                      child: Container(
+                        height: 64,
+                        color: red,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Row(
+                          children: [
+                            IconButton(
+                              tooltip: 'Open accounts',
+                              onPressed: () =>
+                                  drawerKey.currentState?.openDrawer(),
+                              icon: const Icon(
+                                Icons.menu_rounded,
+                                color: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            label(
+                              [
+                                'Portfolio',
+                                'Markets',
+                                'Watchlist',
+                                'Activity',
+                              ][state.tab],
+                              size: 21,
+                              color: Colors.white,
+                              weight: FontWeight.w600,
+                            ),
+                            const Spacer(),
+                            if (wide)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 20),
+                                child: label(
+                                  'MERIDIAN',
+                                  size: 13,
+                                  color: Colors.white70,
+                                  weight: FontWeight.w700,
+                                ),
+                              ),
+                            Semantics(
+                              button: true,
+                              label: 'Profile',
+                              child: GestureDetector(
+                                onTap: () => openPage(
+                                  context,
+                                  'Profile',
+                                  const ProfileContent(),
+                                ),
+                                child: const CircleAvatar(
+                                  radius: 17,
+                                  backgroundColor: Color(0xFFD2626D),
+                                  child: Text(
+                                    'PL',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: IndexedStack(
+                        index: state.tab,
+                        children: [
+                          Portfolio(state: state),
+                          const Markets(),
+                          Watchlist(state: state),
+                          const Activity(),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      );
 }
 
 class AccountMenu extends StatelessWidget {
@@ -268,96 +262,99 @@ class AccountMenu extends StatelessWidget {
   final InvestmentState state;
   final ValueChanged<int> onSelect;
   @override
-  Widget build(BuildContext context) => Container(
-    decoration: const BoxDecoration(
-      color: Color(0xFFEEEDE7),
-      border: Border(right: BorderSide(color: Color(0xFFE2E1DA))),
-    ),
-    child: ListView(
-      padding: EdgeInsets.fromLTRB(
-        16,
-        26,
-        16,
-        24 + MediaQuery.paddingOf(context).bottom,
+  Widget build(BuildContext context) => Material(
+    color: const Color(0xFFEEEDE7),
+    child: Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFFEEEDE7),
+        border: Border(right: BorderSide(color: Color(0xFFE2E1DA))),
       ),
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 10),
-          child: label('MERIDIAN', size: 18, weight: FontWeight.w800),
+      child: ListView(
+        padding: EdgeInsets.fromLTRB(
+          16,
+          26,
+          16,
+          24 + MediaQuery.paddingOf(context).bottom,
         ),
-        const SizedBox(height: 7),
-        Padding(
-          padding: const EdgeInsets.only(left: 10),
-          child: label('Demo investing', size: 12, color: muted),
-        ),
-        const SizedBox(height: 32),
-        for (var i = 0; i < 4; i++)
+        children: [
           Padding(
-            padding: const EdgeInsets.only(bottom: 7),
-            child: Semantics(
-              button: true,
-              selected: state.account == i,
-              child: Material(
-                color: state.account == i ? Colors.white : Colors.transparent,
-                borderRadius: BorderRadius.circular(12),
-                child: InkWell(
+            padding: const EdgeInsets.only(left: 10),
+            child: label('MERIDIAN', size: 18, weight: FontWeight.w800),
+          ),
+          const SizedBox(height: 7),
+          Padding(
+            padding: const EdgeInsets.only(left: 10),
+            child: label('Demo investing', size: 12, color: muted),
+          ),
+          const SizedBox(height: 32),
+          for (var i = 0; i < 4; i++)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 7),
+              child: Semantics(
+                button: true,
+                selected: state.account == i,
+                child: Material(
+                  color: state.account == i ? Colors.white : Colors.transparent,
                   borderRadius: BorderRadius.circular(12),
-                  onTap: () => onSelect(i),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 15,
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          [
-                            Icons.grid_view_rounded,
-                            Icons.person_outline,
-                            Icons.spa_outlined,
-                            Icons.shield_outlined,
-                          ][i],
-                          size: 20,
-                          color: state.account == i ? red : muted,
-                        ),
-                        const SizedBox(width: 11),
-                        Expanded(
-                          child: label(
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () => onSelect(i),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 15,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
                             [
-                              'All accounts',
-                              'Personal',
-                              'Retirement',
-                              'Tax-free',
+                              Icons.grid_view_rounded,
+                              Icons.person_outline,
+                              Icons.spa_outlined,
+                              Icons.shield_outlined,
                             ][i],
-                            size: 14,
-                            weight: state.account == i
-                                ? FontWeight.w600
-                                : FontWeight.w400,
+                            size: 20,
+                            color: state.account == i ? red : muted,
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 11),
+                          Expanded(
+                            child: label(
+                              [
+                                'All accounts',
+                                'Personal',
+                                'Retirement',
+                                'Tax-free',
+                              ][i],
+                              size: 14,
+                              weight: state.account == i
+                                  ? FontWeight.w600
+                                  : FontWeight.w400,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
+          const SizedBox(height: 25),
+          const Divider(color: Color(0xFFDADAD2)),
+          const SizedBox(height: 16),
+          menuLink(
+            context,
+            Icons.tune,
+            'Preferences',
+            const PreferencesContent(),
           ),
-        const SizedBox(height: 25),
-        const Divider(color: Color(0xFFDADAD2)),
-        const SizedBox(height: 16),
-        menuLink(
-          context,
-          Icons.tune,
-          'Preferences',
-          const PreferencesContent(),
-        ),
-        menuLink(
-          context,
-          Icons.description_outlined,
-          'Statements',
-          const StatementsContent(),
-        ),
-      ],
+          menuLink(
+            context,
+            Icons.description_outlined,
+            'Statements',
+            const StatementsContent(),
+          ),
+        ],
+      ),
     ),
   );
   Widget menuLink(
@@ -381,15 +378,18 @@ class PageScroll extends StatelessWidget {
   final List<Widget> children;
   final String? storageKey;
   @override
-  Widget build(BuildContext context) => ListView(
-    key: PageStorageKey(storageKey ?? 'page'),
-    padding: EdgeInsets.fromLTRB(
-      24,
-      28,
-      24,
-      MediaQuery.paddingOf(context).bottom + 28,
+  Widget build(BuildContext context) => Material(
+    type: MaterialType.transparency,
+    child: ListView(
+      key: PageStorageKey(storageKey ?? 'page'),
+      padding: EdgeInsets.fromLTRB(
+        24,
+        28,
+        24,
+        MediaQuery.paddingOf(context).bottom + 28,
+      ),
+      children: children,
     ),
-    children: children,
   );
 }
 
