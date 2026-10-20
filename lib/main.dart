@@ -104,106 +104,111 @@ class _InvestmentHomeState extends State<InvestmentHome> {
   }
 
   @override
-  Widget build(BuildContext context) =>
-      BlocBuilder<InvestmentBloc, InvestmentState>(
-        builder: (context, state) => LayoutBuilder(
-          builder: (context, constraints) {
-            return AdaptiveScaffold(
-              backgroundColor: paper,
-              scaffoldKey: drawerKey,
-              appBar: AdaptiveAppBar(
-                title: ['Portfolio', 'Markets', 'Watchlist', 'Activity'][state.tab],
-                scrollController: navigation,
-                navigationBarColor: red,
+  Widget build(
+    BuildContext context,
+  ) => BlocBuilder<InvestmentBloc, InvestmentState>(
+    builder: (context, state) => LayoutBuilder(
+      builder: (context, constraints) {
+        return AdaptiveScaffold(
+          backgroundColor: paper,
+          scaffoldKey: drawerKey,
+          appBar: AdaptiveAppBar(
+            title: ['Portfolio', 'Markets', 'Watchlist', 'Activity'][state.tab],
+            scrollController: navigation,
+            navigationBarColor: red,
+            hidesNavigationButtonBackground: true,
+            tintColor: Colors.white,
+            actions: [
+              AdaptiveAppBarAction(
+                iosSymbol: menuOpen ? 'xmark' : 'line.3.horizontal',
+                icon: menuOpen ? Icons.close : Icons.menu_rounded,
+                label: menuOpen ? 'Close accounts' : 'Open accounts',
                 tintColor: Colors.white,
-                actions: [
-                  AdaptiveAppBarAction(
-                    iosSymbol: menuOpen ? 'xmark' : 'line.3.horizontal',
-                    icon: menuOpen ? Icons.close : Icons.menu_rounded,
-                    label: menuOpen ? 'Close accounts' : 'Open accounts',
-                    tintColor: ink,
-                    spacerAfter: ToolbarSpacerType.flexible,
-                    onPressed: () {
-                      if (menuOpen) {
-                        drawerKey.currentState?.closeDrawer();
-                      } else {
-                        drawerKey.currentState?.openDrawer();
-                      }
+                spacerAfter: ToolbarSpacerType.flexible,
+                onPressed: () {
+                  if (menuOpen) {
+                    drawerKey.currentState?.closeDrawer();
+                  } else {
+                    drawerKey.currentState?.openDrawer();
+                  }
+                },
+              ),
+              AdaptiveAppBarAction(
+                title: 'PL',
+                label: 'Profile',
+                onPressed: () =>
+                    openPage(context, 'Profile', const ProfileContent()),
+              ),
+            ],
+          ),
+          tabBarHidden: menuOpen,
+          onDrawerChanged: (open) => setState(() => menuOpen = open),
+          drawer: Drawer(
+            backgroundColor: paper,
+            width: math.min(320, constraints.maxWidth * 0.82),
+            child: ValueListenableBuilder<double?>(
+              valueListenable: navigation.navigationBarBottom,
+              builder: (context, top, _) => Padding(
+                padding: EdgeInsets.only(
+                  top: top ?? MediaQuery.paddingOf(context).top,
+                ),
+                child: SafeArea(
+                  top: false,
+                  child: AccountMenu(
+                    state: state,
+                    onSelect: (i) {
+                      context.read<InvestmentBloc>().add(AccountSelected(i));
+                      drawerKey.currentState?.closeDrawer();
                     },
                   ),
-                  AdaptiveAppBarAction(
-                    title: 'PL',
-                    label: 'Profile',
-                    onPressed: () => openPage(context, 'Profile', const ProfileContent()),
-                  ),
-                ],
-              ),
-              tabBarHidden: menuOpen,
-              onDrawerChanged: (open) => setState(() => menuOpen = open),
-              drawer: Drawer(
-                backgroundColor: paper,
-                width: math.min(320, constraints.maxWidth * 0.82),
-                child: ValueListenableBuilder<double?>(
-                  valueListenable: navigation.navigationBarBottom,
-                  builder: (context, top, _) => Padding(
-                    padding: EdgeInsets.only(top: top ?? MediaQuery.paddingOf(context).top),
-                    child: SafeArea(
-                      top: false,
-                      child: AccountMenu(
-                        state: state,
-                        onSelect: (i) {
-                          context.read<InvestmentBloc>().add(AccountSelected(i));
-                          drawerKey.currentState?.closeDrawer();
-                        },
-                      ),
-                    ),
-                  ),
                 ),
               ),
-              bottomNavigationBar: AdaptiveBottomNavigationBar(
-                selectedIndex: state.tab,
-                selectedItemColor: red,
-                onTap: (i) {
-                  drawerKey.currentState?.closeDrawer();
-                  context.read<InvestmentBloc>().add(TabSelected(i));
-                },
-                items: const [
-                  AdaptiveNavigationDestination(
-                    icon: 'chart.pie',
-                    selectedIcon: 'chart.pie.fill',
-                    label: 'Portfolio',
-                  ),
-                  AdaptiveNavigationDestination(
-                    icon: 'chart.xyaxis.line',
-                    label: 'Markets',
-                  ),
-                  AdaptiveNavigationDestination(
-                    icon: 'star',
-                    selectedIcon: 'star.fill',
-                    label: 'Watchlist',
-                  ),
-                  AdaptiveNavigationDestination(
-                    icon: 'clock.arrow.circlepath',
-                    label: 'Activity',
-                  ),
-                ],
+            ),
+          ),
+          bottomNavigationBar: AdaptiveBottomNavigationBar(
+            selectedIndex: state.tab,
+            selectedItemColor: red,
+            onTap: (i) {
+              drawerKey.currentState?.closeDrawer();
+              context.read<InvestmentBloc>().add(TabSelected(i));
+            },
+            items: const [
+              AdaptiveNavigationDestination(
+                icon: 'chart.pie',
+                selectedIcon: 'chart.pie.fill',
+                label: 'Portfolio',
               ),
-              body: SafeArea(
-                bottom: false,
-                child: IndexedStack(
-                  index: state.tab,
-                  children: [
-                    Portfolio(state: state),
-                    const Markets(),
-                    Watchlist(state: state),
-                    const Activity(),
-                  ],
-                ),
+              AdaptiveNavigationDestination(
+                icon: 'chart.xyaxis.line',
+                label: 'Markets',
               ),
-            );
-          },
-        ),
-      );
+              AdaptiveNavigationDestination(
+                icon: 'star',
+                selectedIcon: 'star.fill',
+                label: 'Watchlist',
+              ),
+              AdaptiveNavigationDestination(
+                icon: 'clock.arrow.circlepath',
+                label: 'Activity',
+              ),
+            ],
+          ),
+          body: SafeArea(
+            bottom: false,
+            child: IndexedStack(
+              index: state.tab,
+              children: [
+                Portfolio(state: state),
+                const Markets(),
+                Watchlist(state: state),
+                const Activity(),
+              ],
+            ),
+          ),
+        );
+      },
+    ),
+  );
 }
 
 class AccountMenu extends StatelessWidget {
@@ -688,6 +693,7 @@ void openPage(BuildContext context, String title, Widget content) =>
         appBar: AdaptiveAppBar(
           title: title,
           navigationBarColor: red,
+          hidesNavigationButtonBackground: true,
           tintColor: Colors.white,
         ),
         body: SafeArea(bottom: false, child: content),

@@ -46,6 +46,7 @@ class iOS26ToolbarPlatformView: NSObject, FlutterPlatformView, NativeNavigationP
     private let navigationItem = UINavigationItem()
     private let channel: FlutterMethodChannel
     private var configuredTint: UIColor?
+    private var hidesButtonBackground = false
     private var usesLargeTitle = false
     private var verticalNavigation = false
     private var scrollOffset: CGFloat = 0
@@ -79,6 +80,7 @@ class iOS26ToolbarPlatformView: NSObject, FlutterPlatformView, NativeNavigationP
         verticalNavigation = params["verticalNavigation"] as? Bool ?? false
         scrollOffset = CGFloat(params["scrollOffset"] as? Double ?? 0)
         if let value = params["tint"] as? NSNumber { configuredTint = Self.colorFromARGB(value.intValue) }
+        hidesButtonBackground = params["hidesNavigationButtonBackground"] as? Bool ?? false
         configureNavigationAppearance(params)
         configureItems(params)
         containerView.onWindowChange = { [weak self] in
@@ -145,6 +147,21 @@ class iOS26ToolbarPlatformView: NSObject, FlutterPlatformView, NativeNavigationP
         navigationItem.compactScrollEdgeAppearance = appearance
     }
 
+    private func configureButtonBackgrounds() {
+        if #available(iOS 26.0, *) {
+            for item in (navigationItem.leftBarButtonItems ?? []) + (navigationItem.rightBarButtonItems ?? []) {
+                item.hidesSharedBackground = hidesButtonBackground && !verticalNavigation
+            }
+        }
+        // Duo places leading controls in the side rail, outside the coloured
+        // title bar. Use system label contrast on that page-coloured surface.
+        if hidesButtonBackground && verticalNavigation {
+            for item in navigationItem.leftBarButtonItems ?? [] {
+                item.tintColor = .label
+            }
+        }
+    }
+
     private func configureItems(_ params: [String: Any]) {
         // Title
         if let title = params["title"] as? String {
@@ -153,8 +170,16 @@ class iOS26ToolbarPlatformView: NSObject, FlutterPlatformView, NativeNavigationP
 
         if params.keys.contains("leading") { leadingText = params["leading"] as? String }
         var leadingItems: [UIBarButtonItem] = []
-        if let leading = leadingText, !leading.isEmpty {
-            leadingItems.append(UIBarButtonItem(title: leading, style: .plain, target: self, action: #selector(leadingTapped)))
+        if let leading = leadingText {
+            if !leading.isEmpty {
+                leadingItems.append(UIBarButtonItem(title: leading, style: .plain, target: self, action: #selector(leadingTapped)))
+            } else if hidesButtonBackground && !verticalNavigation {
+                // A regular native item supports hidesSharedBackground; the
+                // automatically generated Back item ignores it on current iOS.
+                let back = UIBarButtonItem(image: UIImage(systemName: "chevron.backward"), style: .plain, target: self, action: #selector(leadingTapped))
+                back.accessibilityLabel = "Back"
+                leadingItems.append(back)
+            }
         }
 
         // Process actions
@@ -259,6 +284,7 @@ class iOS26ToolbarPlatformView: NSObject, FlutterPlatformView, NativeNavigationP
                 if !perActionTintTags.contains(item.tag) { item.tintColor = configuredTint }
             }
         }
+        configureButtonBackgrounds()
         NativeNavigationHost.update(self)
     }
 
@@ -383,6 +409,26 @@ class iOS26ToolbarPlatformView: NSObject, FlutterPlatformView, NativeNavigationP
                     }
                 }
             }
+            configureButtonBackgrounds()
+            result(nil)
+        case "setButtonBackground":
+            if let args = call.arguments as? [String: Any] {
+                hidesButtonBackground = args["hidden"] as? Bool ?? false
+                // Recreate only the leading item when changing this policy.
+                if leadingText == "" {
+                    var items = navigationItem.leftBarButtonItems ?? []
+                    items.removeAll { $0.accessibilityLabel == "Back" }
+                    if hidesButtonBackground && !verticalNavigation {
+                        let back = UIBarButtonItem(image: UIImage(systemName: "chevron.backward"), style: .plain, target: self, action: #selector(leadingTapped))
+                        back.accessibilityLabel = "Back"
+                        back.tintColor = configuredTint
+                        items.insert(back, at: 0)
+                    }
+                    navigationItem.leftBarButtonItems = items
+                }
+                configureButtonBackgrounds()
+                NativeNavigationHost.update(self)
+            }
             result(nil)
         case "setNavigationBarColor":
             if let args = call.arguments as? [String: Any] {
@@ -413,6 +459,7 @@ class iOS26ToolbarPlatformView: NSObject, FlutterPlatformView, NativeNavigationP
                     }
                 }
             }
+            configureButtonBackgrounds()
             NativeNavigationHost.update(self)
             result(nil)
         default:

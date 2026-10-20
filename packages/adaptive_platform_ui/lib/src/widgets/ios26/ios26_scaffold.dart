@@ -36,6 +36,7 @@ class IOS26Scaffold extends StatefulWidget {
     this.leading,
     this.tintColor,
     this.navigationBarColor,
+    this.hidesNavigationButtonBackground = false,
     this.titleWidget,
     this.minimizeBehavior = TabBarMinimizeBehavior.automatic,
     this.enableBlur = true,
@@ -58,6 +59,9 @@ class IOS26Scaffold extends StatefulWidget {
 
   /// Opaque native navigation background, including its scroll-edge appearance.
   final Color? navigationBarColor;
+
+  /// Removes the shared glass background from native navigation buttons.
+  final bool hidesNavigationButtonBackground;
 
   /// Custom widget overlaid at the toolbar's title position.
   /// When set, the native title is hidden and this widget is centered instead.
@@ -424,6 +428,8 @@ class _IOS26ScaffoldState extends State<IOS26Scaffold> {
                         : widget.actions,
                     tintColor: widget.tintColor,
                     navigationBarColor: widget.navigationBarColor,
+                    hidesNavigationButtonBackground:
+                        widget.hidesNavigationButtonBackground,
                     titleWidget: widget.titleWidget,
                     onActionTap: (index) {
                       // Call the appropriate action callback

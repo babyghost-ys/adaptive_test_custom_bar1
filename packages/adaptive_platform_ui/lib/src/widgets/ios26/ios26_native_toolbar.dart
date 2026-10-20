@@ -21,6 +21,7 @@ class IOS26NativeToolbar extends StatefulWidget {
     this.titleWidget,
     this.tintColor,
     this.navigationBarColor,
+    this.hidesNavigationButtonBackground = false,
     this.height = 44.0,
     this.showNativeView = true,
     this.showsGradient = true,
@@ -51,6 +52,9 @@ class IOS26NativeToolbar extends StatefulWidget {
 
   /// Opaque native navigation background, including its scroll-edge appearance.
   final Color? navigationBarColor;
+
+  /// Removes the shared glass background from native navigation buttons.
+  final bool hidesNavigationButtonBackground;
 
   final double height;
   final bool showNativeView;
@@ -87,6 +91,7 @@ class _IOS26NativeToolbarState extends State<IOS26NativeToolbar> {
   bool? _lastIsDark;
   int? _lastTint;
   int? _lastNavigationBarColor;
+  bool? _lastHidesNavigationButtonBackground;
   List<AdaptiveAppBarAction>? _lastActions;
 
   bool get _isDark => CupertinoTheme.of(context).brightness == Brightness.dark;
@@ -277,6 +282,17 @@ class _IOS26NativeToolbarState extends State<IOS26NativeToolbar> {
       }, () => _lastNavigationBarColor = previous);
     }
 
+    if (force ||
+        _lastHidesNavigationButtonBackground !=
+            widget.hidesNavigationButtonBackground) {
+      final previous = _lastHidesNavigationButtonBackground;
+      _lastHidesNavigationButtonBackground =
+          widget.hidesNavigationButtonBackground;
+      send('buttonBackground', 'setButtonBackground', {
+        'hidden': widget.hidesNavigationButtonBackground,
+      }, () => _lastHidesNavigationButtonBackground = previous);
+    }
+
     // MethodChannel preserves send order. Do not serialize new ownership
     // behind old replies or write acknowledged values back over newer intent.
     await Future.wait(requests);
@@ -349,6 +365,7 @@ class _IOS26NativeToolbarState extends State<IOS26NativeToolbar> {
       if (!widget.showsGradient) 'showsGradient': false,
       if (widget.tintColor != null) 'tint': _colorToARGB(widget.tintColor!),
       'navigationBarColor': widget.navigationBarColor?.toARGB32(),
+      'hidesNavigationButtonBackground': widget.hidesNavigationButtonBackground,
     };
 
     return SizedBox(

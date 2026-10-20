@@ -235,6 +235,13 @@ final class NativeNavigationContent: UIViewController {
 }
 
 private final class NativeNavigationController: UINavigationController, UINavigationControllerDelegate {
+    private let navigationSafeAreaBackground: UIView = {
+        let background = UIView()
+        background.isUserInteractionEnabled = false
+        background.accessibilityElementsHidden = true
+        return background
+    }()
+
     var completedLayout: (() -> Void)?
     private let transitionHeaderBackdrop = UIView()
     private weak var backdropContent: NativeNavigationContent?
@@ -271,7 +278,25 @@ private final class NativeNavigationController: UINavigationController, UINaviga
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         layoutTransitionBackdrop()
+        layoutNavigationSafeAreaBackground()
         completedLayout?()
+    }
+    private func layoutNavigationSafeAreaBackground() {
+        // The vertical navigation layout can leave a safe-area strip above
+        // UIKit's opaque bar background. Continue only its colour to the edge;
+        // UIKit retains full ownership of bar height, title and side controls.
+        guard !isNavigationBarHidden,
+              let color = topViewController?.navigationItem.standardAppearance?.backgroundColor,
+              navigationBar.frame.minY > view.bounds.minY else {
+            navigationSafeAreaBackground.removeFromSuperview()
+            return
+        }
+        navigationSafeAreaBackground.backgroundColor = color
+        navigationSafeAreaBackground.frame = CGRect(
+            x: view.bounds.minX, y: view.bounds.minY,
+            width: view.bounds.width,
+            height: navigationBar.frame.minY - view.bounds.minY)
+        view.insertSubview(navigationSafeAreaBackground, belowSubview: navigationBar)
     }
     private func layoutTransitionBackdrop() {
         guard let content = backdropContent,

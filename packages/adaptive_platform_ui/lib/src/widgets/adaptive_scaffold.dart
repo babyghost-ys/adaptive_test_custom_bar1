@@ -549,6 +549,8 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
           leading: widget.appBar?.leading,
           tintColor: widget.appBar?.tintColor,
           navigationBarColor: widget.appBar?.navigationBarColor,
+          hidesNavigationButtonBackground:
+              widget.appBar?.hidesNavigationButtonBackground ?? false,
           titleWidget: _buildIOS26TitleOverlay(),
           minimizeBehavior: widget.minimizeBehavior,
           enableBlur: widget.enableBlur,
