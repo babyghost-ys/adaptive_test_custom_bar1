@@ -26,6 +26,7 @@ class IOS26NativeToolbar extends StatefulWidget {
     this.titleWidget,
     this.tintColor,
     this.navigationBarColor,
+    this.navigationBarShadow = false,
     this.hidesNavigationButtonBackground = false,
     this.height = 44.0,
     this.showNativeView = true,
@@ -57,6 +58,9 @@ class IOS26NativeToolbar extends StatefulWidget {
 
   /// Opaque native navigation background, including its scroll-edge appearance.
   final Color? navigationBarColor;
+
+  /// Subtle native shadow below a [navigationBarColor] bar.
+  final bool navigationBarShadow;
 
   /// Removes the shared glass background from native navigation buttons.
   final bool hidesNavigationButtonBackground;
@@ -96,6 +100,7 @@ class _IOS26NativeToolbarState extends State<IOS26NativeToolbar> {
   bool? _lastIsDark;
   int? _lastTint;
   int? _lastNavigationBarColor;
+  bool? _lastNavigationBarShadow;
   bool? _lastHidesNavigationButtonBackground;
   List<AdaptiveAppBarAction>? _lastActions;
 
@@ -279,12 +284,23 @@ class _IOS26NativeToolbarState extends State<IOS26NativeToolbar> {
     }
 
     final barColor = widget.navigationBarColor?.toARGB32();
-    if (force || _lastNavigationBarColor != barColor) {
+    final barShadow = widget.navigationBarShadow;
+    if (force ||
+        _lastNavigationBarColor != barColor ||
+        _lastNavigationBarShadow != barShadow) {
       final previous = _lastNavigationBarColor;
+      final previousShadow = _lastNavigationBarShadow;
       _lastNavigationBarColor = barColor;
-      send('navigationBarColor', 'setNavigationBarColor', {
-        'navigationBarColor': barColor,
-      }, () => _lastNavigationBarColor = previous);
+      _lastNavigationBarShadow = barShadow;
+      send(
+        'navigationBarColor',
+        'setNavigationBarColor',
+        {'navigationBarColor': barColor, 'navigationBarShadow': barShadow},
+        () {
+          _lastNavigationBarColor = previous;
+          _lastNavigationBarShadow = previousShadow;
+        },
+      );
     }
 
     if (force ||
@@ -370,6 +386,7 @@ class _IOS26NativeToolbarState extends State<IOS26NativeToolbar> {
       if (!widget.showsGradient) 'showsGradient': false,
       if (widget.tintColor != null) 'tint': _colorToARGB(widget.tintColor!),
       'navigationBarColor': widget.navigationBarColor?.toARGB32(),
+      'navigationBarShadow': widget.navigationBarShadow,
       'hidesNavigationButtonBackground': widget.hidesNavigationButtonBackground,
     };
 

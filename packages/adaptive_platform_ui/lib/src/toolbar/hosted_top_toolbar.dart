@@ -27,6 +27,7 @@ class TopToolbarContent {
     this.actions = const <AdaptiveAppBarAction>[],
     this.tint,
     this.navigationBarColor,
+    this.navigationBarShadow = false,
     this.hidesNavigationButtonBackground = false,
     this.navigator,
   });
@@ -60,6 +61,7 @@ class TopToolbarContent {
           : appBar.actions ?? const <AdaptiveAppBarAction>[],
       tint: appBar.tintColor,
       navigationBarColor: appBar.navigationBarColor,
+      navigationBarShadow: appBar.navigationBarShadow,
       hidesNavigationButtonBackground: appBar.hidesNavigationButtonBackground,
       navigator: entry.navigator,
     );
@@ -81,6 +83,7 @@ class TopToolbarContent {
   final List<AdaptiveAppBarAction> actions;
   final Color? tint;
   final Color? navigationBarColor;
+  final bool navigationBarShadow;
   final bool hidesNavigationButtonBackground;
   final NavigatorState? navigator;
 
@@ -352,6 +355,7 @@ class _HostedTopToolbarState extends State<HostedTopToolbar> {
                     actions: content.actions,
                     tintColor: content.tint,
                     navigationBarColor: content.navigationBarColor,
+                    navigationBarShadow: content.navigationBarShadow,
                     hidesNavigationButtonBackground:
                         content.hidesNavigationButtonBackground,
                     showsGradient: false,

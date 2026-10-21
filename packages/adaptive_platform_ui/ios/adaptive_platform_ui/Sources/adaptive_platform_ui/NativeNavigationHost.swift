@@ -1388,7 +1388,7 @@ final class NativeNavigationHost {
         let bar = navigation.navigationBar
         let barKey = ObjectIdentifier(bar)
         let key = source.standardAppearance.map {
-            "\($0.backgroundColor?.description ?? "-")|\(($0.titleTextAttributes[.foregroundColor] as? UIColor)?.description ?? "-")"
+            "\($0.backgroundColor?.description ?? "-")|\(($0.titleTextAttributes[.foregroundColor] as? UIColor)?.description ?? "-")|\($0.shadowImage != nil)"
         } ?? ""
         guard sharedAppearanceKeys[barKey] != key else { return }
         if defaultBarAppearances[barKey] == nil {

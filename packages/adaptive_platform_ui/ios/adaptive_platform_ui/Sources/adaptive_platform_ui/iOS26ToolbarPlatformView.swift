@@ -133,7 +133,13 @@ class iOS26ToolbarPlatformView: NSObject, FlutterPlatformView, NativeNavigationP
             let style = UINavigationBarAppearance()
             style.configureWithOpaqueBackground()
             style.backgroundColor = Self.colorFromARGB(value.intValue)
-            style.shadowColor = .clear
+            if params["navigationBarShadow"] as? Bool == true {
+                // A short fade UIKit draws below the bar, tinted faintly.
+                style.shadowImage = Self.barShadowImage
+                style.shadowColor = UIColor.black.withAlphaComponent(0.1)
+            } else {
+                style.shadowColor = .clear
+            }
             if let tint = configuredTint {
                 style.titleTextAttributes = [.foregroundColor: tint]
                 style.largeTitleTextAttributes = [.foregroundColor: tint]
@@ -490,6 +496,20 @@ class iOS26ToolbarPlatformView: NSObject, FlutterPlatformView, NativeNavigationP
     }
 
     private static let leadingIdentifier = "adaptive_platform_ui.leading"
+
+    /// A vertical fade from opaque to clear. As a template image, the
+    /// appearance's shadowColor sets its strength.
+    private static let barShadowImage: UIImage = {
+        let size = CGSize(width: 1, height: 6)
+        let image = UIGraphicsImageRenderer(size: size).image { context in
+            let colors = [UIColor.black.cgColor, UIColor.black.withAlphaComponent(0).cgColor] as CFArray
+            guard let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                                            colors: colors, locations: [0, 1]) else { return }
+            context.cgContext.drawLinearGradient(gradient, start: .zero,
+                                                 end: CGPoint(x: 0, y: size.height), options: [])
+        }
+        return image.withRenderingMode(.alwaysTemplate)
+    }()
 
     private static func colorFromARGB(_ argb: Int) -> UIColor {
         let a = CGFloat((argb >> 24) & 0xFF) / 255.0

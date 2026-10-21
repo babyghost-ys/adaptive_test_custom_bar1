@@ -97,6 +97,7 @@ Page<void> detailPage(GoRouterState state, String title, Widget content) =>
         appBar: AdaptiveAppBar(
           title: title,
           navigationBarColor: red,
+          navigationBarShadow: true,
           hidesNavigationButtonBackground: true,
           tintColor: Colors.white,
         ),
@@ -253,6 +254,7 @@ class _InvestmentHomeState extends State<InvestmentHome> {
                 ][widget.shell.currentIndex],
                 scrollController: navigation,
                 navigationBarColor: red,
+                navigationBarShadow: true,
                 hidesNavigationButtonBackground: true,
                 tintColor: Colors.white,
                 actions: [
