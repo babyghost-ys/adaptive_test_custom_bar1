@@ -100,6 +100,7 @@ class _IOS26ScaffoldState extends State<IOS26Scaffold> {
       SystemVerticalBar.regions.addListener(_onEdgeChanged);
       _edge = SystemVerticalBar.edge..addListener(_onEdgeChanged);
       SystemVerticalBar.titleBand.addListener(_onEdgeChanged);
+      nativeNavigationBarBottom.addListener(_onEdgeChanged);
     }
   }
 
@@ -114,6 +115,7 @@ class _IOS26ScaffoldState extends State<IOS26Scaffold> {
       SystemVerticalBar.regions.removeListener(_onEdgeChanged);
       _edge!.removeListener(_onEdgeChanged);
       SystemVerticalBar.titleBand.removeListener(_onEdgeChanged);
+      nativeNavigationBarBottom.removeListener(_onEdgeChanged);
     }
     super.dispose();
   }
@@ -335,10 +337,18 @@ class _IOS26ScaffoldState extends State<IOS26Scaffold> {
     );
 
     if (showTopToolbar || trailingInset > 0) {
+      final barBottom = nativeNavigationBarBottom.value;
       final topInset = !showTopToolbar
           ? 0.0
           : duoVerticalPose
           ? math.max(0.0, DuoTitleBand.of(context).contentTop - mq.padding.top)
+          // UIKit's measured bar, wherever it is hosted. A fixed height above
+          // the status inset leaves a gap where the bar shares its row with
+          // the status cluster (iPhone Duo held upright). A large title's bar
+          // changes height as it collapses; keep the fixed inset there so the
+          // body does not move while scrolling.
+          : barBottom != null && !widget.largeTitle
+          ? math.max(0.0, barBottom - mq.padding.top)
           : kToolbarContentHeight;
       bodyContent = Padding(
         padding: EdgeInsets.only(

@@ -5,6 +5,11 @@ import 'package:flutter/services.dart';
 import '../adaptive_navigation_scroll_controller.dart';
 import '../adaptive_app_bar_action.dart';
 
+/// UIKit's measured bottom edge of the window's native navigation bar, in
+/// window coordinates, reported by whichever page currently owns it. Null
+/// until UIKit has laid the bar out.
+final nativeNavigationBarBottom = ValueNotifier<double?>(null);
+
 /// Native iOS 26 UINavigationBar widget using platform views
 /// Implements Liquid Glass design with native blur effects
 class IOS26NativeToolbar extends StatefulWidget {
@@ -457,6 +462,7 @@ class _IOS26NativeToolbarState extends State<IOS26NativeToolbar> {
             bottom.isFinite &&
             inset > 0 &&
             bottom > 0) {
+          nativeNavigationBarBottom.value = bottom;
           final controller = widget.scrollController;
           controller?.contentTopInset.value = inset;
           controller?.navigationBarBottom.value = bottom;

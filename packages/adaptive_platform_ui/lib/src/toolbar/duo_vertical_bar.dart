@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import '../platform/platform_info.dart';
 import '../platform/reserved_region.dart';
 
 import '../platform/system_vertical_bar.dart';
@@ -491,11 +492,13 @@ class DuoVerticalBar extends StatelessWidget {
       regions: regions,
     );
     final tabCount = tabs.isNotEmpty ? tabs.length : reservedTabs;
-    // Native search tabs live in a UITabBarController, which UIKit already
-    // lays out as the system vertical bar. Drawing them here as well stacked
-    // a second capsule under the native one; keep only their room.
+    // On iOS, native tabs (with or without search) live in a
+    // UITabBarController, which UIKit already lays out as the system vertical
+    // bar. Drawing them here as well stacked a second capsule over the native
+    // one, visibly offset in poses where this bar clears the camera; keep only
+    // their room.
     final systemDrawsTabs =
-        tabBar != null && tabBar!.useNativeBottomBar && tabBar!.search != null;
+        tabBar != null && tabBar!.useNativeBottomBar && PlatformInfo.isIOS;
     final tabsHeight = tabCount == 0
         ? 0.0
         : IOS26GlassCapsule.tabsHeight(tabCount) + kDuoBarGroupSpacing;
