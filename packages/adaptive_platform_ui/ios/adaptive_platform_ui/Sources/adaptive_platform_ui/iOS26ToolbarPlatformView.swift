@@ -56,6 +56,7 @@ class iOS26ToolbarPlatformView: NSObject, FlutterPlatformView, NativeNavigationP
     private var isDark = false
     private var leadingText: String?
     private var perActionTintTags: Set<Int> = []
+    private var configuredActions: NSArray?
     private var lastInset: CGFloat?
     private var lastBarBottom: CGFloat?
     private var metricsGeneration = -1
@@ -153,10 +154,10 @@ class iOS26ToolbarPlatformView: NSObject, FlutterPlatformView, NativeNavigationP
                 item.hidesSharedBackground = hidesButtonBackground && !verticalNavigation
             }
         }
-        // Duo places leading controls in the side rail, outside the coloured
+        // Duo places the bar's controls in the side rail, outside the coloured
         // title bar. Use system label contrast on that page-coloured surface.
         if hidesButtonBackground && verticalNavigation {
-            for item in navigationItem.leftBarButtonItems ?? [] {
+            for item in (navigationItem.leftBarButtonItems ?? []) + (navigationItem.rightBarButtonItems ?? []) {
                 item.tintColor = .label
             }
         }
@@ -168,14 +169,19 @@ class iOS26ToolbarPlatformView: NSObject, FlutterPlatformView, NativeNavigationP
             navigationItem.title = title
         }
 
+        configuredActions = params["actions"] as? NSArray
         if params.keys.contains("leading") { leadingText = params["leading"] as? String }
         var leadingItems: [UIBarButtonItem] = []
         if let leading = leadingText {
             if !leading.isEmpty {
                 leadingItems.append(UIBarButtonItem(title: leading, style: .plain, target: self, action: #selector(leadingTapped)))
-            } else if hidesButtonBackground && !verticalNavigation {
+            } else if hidesButtonBackground {
                 // A regular native item supports hidesSharedBackground; the
                 // automatically generated Back item ignores it on current iOS.
+                // On Duo it keeps its glass, but as a regular item it replaces
+                // the outgoing leading control in place. The generated item
+                // arrives only after the push, so the outgoing control's glass
+                // first merged into the status cluster above it.
                 let back = UIBarButtonItem(image: UIImage(systemName: "chevron.backward"), style: .plain, target: self, action: #selector(leadingTapped))
                 back.accessibilityLabel = "Back"
                 leadingItems.append(back)
@@ -277,6 +283,13 @@ class iOS26ToolbarPlatformView: NSObject, FlutterPlatformView, NativeNavigationP
         }
 
         // Assign to navigation item
+        // On Duo, match each page's first leading control across pushes and
+        // pops, so UIKit morphs one glass item (menu into Back) instead of
+        // dissolving the outgoing glass before the incoming one appears.
+        // Without glass, a match only swaps the symbol ahead of the titles.
+        if #available(iOS 26.0, *), verticalNavigation {
+            (leadingItems + leftGroup).first?.identifier = Self.leadingIdentifier
+        }
         navigationItem.leftBarButtonItems = leadingItems + leftGroup
         navigationItem.rightBarButtonItems = rightGroup.reversed()
         if let configuredTint {
@@ -397,7 +410,11 @@ class iOS26ToolbarPlatformView: NSObject, FlutterPlatformView, NativeNavigationP
             }
             result(nil)
         case "updateActions":
-            if let args = call.arguments as? [String: Any] {
+            // Dart resends its actions whenever an anchor is created. Keep the
+            // existing items when nothing changed: new instances restart their
+            // glass and flash right after a push or pop.
+            if let args = call.arguments as? [String: Any],
+               (args["actions"] as? NSArray) != configuredActions {
                 perActionTintTags.removeAll()
                 configureItems(args)
                 // Re-apply global tint to items without per-action tint
@@ -413,15 +430,20 @@ class iOS26ToolbarPlatformView: NSObject, FlutterPlatformView, NativeNavigationP
             result(nil)
         case "setButtonBackground":
             if let args = call.arguments as? [String: Any] {
-                hidesButtonBackground = args["hidden"] as? Bool ?? false
-                // Recreate only the leading item when changing this policy.
-                if leadingText == "" {
+                let hidden = args["hidden"] as? Bool ?? false
+                let changed = hidden != hidesButtonBackground
+                hidesButtonBackground = hidden
+                // Recreate only the leading item, and only when this policy
+                // changes. A new instance on every resync restarts the item's
+                // glass, which shows as a flash right after a push.
+                if changed, leadingText == "" {
                     var items = navigationItem.leftBarButtonItems ?? []
                     items.removeAll { $0.accessibilityLabel == "Back" }
-                    if hidesButtonBackground && !verticalNavigation {
+                    if hidesButtonBackground {
                         let back = UIBarButtonItem(image: UIImage(systemName: "chevron.backward"), style: .plain, target: self, action: #selector(leadingTapped))
                         back.accessibilityLabel = "Back"
                         back.tintColor = configuredTint
+                        if #available(iOS 26.0, *), verticalNavigation { back.identifier = Self.leadingIdentifier }
                         items.insert(back, at: 0)
                     }
                     navigationItem.leftBarButtonItems = items
@@ -466,6 +488,8 @@ class iOS26ToolbarPlatformView: NSObject, FlutterPlatformView, NativeNavigationP
             result(FlutterMethodNotImplemented)
         }
     }
+
+    private static let leadingIdentifier = "adaptive_platform_ui.leading"
 
     private static func colorFromARGB(_ argb: Int) -> UIColor {
         let a = CGFloat((argb >> 24) & 0xFF) / 255.0

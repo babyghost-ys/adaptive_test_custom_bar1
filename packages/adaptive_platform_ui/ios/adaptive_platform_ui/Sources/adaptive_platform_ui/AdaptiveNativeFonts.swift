@@ -65,7 +65,7 @@ enum AdaptiveNativeFonts {
         family == nil ? [:] : [.font: font(size: size, weight: weight)]
     }
 
-    private static func styled(_ appearance: UINavigationBarAppearance) -> UINavigationBarAppearance {
+    static func styled(_ appearance: UINavigationBarAppearance) -> UINavigationBarAppearance {
         let copy = appearance.copy()
         copy.titleTextAttributes.removeValue(forKey: .font)
         copy.largeTitleTextAttributes.removeValue(forKey: .font)

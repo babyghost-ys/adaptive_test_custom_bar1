@@ -48,6 +48,18 @@ abstract final class AdaptiveNavigator {
 bool ownsNativePageTransition(Route<dynamic>? route) =>
     route is _NativePageRoute<dynamic>;
 
+/// Whether a native page has been pushed above [route]. The pushed page has
+/// no Flutter transition, so [route] cannot tell it from a popup by its
+/// secondary animation.
+bool hasNativePageAbove(Route<dynamic>? route) {
+  if (route == null) return false;
+  final stack = route is _NativePageRoute<dynamic>
+      ? route.stack
+      : _NativeNavigation.instance._rootStacks[route];
+  if (stack == null || stack.routes.isEmpty) return false;
+  return !identical(stack.routes.last, route);
+}
+
 final class _NativeStack {
   _NativeStack(
     this.navigator,
@@ -84,6 +96,7 @@ final class _NativeNavigation {
   static final instance = _NativeNavigation();
   static const _channel = MethodChannel('adaptive_platform_ui/navigation');
   final _stacks = Expando<_NativeStack>();
+  final _rootStacks = Expando<_NativeStack>();
   final _routes = <String, _NativePageRoute<dynamic>>{};
   final _nativePops = <String>{};
   int _nextId = 0;
@@ -101,6 +114,9 @@ final class _NativeNavigation {
       parentRoute,
       toolbarRegistry,
     );
+    if (parentRoute != null && stack.rootRoute == parentRoute) {
+      _rootStacks[parentRoute] = stack;
+    }
     // Ignore a repeated tap while UIKit is preparing its source page. A push
     // cannot be queued behind the first route's result: that completes on pop.
     if (stack.preparing) return null;

@@ -92,8 +92,16 @@ final class NativeNavigationContent: UIViewController {
     var hidesNativeNavigationBar = false
     override var shouldAutomaticallyForwardAppearanceMethods: Bool { false }
     var drawerStatusBarStyle: UIStatusBarStyle?
-    override var childForStatusBarStyle: UIViewController? { drawerStatusBarStyle == nil ? flutter : nil }
-    override var preferredStatusBarStyle: UIStatusBarStyle { drawerStatusBarStyle ?? super.preferredStatusBarStyle }
+    /// Flutter's style when it last left this page. A revealed page has no
+    /// Flutter child until its pop completes; without this the status bar
+    /// falls back to the default style for the whole transition.
+    private var retainedStatusBarStyle: UIStatusBarStyle?
+    override var childForStatusBarStyle: UIViewController? {
+        drawerStatusBarStyle == nil && flutter != nil ? flutter : nil
+    }
+    override var preferredStatusBarStyle: UIStatusBarStyle {
+        drawerStatusBarStyle ?? retainedStatusBarStyle ?? super.preferredStatusBarStyle
+    }
     override var childForStatusBarHidden: UIViewController? { flutter }
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
         flutter?.supportedInterfaceOrientations ?? super.supportedInterfaceOrientations
@@ -196,6 +204,7 @@ final class NativeNavigationContent: UIViewController {
     }
     func detachFlutter() {
         guard let controller = flutter, controller.parent === self else { flutter = nil; return }
+        retainedStatusBarStyle = controller.preferredStatusBarStyle
         if forwardingAppearance { controller.endAppearanceTransition(); forwardingAppearance = false; flutterAppeared = true }
         if forwardingDisappearance { controller.endAppearanceTransition(); forwardingDisappearance = false }
         if flutterAppeared {
@@ -245,10 +254,14 @@ private final class NativeNavigationController: UINavigationController, UINaviga
     }()
 
     var completedLayout: (() -> Void)?
+    /// Background of the appearance applied to the bar itself, shared by
+    /// every page in the stack rather than carried by each navigation item.
+    var sharedBarColor: UIColor? { didSet { view.setNeedsLayout() } }
     private let transitionHeaderBackdrop = UIView()
     private weak var backdropContent: NativeNavigationContent?
     private weak var backdropContainer: UIView?
     var requestedBack: (() -> Void)?
+    var willShowRoute: ((UIViewController) -> Void)?
     var completedNavigation: ((UINavigationController, UIViewController) -> Void)?
     private(set) var transitioningBetweenRoutes = false
     var usesManagedRoutes = false {
@@ -297,7 +310,8 @@ private final class NativeNavigationController: UINavigationController, UINaviga
         // UIKit's opaque bar background. Continue only its colour to the edge;
         // UIKit retains full ownership of bar height, title and side controls.
         guard !isNavigationBarHidden,
-              let color = topViewController?.navigationItem.standardAppearance?.backgroundColor,
+              let color = topViewController?.navigationItem.standardAppearance?.backgroundColor
+                ?? sharedBarColor,
               navigationBar.frame.minY > view.bounds.minY else {
             navigationSafeAreaBackground.removeFromSuperview()
             return
@@ -332,6 +346,7 @@ private final class NativeNavigationController: UINavigationController, UINaviga
                               willShow viewController: UIViewController, animated: Bool) {
         guard usesManagedRoutes else { return }
         transitioningBetweenRoutes = true
+        willShowRoute?(viewController)
         let hidesBar = (viewController as? NativeNavigationContent)?.hidesNativeNavigationBar ?? false
         // UIKit rounds its transition cards. The surface exposed behind a
         // custom-header root must use that page's colors, not system white.
@@ -477,6 +492,9 @@ final class NativeNavigationHost {
     private var deferredTabSelection: (NativeNavigationContent, UINavigationController?, UINavigationController?)?
     private var routePopPermissions: [String: Bool] = [:]
     private var appliedTints: [ObjectIdentifier: UIColor?] = [:]
+    private var sharedAppearanceKeys: [ObjectIdentifier: String] = [:]
+    private var defaultBarAppearances: [ObjectIdentifier: (UINavigationBarAppearance, UINavigationBarAppearance?,
+                                                           UINavigationBarAppearance?, UINavigationBarAppearance?)] = [:]
     private var rootContent: UIViewController { tabs ?? content }
 
     private init(flutter: FlutterViewController, window: UIWindow) {
@@ -564,6 +582,10 @@ final class NativeNavigationHost {
             navigation.usesManagedRoutes = true
             navigation.completedNavigation = { [weak self] navigation, controller in
                 self?.completedNativeNavigation(navigation, controller: controller)
+            }
+            navigation.willShowRoute = { [weak self, weak navigation] controller in
+                guard let navigation else { return }
+                self?.updateTabBar(for: controller, in: navigation)
             }
         }
         guard managedNavigation === navigation, managedRoutes.last?.identifier == parent else { result(false); return }
@@ -696,7 +718,10 @@ final class NativeNavigationHost {
             state.popEnabled = routePopPermissions[identifier] ?? true
             managedRoutes.append(state)
             navigation.routePopEnabled = state.popEnabled
-            next.hidesBottomBarWhenPushed = true
+            // On Duo, UIKit hides the vertical tab bar by morphing its glass
+            // into the leading bar controls, which flashes at the top of the
+            // bar. Fade it with the push instead; see updateTabBar(for:).
+            next.hidesBottomBarWhenPushed = !verticalTabs
             if let incomingPage { remember(incomingPage); configure(incomingPage) }
             next.prepareSearchTransitionGlass()
             pushCompletion = result
@@ -780,6 +805,29 @@ final class NativeNavigationHost {
             Self.routeChannel?.invokeMethod("didPop", arguments: [
                 "routeId": poppedIdentifier, "targetRouteId": target.identifier
             ])
+        }
+    }
+
+    /// Whether the root page lays its tabs out in Duo's vertical bar.
+    private var verticalTabs: Bool {
+        tabs != nil && managedRoutes.first?.page?.nativeVerticalNavigation == true
+    }
+
+    /// Hides Duo's vertical tab bar for pushed routes and shows it for the
+    /// root, without UIKit's hidesBottomBarWhenPushed morph.
+    private func updateTabBar(for controller: UIViewController, in navigation: UINavigationController) {
+        guard #available(iOS 18.0, *), let tabs else { return }
+        guard verticalTabs else {
+            // A posture change can leave the regular layout in charge mid-stack.
+            if tabs.isTabBarHidden, managedRoutes.count <= 1 { tabs.setTabBarHidden(false, animated: false) }
+            return
+        }
+        let hidden = controller !== managedRoutes.first?.content
+        guard tabs.isTabBarHidden != hidden else { return }
+        tabs.setTabBarHidden(hidden, animated: true)
+        navigation.transitionCoordinator?.animate(alongsideTransition: nil) { [weak tabs] context in
+            guard context.isCancelled else { return }
+            tabs?.setTabBarHidden(!hidden, animated: true)
         }
     }
 
@@ -1295,10 +1343,11 @@ final class NativeNavigationHost {
             assign(destination, \.searchBarPlacementAllowsToolbarIntegration,
                    source.searchBarPlacementAllowsToolbarIntegration)
         }
-        assign(destination, \.standardAppearance, source.standardAppearance)
-        assign(destination, \.scrollEdgeAppearance, source.scrollEdgeAppearance)
-        assign(destination, \.compactAppearance, source.compactAppearance)
-        assign(destination, \.compactScrollEdgeAppearance, source.compactScrollEdgeAppearance)
+        applySharedAppearance(source, to: navigation)
+        assign(destination, \.standardAppearance, nil)
+        assign(destination, \.scrollEdgeAppearance, nil)
+        assign(destination, \.compactAppearance, nil)
+        assign(destination, \.compactScrollEdgeAppearance, nil)
         assign(destination, \.title, source.title)
         assign(destination, \.leftBarButtonItems, source.leftBarButtonItems)
         assign(destination, \.rightBarButtonItems, source.rightBarButtonItems)
@@ -1328,6 +1377,38 @@ final class NativeNavigationHost {
         // presentation. Reasserting visibility in its callbacks interrupts it.
         if navigation.isNavigationBarHidden, source.searchController == nil || changesSearchOwner {
             navigation.setNavigationBarHidden(false, animated: false)
+        }
+    }
+
+    /// Applies a page's bar appearance to the navigation bar itself. When it
+    /// lives on each navigation item, UIKit cross-fades the bar background
+    /// between identical items on every push and pop; on Duo that exposes the
+    /// page behind the vertical bar's status glass, which flashes light.
+    private func applySharedAppearance(_ source: UINavigationItem, to navigation: UINavigationController) {
+        let bar = navigation.navigationBar
+        let barKey = ObjectIdentifier(bar)
+        let key = source.standardAppearance.map {
+            "\($0.backgroundColor?.description ?? "-")|\(($0.titleTextAttributes[.foregroundColor] as? UIColor)?.description ?? "-")"
+        } ?? ""
+        guard sharedAppearanceKeys[barKey] != key else { return }
+        if defaultBarAppearances[barKey] == nil {
+            defaultBarAppearances[barKey] = (bar.standardAppearance, bar.scrollEdgeAppearance,
+                                             bar.compactAppearance, bar.compactScrollEdgeAppearance)
+        }
+        sharedAppearanceKeys[barKey] = key
+        if let appearance = source.standardAppearance {
+            let styled = AdaptiveNativeFonts.styled(appearance)
+            bar.standardAppearance = styled
+            bar.scrollEdgeAppearance = styled
+            bar.compactAppearance = styled
+            bar.compactScrollEdgeAppearance = styled
+            (navigation as? NativeNavigationController)?.sharedBarColor = appearance.backgroundColor
+        } else if let defaults = defaultBarAppearances[barKey] {
+            bar.standardAppearance = defaults.0
+            bar.scrollEdgeAppearance = defaults.1
+            bar.compactAppearance = defaults.2
+            bar.compactScrollEdgeAppearance = defaults.3
+            (navigation as? NativeNavigationController)?.sharedBarColor = nil
         }
     }
 

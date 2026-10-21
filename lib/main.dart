@@ -136,6 +136,7 @@ class _InvestmentHomeState extends State<InvestmentHome> {
               'symbol': 'slider.horizontal.3',
             },
             {'id': 'statements', 'title': 'Statements', 'symbol': 'doc.text'},
+            {'id': 'profile', 'title': 'Profile', 'symbol': 'person.crop.circle'},
           ],
         });
     if (!mounted || selection == null) return;
@@ -147,6 +148,8 @@ class _InvestmentHomeState extends State<InvestmentHome> {
       openPage(context, 'Preferences', const PreferencesContent());
     } else if (selection == 'statements') {
       openPage(context, 'Statements', const StatementsContent());
+    } else if (selection == 'profile') {
+      openPage(context, 'Profile', const ProfileContent());
     }
   }
 
@@ -176,10 +179,12 @@ class _InvestmentHomeState extends State<InvestmentHome> {
                     _openAccounts(context, state, constraints.maxWidth),
               ),
               AdaptiveAppBarAction(
-                title: 'PL',
-                label: 'Profile',
+                iosSymbol: 'magnifyingglass',
+                icon: Icons.search,
+                label: 'Search',
+                tintColor: Colors.white,
                 onPressed: () =>
-                    openPage(context, 'Profile', const ProfileContent()),
+                    openPage(context, 'Search', const SearchContent()),
               ),
             ],
           ),
@@ -350,6 +355,12 @@ class AccountMenu extends StatelessWidget {
             Icons.description_outlined,
             'Statements',
             const StatementsContent(),
+          ),
+          menuLink(
+            context,
+            Icons.account_circle_outlined,
+            'Profile',
+            const ProfileContent(),
           ),
         ],
       ),
@@ -796,6 +807,40 @@ class AssetDetails extends StatelessWidget {
       ],
     ),
   );
+}
+
+class SearchContent extends StatefulWidget {
+  const SearchContent({super.key});
+  @override
+  State<SearchContent> createState() => _SearchContentState();
+}
+
+class _SearchContentState extends State<SearchContent> {
+  String query = '';
+  @override
+  Widget build(BuildContext context) {
+    final needle = query.trim().toLowerCase();
+    final matches = assets.where(
+      (a) =>
+          needle.isEmpty ||
+          a.symbol.toLowerCase().contains(needle) ||
+          a.name.toLowerCase().contains(needle),
+    );
+    return PageScroll(
+      storageKey: 'search',
+      children: [
+        CupertinoSearchTextField(
+          autofocus: true,
+          autocorrect: false,
+          prefixIcon: const Icon(Icons.search),
+          suffixIcon: const Icon(Icons.cancel),
+          onChanged: (value) => setState(() => query = value),
+        ),
+        const SizedBox(height: 12),
+        ...matches.map((a) => AssetRow(asset: a)),
+      ],
+    );
+  }
 }
 
 class ProfileContent extends StatelessWidget {

@@ -12,6 +12,7 @@ import '../adaptive_app_bar_action.dart';
 import '../adaptive_navigation_scroll_controller.dart';
 import '../adaptive_bottom_navigation_bar.dart';
 import '../adaptive_button.dart';
+import '../adaptive_navigator.dart';
 import '../adaptive_scaffold.dart';
 import 'ios26_native_tab_bar.dart';
 import 'native_bottom_bar_layout.dart';
@@ -198,6 +199,7 @@ class _IOS26ScaffoldState extends State<IOS26Scaffold> {
     final coveredByPopup =
         !isCurrentRoute &&
         !isPopping &&
+        !hasNativePageAbove(route) &&
         (route?.isActive ?? false) &&
         route?.secondaryAnimation?.status == AnimationStatus.dismissed;
 
