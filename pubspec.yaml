@@ -12,6 +12,7 @@ dependencies:
   flutter_bloc: ^9.1.1
   adaptive_platform_ui:
     path: packages/adaptive_platform_ui
+  go_router: ^18.1.1
 dev_dependencies:
   flutter_lints: ^6.0.0
 flutter:

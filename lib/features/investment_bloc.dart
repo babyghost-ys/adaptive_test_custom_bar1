@@ -25,11 +25,6 @@ const assets = [
 
 sealed class InvestmentEvent {}
 
-class TabSelected extends InvestmentEvent {
-  TabSelected(this.index);
-  final int index;
-}
-
 class AccountSelected extends InvestmentEvent {
   AccountSelected(this.index);
   final int index;
@@ -47,24 +42,18 @@ class WatchToggled extends InvestmentEvent {
 
 class InvestmentState {
   const InvestmentState({
-    this.tab = 0,
     this.account = 0,
     this.range = 2,
     this.watchlist = const {'AAPL', 'NVDA', 'VOO'},
   });
-  final int tab, account, range;
+  final int account, range;
   final Set<String> watchlist;
-  InvestmentState copy({
-    int? tab,
-    int? account,
-    int? range,
-    Set<String>? watchlist,
-  }) => InvestmentState(
-    tab: tab ?? this.tab,
-    account: account ?? this.account,
-    range: range ?? this.range,
-    watchlist: watchlist ?? this.watchlist,
-  );
+  InvestmentState copy({int? account, int? range, Set<String>? watchlist}) =>
+      InvestmentState(
+        account: account ?? this.account,
+        range: range ?? this.range,
+        watchlist: watchlist ?? this.watchlist,
+      );
   double get accountScale => [1.0, 0.6, 0.3, 0.1][account];
   double get invested =>
       assets.fold<double>(
@@ -80,7 +69,6 @@ class InvestmentState {
 
 class InvestmentBloc extends Bloc<InvestmentEvent, InvestmentState> {
   InvestmentBloc() : super(const InvestmentState()) {
-    on<TabSelected>((event, emit) => emit(state.copy(tab: event.index)));
     on<AccountSelected>(
       (event, emit) => emit(state.copy(account: event.index)),
     );

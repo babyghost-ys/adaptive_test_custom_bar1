@@ -38,7 +38,8 @@ export 'src/style/sf_symbol.dart';
 
 // Widgets
 export 'src/widgets/adaptive_app.dart';
-export 'src/widgets/adaptive_navigator.dart' show AdaptiveNavigator;
+export 'src/widgets/adaptive_navigator.dart'
+    show AdaptiveNavigator, AdaptivePage;
 
 // Fixed toolbar chrome (installed automatically by AdaptiveApp; exported so
 // apps with their own MaterialApp/CupertinoApp can wrap their builder)

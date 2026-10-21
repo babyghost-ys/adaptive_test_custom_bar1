@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:go_router/go_router.dart';
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 
 import 'features/investment_bloc.dart';
@@ -22,10 +23,92 @@ void main() {
   );
 }
 
+/// Details sit on the root navigator above the tabs, so UIKit pushes them
+/// over the whole tab layout.
+final router = GoRouter(
+  initialLocation: '/portfolio',
+  routes: [
+    StatefulShellRoute.indexedStack(
+      builder: (context, state, shell) => InvestmentHome(shell: shell),
+      branches: [
+        for (final (path, page) in [
+          ('/portfolio', const PortfolioTab()),
+          ('/markets', const Markets()),
+          ('/watchlist', const WatchlistTab()),
+          ('/activity', const Activity()),
+        ])
+          StatefulShellBranch(
+            routes: [GoRoute(path: path, builder: (context, state) => page)],
+          ),
+      ],
+    ),
+    GoRoute(
+      path: '/search',
+      pageBuilder: (context, state) =>
+          detailPage(state, 'Search', const SearchContent()),
+    ),
+    GoRoute(
+      path: '/profile',
+      pageBuilder: (context, state) =>
+          detailPage(state, 'Profile', const ProfileContent()),
+    ),
+    GoRoute(
+      path: '/preferences',
+      pageBuilder: (context, state) =>
+          detailPage(state, 'Preferences', const PreferencesContent()),
+    ),
+    GoRoute(
+      path: '/statements',
+      pageBuilder: (context, state) =>
+          detailPage(state, 'Statements', const StatementsContent()),
+      routes: [
+        GoRoute(
+          path: ':month',
+          pageBuilder: (context, state) {
+            final month = state.pathParameters['month']!;
+            return detailPage(
+              state,
+              '$month statement',
+              const StatementContent(),
+            );
+          },
+        ),
+      ],
+    ),
+    GoRoute(
+      path: '/asset/:symbol',
+      pageBuilder: (context, state) {
+        final asset = assets.firstWhere(
+          (a) => a.symbol == state.pathParameters['symbol'],
+        );
+        return detailPage(state, asset.symbol, AssetDetails(asset: asset));
+      },
+    ),
+  ],
+);
+
+/// A pushed page whose title, Back button and swipe-back UIKit owns.
+Page<void> detailPage(GoRouterState state, String title, Widget content) =>
+    AdaptivePage<void>(
+      key: state.pageKey,
+      name: state.uri.path,
+      child: AdaptiveScaffold(
+        backgroundColor: paper,
+        appBar: AdaptiveAppBar(
+          title: title,
+          navigationBarColor: red,
+          hidesNavigationButtonBackground: true,
+          tintColor: Colors.white,
+        ),
+        body: SafeArea(bottom: false, child: content),
+      ),
+    );
+
 class MeridianApp extends StatelessWidget {
   const MeridianApp({super.key});
   @override
-  Widget build(BuildContext context) => AdaptiveApp(
+  Widget build(BuildContext context) => AdaptiveApp.router(
+    routerConfig: router,
     title: 'Meridian',
     themeMode: ThemeMode.light,
     cupertinoLightTheme: const CupertinoThemeData(
@@ -59,7 +142,6 @@ class MeridianApp extends StatelessWidget {
       ),
       child: child!,
     ),
-    home: const InvestmentHome(),
   );
 }
 
@@ -88,7 +170,8 @@ Text label(
 );
 
 class InvestmentHome extends StatefulWidget {
-  const InvestmentHome({super.key});
+  const InvestmentHome({super.key, required this.shell});
+  final StatefulNavigationShell shell;
   @override
   State<InvestmentHome> createState() => _InvestmentHomeState();
 }
@@ -136,128 +219,125 @@ class _InvestmentHomeState extends State<InvestmentHome> {
               'symbol': 'slider.horizontal.3',
             },
             {'id': 'statements', 'title': 'Statements', 'symbol': 'doc.text'},
-            {'id': 'profile', 'title': 'Profile', 'symbol': 'person.crop.circle'},
+            {
+              'id': 'profile',
+              'title': 'Profile',
+              'symbol': 'person.crop.circle',
+            },
           ],
         });
-    if (!mounted || selection == null) return;
+    if (!context.mounted || selection == null) return;
     if (selection.startsWith('account:')) {
       context.read<InvestmentBloc>().add(
         AccountSelected(int.parse(selection.split(':').last)),
       );
-    } else if (selection == 'preferences') {
-      openPage(context, 'Preferences', const PreferencesContent());
-    } else if (selection == 'statements') {
-      openPage(context, 'Statements', const StatementsContent());
-    } else if (selection == 'profile') {
-      openPage(context, 'Profile', const ProfileContent());
+    } else {
+      context.push('/$selection');
     }
   }
 
   @override
-  Widget build(
-    BuildContext context,
-  ) => BlocBuilder<InvestmentBloc, InvestmentState>(
-    builder: (context, state) => LayoutBuilder(
-      builder: (context, constraints) {
-        return AdaptiveScaffold(
-          backgroundColor: paper,
-          scaffoldKey: drawerKey,
-          appBar: AdaptiveAppBar(
-            title: ['Portfolio', 'Markets', 'Watchlist', 'Activity'][state.tab],
-            scrollController: navigation,
-            navigationBarColor: red,
-            hidesNavigationButtonBackground: true,
-            tintColor: Colors.white,
-            actions: [
-              AdaptiveAppBarAction(
-                iosSymbol: menuOpen ? 'xmark' : 'line.3.horizontal',
-                icon: menuOpen ? Icons.close : Icons.menu_rounded,
-                label: menuOpen ? 'Close accounts' : 'Open accounts',
+  Widget build(BuildContext context) =>
+      BlocBuilder<InvestmentBloc, InvestmentState>(
+        builder: (context, state) => LayoutBuilder(
+          builder: (context, constraints) {
+            return AdaptiveScaffold(
+              backgroundColor: paper,
+              scaffoldKey: drawerKey,
+              appBar: AdaptiveAppBar(
+                title: [
+                  'Portfolio',
+                  'Markets',
+                  'Watchlist',
+                  'Activity',
+                ][widget.shell.currentIndex],
+                scrollController: navigation,
+                navigationBarColor: red,
+                hidesNavigationButtonBackground: true,
                 tintColor: Colors.white,
-                spacerAfter: ToolbarSpacerType.flexible,
-                onPressed: () =>
-                    _openAccounts(context, state, constraints.maxWidth),
+                actions: [
+                  AdaptiveAppBarAction(
+                    iosSymbol: menuOpen ? 'xmark' : 'line.3.horizontal',
+                    icon: menuOpen ? Icons.close : Icons.menu_rounded,
+                    label: menuOpen ? 'Close accounts' : 'Open accounts',
+                    tintColor: Colors.white,
+                    spacerAfter: ToolbarSpacerType.flexible,
+                    onPressed: () =>
+                        _openAccounts(context, state, constraints.maxWidth),
+                  ),
+                  AdaptiveAppBarAction(
+                    iosSymbol: 'magnifyingglass',
+                    icon: Icons.search,
+                    label: 'Search',
+                    tintColor: Colors.white,
+                    onPressed: () => context.push('/search'),
+                  ),
+                ],
               ),
-              AdaptiveAppBarAction(
-                iosSymbol: 'magnifyingglass',
-                icon: Icons.search,
-                label: 'Search',
-                tintColor: Colors.white,
-                onPressed: () =>
-                    openPage(context, 'Search', const SearchContent()),
-              ),
-            ],
-          ),
-          drawerScrimColor: const Color(0x73000000),
-          onDrawerChanged: (open) => setState(() => menuOpen = open),
-          drawerEnableOpenDragGesture:
-              defaultTargetPlatform != TargetPlatform.iOS,
-          drawer: Drawer(
-            elevation: 32,
-            shadowColor: const Color(0xCC000000),
-            backgroundColor: const Color(0xFFEEEDE7),
-            shape: const RoundedRectangleBorder(),
-            width: math.min(320, constraints.maxWidth * 0.82),
-            child: AnnotatedRegion<SystemUiOverlayStyle>(
-              value: SystemUiOverlayStyle.dark,
-              child: ColoredBox(
-                color: const Color(0xFFEEEDE7),
-                child: SafeArea(
-                  child: AccountMenu(
-                    state: state,
-                    onSelect: (i) {
-                      context.read<InvestmentBloc>().add(AccountSelected(i));
-                      drawerKey.currentState?.closeDrawer();
-                    },
+              drawerScrimColor: const Color(0x73000000),
+              onDrawerChanged: (open) => setState(() => menuOpen = open),
+              drawerEnableOpenDragGesture:
+                  defaultTargetPlatform != TargetPlatform.iOS,
+              drawer: Drawer(
+                elevation: 32,
+                shadowColor: const Color(0xCC000000),
+                backgroundColor: const Color(0xFFEEEDE7),
+                shape: const RoundedRectangleBorder(),
+                width: math.min(320, constraints.maxWidth * 0.82),
+                child: AnnotatedRegion<SystemUiOverlayStyle>(
+                  value: SystemUiOverlayStyle.dark,
+                  child: ColoredBox(
+                    color: const Color(0xFFEEEDE7),
+                    child: SafeArea(
+                      child: AccountMenu(
+                        state: state,
+                        onSelect: (i) {
+                          context.read<InvestmentBloc>().add(
+                            AccountSelected(i),
+                          );
+                          drawerKey.currentState?.closeDrawer();
+                        },
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
-          ),
-          bottomNavigationBar: AdaptiveBottomNavigationBar(
-            selectedIndex: state.tab,
-            selectedItemColor: red,
-            onTap: (i) {
-              drawerKey.currentState?.closeDrawer();
-              context.read<InvestmentBloc>().add(TabSelected(i));
-            },
-            items: const [
-              AdaptiveNavigationDestination(
-                icon: 'chart.pie',
-                selectedIcon: 'chart.pie.fill',
-                label: 'Portfolio',
+              bottomNavigationBar: AdaptiveBottomNavigationBar(
+                selectedIndex: widget.shell.currentIndex,
+                selectedItemColor: red,
+                onTap: (i) {
+                  drawerKey.currentState?.closeDrawer();
+                  widget.shell.goBranch(
+                    i,
+                    initialLocation: i == widget.shell.currentIndex,
+                  );
+                },
+                items: const [
+                  AdaptiveNavigationDestination(
+                    icon: 'chart.pie',
+                    selectedIcon: 'chart.pie.fill',
+                    label: 'Portfolio',
+                  ),
+                  AdaptiveNavigationDestination(
+                    icon: 'chart.xyaxis.line',
+                    label: 'Markets',
+                  ),
+                  AdaptiveNavigationDestination(
+                    icon: 'star',
+                    selectedIcon: 'star.fill',
+                    label: 'Watchlist',
+                  ),
+                  AdaptiveNavigationDestination(
+                    icon: 'clock.arrow.circlepath',
+                    label: 'Activity',
+                  ),
+                ],
               ),
-              AdaptiveNavigationDestination(
-                icon: 'chart.xyaxis.line',
-                label: 'Markets',
-              ),
-              AdaptiveNavigationDestination(
-                icon: 'star',
-                selectedIcon: 'star.fill',
-                label: 'Watchlist',
-              ),
-              AdaptiveNavigationDestination(
-                icon: 'clock.arrow.circlepath',
-                label: 'Activity',
-              ),
-            ],
-          ),
-          body: SafeArea(
-            bottom: false,
-            child: IndexedStack(
-              index: state.tab,
-              children: [
-                Portfolio(state: state),
-                const Markets(),
-                Watchlist(state: state),
-                const Activity(),
-              ],
-            ),
-          ),
-        );
-      },
-    ),
-  );
+              body: SafeArea(bottom: false, child: widget.shell),
+            );
+          },
+        ),
+      );
 }
 
 class AccountMenu extends StatelessWidget {
@@ -344,23 +424,18 @@ class AccountMenu extends StatelessWidget {
           const SizedBox(height: 25),
           const Divider(color: Color(0xFFDADAD2)),
           const SizedBox(height: 16),
-          menuLink(
-            context,
-            Icons.tune,
-            'Preferences',
-            const PreferencesContent(),
-          ),
+          menuLink(context, Icons.tune, 'Preferences', '/preferences'),
           menuLink(
             context,
             Icons.description_outlined,
             'Statements',
-            const StatementsContent(),
+            '/statements',
           ),
           menuLink(
             context,
             Icons.account_circle_outlined,
             'Profile',
-            const ProfileContent(),
+            '/profile',
           ),
         ],
       ),
@@ -370,14 +445,14 @@ class AccountMenu extends StatelessWidget {
     BuildContext context,
     IconData icon,
     String title,
-    Widget content,
+    String location,
   ) => ListTile(
     contentPadding: const EdgeInsets.symmetric(horizontal: 10),
     leading: Icon(icon, size: 20, color: muted),
     title: label(title, size: 13),
     onTap: () {
       Scaffold.maybeOf(context)?.closeDrawer();
-      openPage(context, title, content);
+      context.push(location);
     },
   );
 }
@@ -400,6 +475,24 @@ class PageScroll extends StatelessWidget {
       children: children,
     ),
   );
+}
+
+class PortfolioTab extends StatelessWidget {
+  const PortfolioTab({super.key});
+  @override
+  Widget build(BuildContext context) =>
+      BlocBuilder<InvestmentBloc, InvestmentState>(
+        builder: (context, state) => Portfolio(state: state),
+      );
+}
+
+class WatchlistTab extends StatelessWidget {
+  const WatchlistTab({super.key});
+  @override
+  Widget build(BuildContext context) =>
+      BlocBuilder<InvestmentBloc, InvestmentState>(
+        builder: (context, state) => Watchlist(state: state),
+      );
 }
 
 class Portfolio extends StatelessWidget {
@@ -578,8 +671,7 @@ class AssetRow extends StatelessWidget {
     child: Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () =>
-            openPage(context, asset.symbol, AssetDetails(asset: asset)),
+        onTap: () => context.push('/asset/${asset.symbol}'),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 16),
           decoration: const BoxDecoration(
@@ -740,21 +832,6 @@ class Activity extends StatelessWidget {
   );
 }
 
-void openPage(BuildContext context, String title, Widget content) =>
-    AdaptiveNavigator.push<void>(
-      context,
-      (_) => AdaptiveScaffold(
-        backgroundColor: paper,
-        appBar: AdaptiveAppBar(
-          title: title,
-          navigationBarColor: red,
-          hidesNavigationButtonBackground: true,
-          tintColor: Colors.white,
-        ),
-        body: SafeArea(bottom: false, child: content),
-      ),
-    );
-
 class AssetDetails extends StatelessWidget {
   const AssetDetails({super.key, required this.asset});
   final Asset asset;
@@ -907,20 +984,22 @@ class StatementsContent extends StatelessWidget {
           leading: const Icon(Icons.description_outlined, color: red),
           title: label('$month 2026'),
           trailing: const Icon(Icons.chevron_right),
-          onTap: () => openPage(
-            context,
-            '$month statement',
-            PageScroll(
-              children: [
-                metric('Closing balance', '\$118,473.20'),
-                const SizedBox(height: 12),
-                metric('Dividends received', '\$128.40'),
-                const SizedBox(height: 20),
-                label('Demo statement', color: muted, size: 12),
-              ],
-            ),
-          ),
+          onTap: () => context.push('/statements/$month'),
         ),
+    ],
+  );
+}
+
+class StatementContent extends StatelessWidget {
+  const StatementContent({super.key});
+  @override
+  Widget build(BuildContext context) => PageScroll(
+    children: [
+      metric('Closing balance', '\$118,473.20'),
+      const SizedBox(height: 12),
+      metric('Dividends received', '\$128.40'),
+      const SizedBox(height: 20),
+      label('Demo statement', color: muted, size: 12),
     ],
   );
 }

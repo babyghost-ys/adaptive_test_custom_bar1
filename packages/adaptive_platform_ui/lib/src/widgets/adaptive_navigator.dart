@@ -43,6 +43,61 @@ abstract final class AdaptiveNavigator {
   }
 }
 
+/// A full-screen page for declarative routing, such as a go_router
+/// `GoRoute.pageBuilder` or `Navigator.pages`.
+///
+/// On iOS it is the declarative form of [AdaptiveNavigator.push]: UIKit's
+/// navigation controller owns the push, Back button and interactive back
+/// swipe, and popping the route (`context.pop()`, `Navigator.pop`) pops the
+/// native page. Other platforms use a [MaterialPageRoute]-style transition.
+///
+/// ```dart
+/// GoRoute(
+///   path: '/details',
+///   pageBuilder: (context, state) =>
+///       AdaptivePage(key: state.pageKey, child: const DetailsPage()),
+/// )
+/// ```
+class AdaptivePage<T> extends Page<T> {
+  const AdaptivePage({
+    required this.child,
+    super.key,
+    super.name,
+    super.arguments,
+    super.restorationId,
+  });
+
+  /// The page's content, usually an `AdaptiveScaffold`.
+  final Widget child;
+
+  @override
+  Route<T> createRoute(BuildContext context) {
+    if (!PlatformInfo.isIOS) return _MaterialPageBasedRoute<T>(page: this);
+    return _NativePageRoute<T>.page(
+      page: this,
+      navigation: _NativeNavigation.instance,
+      toolbarRegistry: ToolbarRegistry.maybeOf(context),
+    );
+  }
+}
+
+final class _MaterialPageBasedRoute<T> extends PageRoute<T>
+    with MaterialRouteTransitionMixin<T> {
+  _MaterialPageBasedRoute({required AdaptivePage<T> page})
+    : super(settings: page);
+
+  AdaptivePage<T> get _page => settings as AdaptivePage<T>;
+
+  @override
+  Widget buildContent(BuildContext context) => _page.child;
+
+  @override
+  bool get maintainState => true;
+
+  @override
+  String get debugLabel => '${super.debugLabel}(${_page.name})';
+}
+
 // Internal toolbar coordination. The package entry point exports only
 // AdaptiveNavigator from this file, so this does not add a public component API.
 bool ownsNativePageTransition(Route<dynamic>? route) =>
@@ -70,12 +125,20 @@ final class _NativeStack {
 
   final NavigatorState navigator;
   final String rootId;
-  final ModalRoute<dynamic>? rootRoute;
+  ModalRoute<dynamic>? rootRoute;
   final ToolbarRegistry? toolbarRegistry;
   final routes = <_NativePageRoute<dynamic>>[];
   int revision = 0;
   bool preparing = false;
   Future<void>? nativePush;
+
+  /// Declarative pages prepare UIKit one at a time, in stack order.
+  Future<void>? pagePreparation;
+
+  String parentIdOf(_NativePageRoute<dynamic> route) {
+    final index = routes.indexOf(route);
+    return index <= 0 ? rootId : routes[index - 1].id;
+  }
 
   List<String> get routeIds => [rootId, for (final route in routes) route.id];
   String get topId => routes.isEmpty ? rootId : routes.last.id;
@@ -140,7 +203,6 @@ final class _NativeNavigation {
         builder: builder,
         settings: settings,
         id: id,
-        parentId: parentId,
         stack: stack,
         navigation: this,
       );
@@ -152,6 +214,63 @@ final class _NativeNavigation {
     // The result stays pending for this page's lifetime; release preparation
     // before awaiting it, so a detail can push its own next page.
     return navigator.push<T>(route);
+  }
+
+  /// Registers a declarative page with its navigator's native stack. The
+  /// Navigator has already added the route, so unlike [push] it cannot wait
+  /// for UIKit before Flutter builds it: the route stays empty and
+  /// translucent (the previous page keeps showing) until UIKit has prepared.
+  void installPage(_NativePageRoute<dynamic> route, NavigatorState navigator) {
+    final stack = _stacks[navigator] ??= _NativeStack(
+      navigator,
+      'native_root_${++_nextId}',
+      null,
+      route.toolbarRegistry,
+    );
+    route.stack = stack;
+    route.id = 'native_route_${++_nextId}';
+    stack.routes.add(route);
+    _routes[route.id] = route;
+  }
+
+  /// Called from didPush/didAdd. The first preparation is sent synchronously,
+  /// before the previous page rebuilds and gives up the native bar.
+  void preparePage(_NativePageRoute<dynamic> route) {
+    final stack = route.stack;
+    final operation = _preparePage(route, stack.pagePreparation);
+    stack.pagePreparation = operation;
+    unawaited(
+      operation.whenComplete(() {
+        if (identical(stack.pagePreparation, operation)) {
+          stack.pagePreparation = null;
+        }
+      }),
+    );
+  }
+
+  Future<void> _preparePage(
+    _NativePageRoute<dynamic> route,
+    Future<void>? previous,
+  ) async {
+    final stack = route.stack;
+    if (previous != null || stack.nativePush != null) {
+      await previous;
+      await stack.nativePush;
+    }
+    // UIKit refuses while another push or pop is still settling.
+    for (var attempt = 0; attempt < 30; attempt++) {
+      if (!route.isActive || !stack.navigator.mounted) return;
+      final prepared = await _channel.invokeMethod<bool>('preparePush', {
+        'routeId': route.id,
+        'parentRouteId': stack.parentIdOf(route),
+      });
+      if (prepared == true) break;
+      await SchedulerBinding.instance.endOfFrame;
+    }
+    if (!route.isActive) return;
+    route.reveal();
+    shown(route);
+    await stack.nativePush;
   }
 
   Future<void> _handleNativeCall(MethodCall call) async {
@@ -215,7 +334,7 @@ final class _NativeNavigation {
     if (!route.isActive || !route.isCurrent) return;
     await _channel.invokeMethod<void>('routeShown', {
       'routeId': route.id,
-      'parentRouteId': route.parentId,
+      'parentRouteId': route.stack.parentIdOf(route),
       'expectsNativePage': _expectsNativePage(route),
     });
     popPermissionChanged(route);
@@ -314,20 +433,73 @@ final class _NativeNavigation {
 
 final class _NativePageRoute<T> extends PageRoute<T> {
   _NativePageRoute({
-    required this.builder,
+    required WidgetBuilder this.builder,
     required this.id,
-    required this.parentId,
     required this.stack,
     required this.navigation,
     super.settings,
-  }) : super(allowSnapshotting: false);
+  }) : toolbarRegistry = stack.toolbarRegistry,
+       _awaitingNative = false,
+       super(allowSnapshotting: false);
 
-  final WidgetBuilder builder;
-  final String id;
-  final String parentId;
-  final _NativeStack stack;
+  /// A page-based route; [AdaptivePage.child] supplies its content.
+  _NativePageRoute.page({
+    required AdaptivePage<T> page,
+    required this.navigation,
+    required this.toolbarRegistry,
+  }) : builder = null,
+       _awaitingNative = true,
+       super(settings: page, allowSnapshotting: false);
+
+  final WidgetBuilder? builder;
+  late String id;
+  late _NativeStack stack;
   final _NativeNavigation navigation;
+  final ToolbarRegistry? toolbarRegistry;
   bool? nativePopEnabled;
+
+  /// A page-based route waits for UIKit to prepare before showing content.
+  bool _awaitingNative;
+
+  bool get _pageBased => builder == null;
+
+  void reveal() {
+    if (!_awaitingNative) return;
+    // TransitionRoute keeps the route's opacity on its first overlay entry.
+    overlayEntries.first.opaque = true;
+    _awaitingNative = false;
+    // The modal scope caches the built page; this rebuilds it.
+    changedExternalState();
+  }
+
+  @override
+  bool get opaque => !_awaitingNative;
+
+  @override
+  void install() {
+    if (_pageBased) navigation.installPage(this, navigator!);
+    super.install();
+  }
+
+  @override
+  void didChangePrevious(Route<dynamic>? previousRoute) {
+    super.didChangePrevious(previousRoute);
+    // The first declarative page learns its native root here: the route the
+    // native stack returns to when this navigator pops all its pages.
+    if (_pageBased &&
+        stack.rootRoute == null &&
+        previousRoute is ModalRoute<dynamic> &&
+        previousRoute is! _NativePageRoute<dynamic>) {
+      stack.rootRoute = previousRoute;
+      navigation._rootStacks[previousRoute] = stack;
+    }
+  }
+
+  @override
+  void didAdd() {
+    super.didAdd();
+    if (_pageBased) navigation.preparePage(this);
+  }
 
   bool get nativePopAllowed =>
       !willHandlePopInternally &&
@@ -352,7 +524,11 @@ final class _NativePageRoute<T> extends PageRoute<T> {
   @override
   TickerFuture didPush() {
     final result = super.didPush();
-    navigation.shown(this);
+    if (_pageBased) {
+      navigation.preparePage(this);
+    } else {
+      navigation.shown(this);
+    }
     return result;
   }
 
@@ -376,7 +552,9 @@ final class _NativePageRoute<T> extends PageRoute<T> {
     BuildContext context,
     Animation<double> animation,
     Animation<double> secondaryAnimation,
-  ) => builder(context);
+  ) => _awaitingNative
+      ? const SizedBox.shrink()
+      : builder?.call(context) ?? (settings as AdaptivePage<T>).child;
 
   @override
   Widget buildTransitions(
