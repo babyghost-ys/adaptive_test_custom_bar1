@@ -465,6 +465,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
             hidden:
                 widget.tabBarHidden ||
                 !(ModalRoute.of(context)?.isCurrent ?? true),
+            releasesBottomInset: widget.tabBarHidden,
             builder: (context) => _buildPage(context, omitBottomBar: true),
           )
         : _buildPage(context);

@@ -14,6 +14,7 @@ class IOS26SearchTabScaffold extends StatefulWidget {
     required this.bar,
     required this.builder,
     required this.hidden,
+    this.releasesBottomInset,
     this.headerBackgroundColor,
     this.backgroundColor,
     this.headerHeight = 0,
@@ -22,6 +23,12 @@ class IOS26SearchTabScaffold extends StatefulWidget {
   final AdaptiveBottomNavigationBar bar;
   final WidgetBuilder builder;
   final bool hidden;
+
+  /// Whether the page gives up the tab bar's bottom inset; defaults to
+  /// [hidden]. A page covered by a pushed route keeps it: the page is off
+  /// screen, and dropping the inset would shorten its scroll extent and clamp
+  /// its position, so it jumps when Back reveals it.
+  final bool? releasesBottomInset;
   final Color? headerBackgroundColor;
   final Color? backgroundColor;
   final double headerHeight;
@@ -109,7 +116,10 @@ class _SearchTabsState extends State<IOS26SearchTabScaffold> {
         widget.bar.search?.onSubmitted?.call(call.arguments as String);
       case 'layout':
         final data = call.arguments as Map;
-        final bottom = (data['bottom'] as num).toDouble();
+        final reported = (data['bottom'] as num).toDouble();
+        // A covered page keeps the inset it had: UIKit reports the pushed
+        // page's smaller one while the tab bar is hidden for it.
+        final bottom = _ready && _covered ? _bottomInset : reported;
         final safeTop = (data['safeTop'] as num?)?.toDouble() ?? 0;
         final safeLeft = (data['safeLeft'] as num?)?.toDouble();
         final safeRight = (data['safeRight'] as num?)?.toDouble();
@@ -136,6 +146,10 @@ class _SearchTabsState extends State<IOS26SearchTabScaffold> {
         });
     }
   }
+
+  /// Behind a pushed page rather than with its tab bar hidden.
+  bool get _covered =>
+      widget.hidden && !(widget.releasesBottomInset ?? widget.hidden);
 
   bool get _searchSelected =>
       widget.bar.items![widget.bar.selectedIndex!].isSearch;
@@ -178,7 +192,7 @@ class _SearchTabsState extends State<IOS26SearchTabScaffold> {
       top: isSearch
           ? (_searchTopInset ?? metrics.padding.top)
           : math.max(metrics.padding.top, _safeTop),
-      bottom: widget.hidden
+      bottom: widget.releasesBottomInset ?? widget.hidden
           ? metrics.padding.bottom
           : math.max(metrics.padding.bottom, _bottomInset),
     );
