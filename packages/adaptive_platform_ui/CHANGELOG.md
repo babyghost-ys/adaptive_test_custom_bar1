@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+* **IMPROVEMENT**: Removed the `foldable` dependency. Camera/status occlusions now come from the package-owned iOS layout bridge; toolbar placement still uses safe areas and UIKit traits. The testing-only `debugFold` override is now `debugRegions`, accepting package-owned reserved regions.
 * **NEW**: `AdaptiveNativeFonts.setFamily` sets one font family for the native iOS components and restyles them live, including navigation and tab bars (new `adaptive_platform_ui/native_fonts` channel)
 * **FIX**: package scaffolds, list tiles, form sections and expansion tiles replaced the inherited `DefaultTextStyle`, dropping an app-wide font family; they now merge their size and colour into it
 * **FIX**: iOS native buttons reported the size of a title wrapped inside their current frame after the title changed; they now measure the single-line title, and keep it on one line

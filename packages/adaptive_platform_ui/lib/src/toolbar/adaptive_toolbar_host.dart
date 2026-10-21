@@ -1,8 +1,6 @@
-import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
-import 'package:foldable/foldable.dart';
+import '../platform/reserved_region.dart';
 
 import '../platform/platform_info.dart';
 import '../platform/system_vertical_bar.dart';
@@ -28,17 +26,17 @@ class AdaptiveToolbarHost extends StatefulWidget {
   const AdaptiveToolbarHost({
     super.key,
     required this.child,
-    @visibleForTesting this.debugFold,
+    @visibleForTesting this.debugRegions,
     @visibleForTesting this.debugVerticalBarEdge,
   });
 
   /// The navigator (or whatever the app's `builder` receives).
   final Widget child;
 
-  /// Replaces the platform's fold readings (the reserved regions) and the
+  /// Replaces the platform's reserved regions and the
   /// iOS 26 check, so the chrome can be exercised in widget tests anywhere.
   @visibleForTesting
-  final FoldableData? debugFold;
+  final List<ReservedRegion>? debugRegions;
 
   /// Replaces the system's vertical bar edge in widget tests, where the
   /// platform channel it comes from does not exist.
@@ -54,11 +52,6 @@ class _AdaptiveToolbarHostState extends State<AdaptiveToolbarHost>
   final ToolbarRegistry _registry = ToolbarRegistry();
   late final ToolbarBlend _blend;
 
-  /// Latest fold / size-class reading; null until the first one arrives and
-  /// on platforms where the chrome is never drawn.
-  FoldableData? _fold;
-  StreamSubscription<FoldableData>? _foldSub;
-
   /// The system's vertical bar edge; null wherever the chrome is never drawn
   /// and in tests, where no platform channel answers.
   ValueListenable<SystemVerticalBarEdge>? _edge;
@@ -71,22 +64,13 @@ class _AdaptiveToolbarHostState extends State<AdaptiveToolbarHost>
   void initState() {
     super.initState();
     _blend = ToolbarBlend(registry: _registry, vsync: this);
-    // Fold readings are only needed for the camera clearance of the bar.
-    if (widget.debugFold == null && PlatformInfo.isIOS26OrHigher()) {
-      Foldable.snapshot.then(_onFoldChanged).catchError((Object _) {});
-      _foldSub = Foldable.changes.listen(
-        _onFoldChanged,
-        onError: (Object _) {},
-      );
+    // Reserved regions supply camera clearance for the bar.
+    if (widget.debugRegions == null && PlatformInfo.isIOS26OrHigher()) {
+      SystemVerticalBar.regions.addListener(_onEdgeChanged);
       // The side the bar belongs on comes from the system, not from insets:
       // the leading Split View pane has none to read.
       _edge = SystemVerticalBar.edge..addListener(_onEdgeChanged);
     }
-  }
-
-  void _onFoldChanged(FoldableData data) {
-    if (!mounted) return;
-    setState(() => _fold = data);
   }
 
   void _onEdgeChanged() {
@@ -97,7 +81,9 @@ class _AdaptiveToolbarHostState extends State<AdaptiveToolbarHost>
   @override
   void dispose() {
     _edge?.removeListener(_onEdgeChanged);
-    _foldSub?.cancel();
+    if (_edge != null) {
+      SystemVerticalBar.regions.removeListener(_onEdgeChanged);
+    }
     _blend.dispose();
     _registry.dispose();
     super.dispose();
@@ -105,10 +91,10 @@ class _AdaptiveToolbarHostState extends State<AdaptiveToolbarHost>
 
   @override
   Widget build(BuildContext context) {
-    final fold = widget.debugFold ?? _fold;
+    final regions = widget.debugRegions ?? SystemVerticalBar.currentRegions;
     // The fixed chrome only exists where pages use the native iOS 26
     // toolbar; elsewhere pages keep their own Cupertino / Material bars.
-    final hostsToolbar = widget.debugFold != null || PlatformInfo.isIOS;
+    final hostsToolbar = widget.debugRegions != null || PlatformInfo.isIOS;
     final edge =
         widget.debugVerticalBarEdge ??
         _edge?.value ??
@@ -159,10 +145,7 @@ class _AdaptiveToolbarHostState extends State<AdaptiveToolbarHost>
                   left: pose.onLeft ? 0 : null,
                   right: pose.onLeft ? null : 0,
                   width: pose.bandWidth,
-                  child: HostedDuoBar(
-                    blend: _blend,
-                    regions: fold?.regions ?? const <ReservedRegion>[],
-                  ),
+                  child: HostedDuoBar(blend: _blend, regions: regions),
                 ),
             ],
           ),

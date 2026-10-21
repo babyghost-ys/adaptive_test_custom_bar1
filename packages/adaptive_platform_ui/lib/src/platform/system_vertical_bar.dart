@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import 'reserved_region.dart';
+
 /// Where the system places its vertical bar for this window, as a physical
 /// side (`UITraitCollection.verticalBarEdge`, iOS 27.1).
 enum SystemVerticalBarEdge {
@@ -41,6 +43,18 @@ abstract final class SystemVerticalBar {
     SystemVerticalBarEdge.unknown,
   );
   static StreamSubscription<Object?>? _sub;
+  static final ValueNotifier<List<ReservedRegion>> _regions = ValueNotifier(
+    const [],
+  );
+
+  /// Latest camera/status occlusions, without starting a platform subscription.
+  static List<ReservedRegion> get currentRegions => _regions.value;
+
+  /// Shares the edge subscription; updates even when only region bounds change.
+  static ValueListenable<List<ReservedRegion>> get regions {
+    edge;
+    return _regions;
+  }
 
   static const MethodChannel _titleBandChannel = MethodChannel(
     'adaptive_platform_ui/duo_title_band',
@@ -54,7 +68,10 @@ abstract final class SystemVerticalBar {
   /// until the first reading arrives.
   static ValueListenable<SystemVerticalBarEdge> get edge {
     _sub ??= _channel.receiveBroadcastStream().listen((value) {
-      _edge.value = SystemVerticalBarEdge.fromWire(value);
+      final map = value is Map ? value : null;
+      final regions = ReservedRegion.fromWire(map?['regions']);
+      if (!listEquals(_regions.value, regions)) _regions.value = regions;
+      _edge.value = SystemVerticalBarEdge.fromWire(map?['edge'] ?? value);
       _measureTitleBand();
     }, onError: (Object _) {});
     return _edge;

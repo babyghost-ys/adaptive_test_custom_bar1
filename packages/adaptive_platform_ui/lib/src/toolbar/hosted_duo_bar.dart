@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter/foundation.dart';
-import 'package:foldable/foldable.dart';
+import '../platform/reserved_region.dart';
 
 import '../widgets/adaptive_app_bar_action.dart';
 import '../widgets/ios26/ios26_glass_capsule.dart';

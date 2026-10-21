@@ -1,19 +1,24 @@
 import Flutter
 import UIKit
+import ObjectiveC.runtime
 
 /// Streams where UIKit places its vertical bar for this window
 /// (`UITraitCollection.verticalBarEdge`, iOS 27.1) to Dart, as a physical
-/// side: "left", "right", "none", or "unsupported" before iOS 27.1.
+/// side plus active camera/status occlusions in Flutter-view coordinates.
+/// The edge is "left", "right", "none", or "unsupported" before iOS 27.1.
 ///
 /// Read through KVC so the plugin still builds against SDKs older than 27.1.
 final class VerticalBarEdgeStreamHandler: NSObject, FlutterStreamHandler {
     private let registrar: FlutterPluginRegistrar
     private var sink: FlutterEventSink?
     private var observer: EdgeObserverView?
-    private var lastSent: String?
+    private var lastSent: NSDictionary?
     /// Bumped on every listen/cancel so retry closures from an earlier
     /// subscription stop instead of racing the current one.
     private var generation = 0
+    private var regionRefresh: Timer?
+
+    deinit { regionRefresh?.invalidate() }
 
     private static let quickAttempts = 20
     private static let quickInterval: TimeInterval = 0.05
@@ -27,6 +32,8 @@ final class VerticalBarEdgeStreamHandler: NSObject, FlutterStreamHandler {
     func onListen(
         withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink
     ) -> FlutterError? {
+        regionRefresh?.invalidate()
+        regionRefresh = nil
         generation += 1
         observer?.removeFromSuperview()
         observer = nil
@@ -37,6 +44,8 @@ final class VerticalBarEdgeStreamHandler: NSObject, FlutterStreamHandler {
     }
 
     func onCancel(withArguments arguments: Any?) -> FlutterError? {
+        regionRefresh?.invalidate()
+        regionRefresh = nil
         generation += 1
         observer?.removeFromSuperview()
         observer = nil
@@ -65,16 +74,57 @@ final class VerticalBarEdgeStreamHandler: NSObject, FlutterStreamHandler {
         view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.isUserInteractionEnabled = false
         view.accessibilityElementsHidden = true
-        view.onChange = { [weak self] v in self?.send(Self.edge(of: v)) }
+        view.onChange = { [weak self] v in self?.send(Self.edge(of: v), view: v) }
         host.insertSubview(view, at: 0)
         observer = view
-        send(Self.edge(of: view))
+        send(Self.edge(of: view), view: view)
+        // Occlusion activity can change without a size or trait change. Query
+        // the current view again rather than retaining regions from an old pose.
+        regionRefresh = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) {
+            [weak self, weak view] _ in
+            guard let self, let view else { return }
+            self.send(Self.edge(of: view), view: view)
+        }
     }
 
-    private func send(_ edge: String) {
-        guard edge != lastSent else { return }
-        lastSent = edge
-        sink?(edge)
+    private func send(_ edge: String, view: UIView? = nil) {
+        let payload: NSDictionary = [
+            "edge": edge,
+            "regions": view.map(Self.occlusions) ?? []
+        ]
+        guard lastSent == nil || !payload.isEqual(lastSent!) else { return }
+        lastSent = payload
+        sink?(payload)
+    }
+
+    /// Query only active occlusions in this view's coordinates. Runtime lookup
+    /// lets this package continue compiling with SDKs predating this UIKit API.
+    /// No hinge sensors, posture tracking, or device-size guesses are needed.
+    private static func occlusions(in view: UIView) -> [[String: Double]] {
+        let query = NSSelectorFromString("reservedRegionsOfKind:options:")
+        let factory = NSSelectorFromString("occlusionRegionKind")
+        guard view.responds(to: query),
+              let kindClass = NSClassFromString("UIViewReservedRegionKind"),
+              let method = class_getClassMethod(kindClass, factory)
+        else { return [] }
+        typealias MakeKind = @convention(c) (AnyClass, Selector) -> Unmanaged<AnyObject>
+        let makeKind = unsafeBitCast(method_getImplementation(method), to: MakeKind.self)
+        let kind = makeKind(kindClass, factory).takeUnretainedValue()
+        typealias Query = @convention(c) (AnyObject, Selector, AnyObject, UInt) -> Unmanaged<AnyObject>
+        let read = unsafeBitCast(view.method(for: query), to: Query.self)
+        guard let regions = read(view, query, kind, 0).takeUnretainedValue() as? [NSObject]
+        else { return [] }
+        return regions.compactMap { region in
+            guard region.responds(to: NSSelectorFromString("frame")),
+                  let frame = (region.value(forKey: "frame") as? NSValue)?.cgRectValue,
+                  !frame.isNull, !frame.isInfinite, !frame.isEmpty
+            else { return nil }
+            if region.responds(to: NSSelectorFromString("isActive")),
+               let active = region.value(forKey: "active") as? NSNumber,
+               !active.boolValue { return nil }
+            return ["x": Double(frame.minX), "y": Double(frame.minY),
+                    "width": Double(frame.width), "height": Double(frame.height)]
+        }
     }
 
     static func edge(of view: UIView) -> String {

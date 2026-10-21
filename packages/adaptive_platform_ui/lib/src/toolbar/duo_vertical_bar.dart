@@ -1,5 +1,5 @@
 import 'package:flutter/cupertino.dart';
-import 'package:foldable/foldable.dart';
+import '../platform/reserved_region.dart';
 
 import '../platform/system_vertical_bar.dart';
 import '../widgets/adaptive_app_bar_action.dart';

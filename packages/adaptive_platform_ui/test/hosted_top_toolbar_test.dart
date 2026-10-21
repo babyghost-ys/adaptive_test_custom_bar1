@@ -1,3 +1,4 @@
+import 'package:adaptive_platform_ui/src/platform/reserved_region.dart';
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:adaptive_platform_ui/src/toolbar/hosted_duo_bar.dart';
 import 'package:adaptive_platform_ui/src/toolbar/hosted_top_toolbar.dart';
@@ -5,17 +6,10 @@ import 'package:adaptive_platform_ui/src/toolbar/toolbar_chrome_scope.dart';
 import 'package:flutter/cupertino.dart' show CupertinoPageRoute;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:foldable/foldable.dart';
 
 /// Forces the chrome on (there is no iOS 26 in a widget test); the insets
 /// stay those of an ordinary iPhone, so this is not the Duo pose.
-FoldableData forcedChrome() => FoldableData(
-  capabilities: FoldableData.unsupported.capabilities,
-  status: FoldableData.unsupported.status,
-  angleDegrees: FoldableData.unsupported.angleDegrees,
-  regions: const [],
-  displayFeatures: const [],
-);
+List<ReservedRegion> forcedChrome() => const [];
 
 Widget page(String title, {IconData? action, VoidCallback? onAction}) =>
     AdaptiveScaffold(
@@ -36,7 +30,7 @@ Widget hostedApp({
 }) => MaterialApp(
   navigatorKey: navigatorKey,
   builder: (context, child) =>
-      AdaptiveToolbarHost(debugFold: forcedChrome(), child: child!),
+      AdaptiveToolbarHost(debugRegions: forcedChrome(), child: child!),
   home: home,
 );
 

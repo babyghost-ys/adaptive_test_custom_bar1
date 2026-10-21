@@ -1,3 +1,4 @@
+import 'package:adaptive_platform_ui/src/platform/reserved_region.dart';
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:adaptive_platform_ui/src/platform/system_vertical_bar.dart';
 import 'package:adaptive_platform_ui/src/toolbar/duo_vertical_bar.dart';
@@ -8,7 +9,6 @@ import 'package:adaptive_platform_ui/src/widgets/ios26/ios26_scaffold.dart';
 import 'package:flutter/cupertino.dart' show CupertinoIcons, CupertinoPageRoute;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:foldable/foldable.dart';
 
 /// Geometry measured on the iPhone Duo inner display (iOS 27.1 simulator).
 const Size duoLandscape = Size(951, 669);
@@ -16,21 +16,13 @@ const Size duoLandscape = Size(951, 669);
 /// Split View on the inner display, measured on the iOS 27.1 simulator.
 const Size duoSplitPane = Size(469, 669);
 
-FoldableData duoInnerDisplay() => FoldableData(
-  capabilities: FoldableData.unsupported.capabilities,
-  status: FoldableData.unsupported.status,
-  angleDegrees: FoldableData.unsupported.angleDegrees,
-  regions: const [
-    ReservedRegion(
-      kind: ReservedRegionKind.occlusion,
-      bounds: Rect.fromLTRB(867, 0, 951, 120),
-      isActive: true,
-    ),
-  ],
-  displayFeatures: const [],
-  horizontalSizeClass: SizeClass.regular,
-  verticalSizeClass: SizeClass.regular,
-);
+List<ReservedRegion> duoInnerDisplay() => const [
+  ReservedRegion(
+    kind: ReservedRegionKind.occlusion,
+    bounds: Rect.fromLTRB(867, 0, 951, 120),
+    isActive: true,
+  ),
+];
 
 Widget page(
   String title, {
@@ -67,7 +59,7 @@ Widget hostedApp({
 }) => MaterialApp(
   navigatorKey: navigatorKey,
   builder: (context, child) => AdaptiveToolbarHost(
-    debugFold: duoInnerDisplay(),
+    debugRegions: duoInnerDisplay(),
     debugVerticalBarEdge: edge,
     child: child!,
   ),
@@ -660,8 +652,10 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           navigatorKey: root,
-          builder: (context, child) =>
-              AdaptiveToolbarHost(debugFold: duoInnerDisplay(), child: child!),
+          builder: (context, child) => AdaptiveToolbarHost(
+            debugRegions: duoInnerDisplay(),
+            child: child!,
+          ),
           home: ValueListenableBuilder<int>(
             valueListenable: index,
             builder: (_, value, _) => AdaptiveScaffold(
@@ -734,19 +728,13 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         builder: (context, child) => AdaptiveToolbarHost(
-          debugFold: FoldableData(
-            capabilities: FoldableData.unsupported.capabilities,
-            status: FoldableData.unsupported.status,
-            angleDegrees: FoldableData.unsupported.angleDegrees,
-            regions: const [
-              ReservedRegion(
-                kind: ReservedRegionKind.occlusion,
-                bounds: Rect.fromLTWH(594, 384, 84, 82),
-                isActive: true,
-              ),
-            ],
-            displayFeatures: const [],
-          ),
+          debugRegions: const [
+            ReservedRegion(
+              kind: ReservedRegionKind.occlusion,
+              bounds: Rect.fromLTWH(594, 384, 84, 82),
+              isActive: true,
+            ),
+          ],
           child: child!,
         ),
         home: AdaptiveScaffold(
@@ -873,7 +861,7 @@ void main() {
     // element tree and hide the very thing under test.
     Widget app(SystemVerticalBarEdge? edge) => MaterialApp(
       builder: (context, _) => AdaptiveToolbarHost(
-        debugFold: duoInnerDisplay(),
+        debugRegions: duoInnerDisplay(),
         debugVerticalBarEdge: edge,
         child: Navigator(
           onGenerateRoute: (_) =>

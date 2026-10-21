@@ -1,3 +1,4 @@
+import 'package:adaptive_platform_ui/src/platform/reserved_region.dart';
 import 'package:adaptive_platform_ui/src/platform/system_vertical_bar.dart';
 import 'package:adaptive_platform_ui/src/toolbar/duo_vertical_bar.dart';
 import 'package:adaptive_platform_ui/src/widgets/adaptive_app_bar_action.dart';
@@ -7,7 +8,6 @@ import 'package:flutter/cupertino.dart'
     show CupertinoIcons, kMinInteractiveDimensionCupertino;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:foldable/foldable.dart';
 
 /// Geometry measured on the iPhone Duo inner display (iOS 27.1 simulator).
 const Size duoLandscape = Size(951, 669);

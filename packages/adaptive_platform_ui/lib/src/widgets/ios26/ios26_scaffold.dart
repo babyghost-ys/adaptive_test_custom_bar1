@@ -1,10 +1,8 @@
-import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart'
     show ValueListenable, defaultTargetPlatform, TargetPlatform;
-import 'package:foldable/foldable.dart';
 import '../../platform/platform_info.dart';
 import '../../platform/system_vertical_bar.dart';
 import '../../style/sf_symbol.dart';
@@ -90,11 +88,6 @@ class IOS26Scaffold extends StatefulWidget {
 }
 
 class _IOS26ScaffoldState extends State<IOS26Scaffold> {
-  /// Latest iPhone Duo fold / size-class snapshot from the `foldable` package.
-  /// Null until the first snapshot arrives; stays null on non-iOS.
-  FoldableData? _fold;
-  StreamSubscription<FoldableData>? _foldSub;
-
   /// The system's vertical bar edge, for a page that draws its own bar and so
   /// has no host to ask. Null off iOS 26, where no channel answers.
   ValueListenable<SystemVerticalBarEdge>? _edge;
@@ -102,8 +95,8 @@ class _IOS26ScaffoldState extends State<IOS26Scaffold> {
   @override
   void initState() {
     super.initState();
-    _listenToFold();
     if (PlatformInfo.isIOS26OrHigher()) {
+      SystemVerticalBar.regions.addListener(_onEdgeChanged);
       _edge = SystemVerticalBar.edge..addListener(_onEdgeChanged);
       SystemVerticalBar.titleBand.addListener(_onEdgeChanged);
     }
@@ -114,26 +107,13 @@ class _IOS26ScaffoldState extends State<IOS26Scaffold> {
     setState(() {});
   }
 
-  /// Seeds [_fold] with the current snapshot and follows fold / size-class
-  /// changes (opening, closing, rotating, Split View). Failures degrade to
-  /// "not foldable" so the normal top toolbar is used.
-  void _listenToFold() {
-    Foldable.snapshot.then(_onFoldChanged).catchError((Object _) {});
-    _foldSub = Foldable.changes.listen(_onFoldChanged, onError: (Object _) {});
-  }
-
-  void _onFoldChanged(FoldableData data) {
-    if (!mounted) return;
-    setState(() => _fold = data);
-  }
-
   @override
   void dispose() {
     if (_edge != null) {
+      SystemVerticalBar.regions.removeListener(_onEdgeChanged);
       _edge!.removeListener(_onEdgeChanged);
       SystemVerticalBar.titleBand.removeListener(_onEdgeChanged);
     }
-    _foldSub?.cancel();
     super.dispose();
   }
 
@@ -462,7 +442,7 @@ class _IOS26ScaffoldState extends State<IOS26Scaffold> {
                   : widget.actions ?? const <AdaptiveAppBarAction>[],
               tabBar: tabs,
               tint: widget.tintColor,
-              regions: _fold?.regions ?? const <ReservedRegion>[],
+              regions: SystemVerticalBar.currentRegions,
             ),
           ),
       ],
