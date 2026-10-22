@@ -1,14 +1,30 @@
 import 'package:flutter/material.dart';
 
+import 'package:native_widgets_on_duo/app/theme/palette.dart';
 import 'package:native_widgets_on_duo/core/widgets/chart_painter.dart';
+import 'package:native_widgets_on_duo/core/widgets/filter_section_header.dart';
 import 'package:native_widgets_on_duo/core/widgets/metric.dart';
 import 'package:native_widgets_on_duo/core/widgets/page_scroll.dart';
 import 'package:native_widgets_on_duo/core/widgets/section.dart';
 import 'package:native_widgets_on_duo/features/investment/data/demo_assets.dart';
 import 'package:native_widgets_on_duo/features/investment/widgets/asset_row.dart';
+import 'package:native_widgets_on_duo/features/markets/models/market_filter.dart';
+import 'package:native_widgets_on_duo/features/markets/view/market_filter_sheet.dart';
 
-class Markets extends StatelessWidget {
+class Markets extends StatefulWidget {
   const Markets({super.key});
+  @override
+  State<Markets> createState() => _MarketsState();
+}
+
+class _MarketsState extends State<Markets> {
+  MarketFilter filter = const MarketFilter();
+
+  Future<void> openFilters() async {
+    final result = await showMarketFilterSheet(context, filter);
+    if (result != null && mounted) setState(() => filter = result);
+  }
+
   @override
   Widget build(BuildContext context) => PageScroll(
     storageKey: 'markets',
@@ -28,9 +44,18 @@ class Markets extends StatelessWidget {
         child: CustomPaint(painter: ChartPainter(seed: 7, filled: true)),
       ),
       const SizedBox(height: 24),
-      section('Explore', 'USD'),
+      FilterSectionHeader(
+        title: 'Explore',
+        onPressed: openFilters,
+        activeCount: filter.activeCount,
+      ),
       const SizedBox(height: 8),
-      ...assets.map((a) => AssetRow(asset: a)),
+      ...filter.apply(assets).map((a) => AssetRow(asset: a)),
+      if (filter.apply(assets).isEmpty)
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 40),
+          child: Icon(Icons.search_off_rounded, size: 40, color: muted),
+        ),
     ],
   );
 }

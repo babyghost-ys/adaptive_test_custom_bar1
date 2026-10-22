@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:native_widgets_on_duo/app/theme/palette.dart';
 import 'package:native_widgets_on_duo/core/formatting/money.dart';
 import 'package:native_widgets_on_duo/core/widgets/chart_painter.dart';
+import 'package:native_widgets_on_duo/core/widgets/filter_section_header.dart';
 import 'package:native_widgets_on_duo/core/widgets/label.dart';
 import 'package:native_widgets_on_duo/core/widgets/metric.dart';
 import 'package:native_widgets_on_duo/core/widgets/page_scroll.dart';
@@ -11,6 +12,8 @@ import 'package:native_widgets_on_duo/core/widgets/section.dart';
 import 'package:native_widgets_on_duo/features/investment/bloc/investment_bloc.dart';
 import 'package:native_widgets_on_duo/features/investment/data/demo_assets.dart';
 import 'package:native_widgets_on_duo/features/investment/widgets/asset_row.dart';
+import 'package:native_widgets_on_duo/features/portfolio/models/holdings_filter.dart';
+import 'package:native_widgets_on_duo/features/portfolio/view/holdings_filter_sheet.dart';
 
 class PortfolioTab extends StatelessWidget {
   const PortfolioTab({super.key});
@@ -21,9 +24,27 @@ class PortfolioTab extends StatelessWidget {
       );
 }
 
-class Portfolio extends StatelessWidget {
+class Portfolio extends StatefulWidget {
   const Portfolio({super.key, required this.state});
   final InvestmentState state;
+  @override
+  State<Portfolio> createState() => _PortfolioState();
+}
+
+class _PortfolioState extends State<Portfolio> {
+  HoldingsFilter filter = const HoldingsFilter();
+
+  InvestmentState get state => widget.state;
+
+  Future<void> openFilters() async {
+    final result = await showHoldingsFilterSheet(
+      context,
+      filter,
+      scale: state.accountScale,
+    );
+    if (result != null && mounted) setState(() => filter = result);
+  }
+
   @override
   Widget build(BuildContext context) => PageScroll(
     storageKey: 'portfolio',
@@ -117,12 +138,21 @@ class Portfolio extends StatelessWidget {
         ),
       ),
       const SizedBox(height: 32),
-      section('Holdings', '${assets.length} assets'),
-      const SizedBox(height: 10),
-      ...assets.map(
-        (asset) =>
-            AssetRow(asset: asset, holding: true, scale: state.accountScale),
+      FilterSectionHeader(
+        title: 'Holdings',
+        onPressed: openFilters,
+        activeCount: filter.activeCount,
       ),
+      const SizedBox(height: 10),
+      ...filter
+          .apply(assets, state.accountScale)
+          .map(
+            (asset) => AssetRow(
+              asset: asset,
+              holding: true,
+              scale: state.accountScale,
+            ),
+          ),
       const SizedBox(height: 28),
       section('Allocation', ''),
       const SizedBox(height: 18),

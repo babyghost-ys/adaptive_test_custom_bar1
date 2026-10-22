@@ -31,6 +31,14 @@ public class AdaptivePlatformUiPlugin: NSObject, FlutterPlugin {
             actionSheets.handle(call, result: result)
         }
 
+        let filterSheetChannel = FlutterMethodChannel(
+            name: "adaptive_platform_ui/filter_sheet", binaryMessenger: registrar.messenger())
+        let filterSheets = NativeFilterSheet(
+            channel: filterSheetChannel, hostProvider: { registrar.viewController })
+        filterSheetChannel.setMethodCallHandler { call, result in
+            filterSheets.handle(call, result: result)
+        }
+
 
         // Register iOS 26 Button platform view factory
         let ios26ButtonFactory = iOS26ButtonViewFactory(messenger: registrar.messenger())

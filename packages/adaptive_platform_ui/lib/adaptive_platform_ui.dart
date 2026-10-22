@@ -68,6 +68,7 @@ export 'src/content/blur_view/adaptive_blur_view.dart';
 
 export 'src/overlays/action_sheet/adaptive_action_sheet.dart';
 export 'src/overlays/bottom_sheet/adaptive_bottom_sheet.dart';
+export 'src/overlays/filter_sheet/adaptive_filter_sheet.dart';
 export 'src/controls/pickers/adaptive_inline_date_picker.dart';
 export 'src/style/adaptive_native_fonts.dart';
 
