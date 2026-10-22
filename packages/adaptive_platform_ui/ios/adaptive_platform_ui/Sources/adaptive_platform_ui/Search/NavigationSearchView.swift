@@ -27,6 +27,7 @@ final class NavigationSearchView: NSObject, FlutterPlatformView, NativeNavigatio
     private var active = true
     private var dark = false
     private var tint: UIColor?
+    private var barKey: [AnyHashable]?
     private var scrollOffset: CGFloat = 0
     private var lastHeight: CGFloat = 0
     private var lastBottom: CGFloat = 0
@@ -98,29 +99,42 @@ final class NavigationSearchView: NSObject, FlutterPlatformView, NativeNavigatio
         if item.title != title { item.title = title }
         let placeholder = args["placeholder"] as? String ?? "Search"
         if search.searchBar.placeholder != placeholder { search.searchBar.placeholder = placeholder }
-        dark = args["isDark"] as? Bool == true
+        let barColor = (args["navigationBarColor"] as? NSNumber)?.intValue
+        // A coloured bar decides the field's contrast, not the app's brightness.
+        dark = barColor.map(NativeBarAppearance.isDark) ?? (args["isDark"] as? Bool == true)
         active = args["active"] as? Bool ?? true
         if search.overrideUserInterfaceStyle != .unspecified { search.overrideUserInterfaceStyle = .unspecified }
         let style: UIUserInterfaceStyle = dark ? .dark : .light
         if search.searchBar.overrideUserInterfaceStyle != style { search.searchBar.overrideUserInterfaceStyle = style }
         let keyboard: UIKeyboardAppearance = dark ? .dark : .light
         if search.searchBar.keyboardAppearance != keyboard { search.searchBar.keyboardAppearance = keyboard }
-        if let value = args["tint"] as? NSNumber {
-            let color = Self.color(value.int64Value)
-            if tint != color {
-                tint = color
-                search.searchBar.tintColor = color
-            }
+        let color = (args["tint"] as? NSNumber).map { UIColor(argb: $0.intValue) }
+        if tint != color {
+            tint = color
+            search.searchBar.tintColor = color
+        }
+        let shadow = args["navigationBarShadow"] as? Bool == true
+        let plainButtons = args["hidesNavigationButtonBackground"] as? Bool == true
+        let key: [AnyHashable] = [barColor ?? -1, shadow, plainButtons, color ?? UIColor.clear]
+        if barKey != key {
+            barKey = key
+            NativeBarAppearance.apply(
+                NativeBarAppearance.make(color: barColor, shadow: shadow, foreground: color), to: item)
+            item.leftBarButtonItem = plainButtons ? plainBack() : nil
         }
         if active { attach(); NativeNavigationHost.update(self) }
         else { NativeNavigationHost.deactivate(self) }
     }
-    private static func color(_ value: Int64) -> UIColor {
-        UIColor(red: CGFloat((value >> 16) & 255) / 255,
-                green: CGFloat((value >> 8) & 255) / 255,
-                blue: CGFloat(value & 255) / 255,
-                alpha: CGFloat((value >> 24) & 255) / 255)
+    /// UIKit's generated Back item ignores hidesSharedBackground, so a
+    /// plain-button bar gets a regular chevron item instead.
+    private func plainBack() -> UIBarButtonItem {
+        let back = UIBarButtonItem(image: UIImage(systemName: "chevron.backward"), style: .plain,
+                                   target: self, action: #selector(backTapped))
+        back.accessibilityLabel = "Back"
+        if #available(iOS 26.0, *) { back.hidesSharedBackground = true }
+        return back
     }
+    @objc private func backTapped() { back() }
     func nativeNavigationLayout(contentInset: CGFloat, barBottom: CGFloat) { reportLayout(barBottom: barBottom) }
     func nativeNavigationBack() { back() }
     func willPresentSearchController(_ searchController: UISearchController) {

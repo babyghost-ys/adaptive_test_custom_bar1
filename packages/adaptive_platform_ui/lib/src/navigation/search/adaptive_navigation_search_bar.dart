@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../core/theme/adaptive_theme.dart';
 import '../app_bar/adaptive_navigation_scroll_controller.dart';
 
 /// Own one per search page and dispose with the page.
@@ -123,16 +124,20 @@ class _SearchBarState extends State<AdaptiveNavigationSearchBar> {
 
   Map<String, Object?> _configuration() {
     final theme = CupertinoTheme.of(context);
+    final bar = AdaptiveTheme.of(context).barStyle;
     return {
       'title': widget.title,
       'placeholder': widget.placeholder,
       'isDark': theme.brightness == Brightness.dark,
       'active':
           TickerMode.of(context) && (ModalRoute.of(context)?.isCurrent ?? true),
-      'tint': CupertinoDynamicColor.resolve(
-        theme.primaryColor,
-        context,
-      ).toARGB32(),
+      'tint':
+          (bar.foreground ??
+                  CupertinoDynamicColor.resolve(theme.primaryColor, context))
+              .toARGB32(),
+      'navigationBarColor': bar.color?.toARGB32(),
+      'navigationBarShadow': bar.shadow,
+      'hidesNavigationButtonBackground': bar.plainButtons,
     };
   }
 
@@ -146,7 +151,10 @@ class _SearchBarState extends State<AdaptiveNavigationSearchBar> {
   Widget build(BuildContext context) {
     final top = MediaQuery.paddingOf(context).top;
     if (defaultTargetPlatform != TargetPlatform.iOS) {
+      final bar = AdaptiveTheme.of(context).barStyle;
       return AppBar(
+        backgroundColor: bar.color,
+        foregroundColor: bar.foreground,
         title: Text(widget.title),
         leading: BackButton(onPressed: widget.onBack),
         bottom: PreferredSize(

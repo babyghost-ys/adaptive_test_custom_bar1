@@ -19,6 +19,8 @@ Breaking release. See [MIGRATION.md](MIGRATION.md) for the before and after of e
 * **NEW**: `AdaptiveDrawer` and a public `AdaptiveScaffoldState` with `openDrawer()` and `closeDrawer()`: a native panel on iOS, a Material drawer elsewhere.
 * **IMPROVEMENT**: the scaffold measures each page's native bar, so large titles work with a plain `ListView` and no scroll controller, and pages no longer need `SafeArea` or manual inset padding.
 * **IMPROVEMENT**: a tab root's app bar without a title shows the selected tab's label; iOS page bodies have a Material ancestor; Material, Cupertino and widgets localisations are included by default; iOS buttons default to the theme accent.
+* **IMPROVEMENT**: `AdaptiveNavigationSearchBar` follows `AdaptiveBarStyle`: bar colour, shadow, foreground and plain buttons on iOS, and colours on the Material `AppBar`.
+* **FIX**: Back and the search field on an `AdaptiveNavigationSearchBar` page did not respond to touches. The previous page's sheet-covered state carried over to the pushed page, and the root page could stay inert after Back.
 * **IMPROVEMENT**: on web and desktop, the segmented control, tab view and popup menu use Material instead of Cupertino fallbacks.
 * **REMOVED**: the Flutter-drawn iPhone Duo bar, glass capsule and fallback toolbar; UIKit draws every iOS bar, including the Duo vertical bar. A custom Flutter `leading` widget is not shown in the Duo vertical bar.
 

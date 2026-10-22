@@ -217,7 +217,7 @@ final class NativeNavigationHost {
         if host.pendingBackPage === page { host.pendingBackPage = nil }
         guard host.page === page else { return }
         host.page = nil
-        host.covered = false
+        host.coveredPage = nil
         host.applyCovered(animated: false)
         (host.regularNavigation ?? host.navigation).setNavigationBarHidden(true, animated: false)
     }
@@ -225,13 +225,22 @@ final class NativeNavigationHost {
     /// A Flutter sheet or dialog covers the page: keep its bar on screen,
     /// with dimmed tint and no touches, as UIKit leaves a bar behind a sheet.
     static func setCovered(_ page: NativeNavigationPage, _ covered: Bool) {
-        guard let host = installed, host.page === page else { return }
-        host.covered = covered
+        guard let host = installed else { return }
+        // A page can report being uncovered after it stopped being current,
+        // for example while its route is popped back into view; that must
+        // still clear its flag.
+        if !covered, host.coveredPage === page { host.coveredPage = nil }
+        guard host.page === page else { return }
+        if covered { host.coveredPage = page }
         host.applyCovered(animated: true)
     }
 
+    /// The page that reported a Flutter sheet or dialog over it. Kept per
+    /// page so a pushed page never inherits its predecessor's covering,
+    /// which left the bar of a search page without touches.
+    weak var coveredPage: NativeNavigationPage?
     /// Whether a Flutter sheet or dialog covers the current page.
-    var covered = false
+    var covered: Bool { coveredPage != nil && coveredPage === page }
     var drawer: NativeDrawer?
 
     /// UIKit resets a bar's tint adjustment when first responders change

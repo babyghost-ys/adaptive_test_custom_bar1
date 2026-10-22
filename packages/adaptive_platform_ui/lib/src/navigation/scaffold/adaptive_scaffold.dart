@@ -565,8 +565,12 @@ class AdaptiveScaffoldState extends State<AdaptiveScaffold> {
           )
         : _buildPage(context);
     // A custom iOS bar draws its own background, so the bar style's colour
-    // says nothing about what sits under the status bar there.
-    final customBar = _native && !(_appBar?.useNativeToolbar ?? true);
+    // says nothing about what sits under the status bar there. The native
+    // search header follows the bar style, so it counts as themed.
+    final customBar =
+        _native &&
+        !(_appBar?.useNativeToolbar ?? true) &&
+        _appBar?.cupertinoNavigationBar is! AdaptiveNavigationSearchBar;
     final bg =
         (customBar ? null : _appBar?.navigationBarColor) ??
         widget.backgroundColor;
