@@ -1,5 +1,4 @@
 import 'package:flutter/cupertino.dart';
-import 'reserved_region.dart';
 
 import 'system_vertical_bar.dart';
 
@@ -9,20 +8,6 @@ import 'system_vertical_bar.dart';
 /// from the edge in both), which the system mirrors there. Where the system
 /// does reserve the strip, the bar takes the width of that inset instead.
 const double kDuoVerticalBarWidth = 84.0;
-
-/// Top clearance of the vertical bar in a strip without hardware (the leading
-/// Split View pane). Matches UIKit's `bar(onEdge:extent:)` layout region there.
-const double kDuoBarOnlyTopMargin = 16.0;
-
-/// How far the control band extends inward beyond the system strip, so the
-/// centred controls sit a few points off the bezel instead of hugging the
-/// display edge.
-const double kDuoVerticalBarBezelInset = 12.0;
-
-/// Clearance used below the top edge until the system has reported where the
-/// camera and status cluster are. It covers the taller of the two displays, so
-/// controls never start out underneath the cluster.
-const double kDuoStatusClusterFallbackHeight = 170.0;
 
 /// The edge of the window the system reserves for vertical controls.
 enum DuoBarSide { left, right }
@@ -49,10 +34,6 @@ class DuoPose {
   final bool reservedBySystem;
 
   bool get onLeft => side == DuoBarSide.left;
-
-  /// Width of the band the bar is laid out in: the strip plus
-  /// [kDuoVerticalBarBezelInset].
-  double get bandWidth => stripWidth + kDuoVerticalBarBezelInset;
 
   /// [insets] with the strip added on the bar's side: the inset UIKit would
   /// have reserved for a vertical bar it draws itself.
@@ -138,75 +119,6 @@ abstract final class DuoLayout {
     if (viewPadding.left > 0 && viewPadding.right == 0) return DuoBarSide.left;
     return null;
   }
-
-  /// Whether toolbar controls belong in a vertical bar right now.
-  static bool isVerticalBarPose(EdgeInsets viewPadding) =>
-      barSide(viewPadding) != null;
-
-  /// Free space to keep above and below the controls, so that they clear the
-  /// camera and status cluster wherever the current rotation puts them: at
-  /// the top of the strip in portrait, at the bottom of it in one landscape
-  /// rotation. Measured on the system's own bar: controls start right at the
-  /// edge of a region, and keep [kDuoBarEdgeMargin] from a free window edge.
-  static ({double top, double bottom}) barInsets({
-    required Size size,
-    required DuoPose pose,
-    required List<ReservedRegion> regions,
-  }) {
-    // A strip the system did not reserve has no camera or status cluster in
-    // it. No region will ever be reported there, so don't wait for one.
-    if (!pose.reservedBySystem) {
-      return (top: kDuoBarOnlyTopMargin, bottom: kDuoBarEdgeMargin);
-    }
-    final stripStart = pose.onLeft ? 0.0 : size.width - pose.stripWidth;
-    final stripEnd = pose.onLeft ? pose.stripWidth : size.width;
-
-    // Only regions that really lie in this window's strip count. While the
-    // device folds, unfolds or rotates, a reading taken in the previous pose
-    // can still be around for a moment; its region sits elsewhere.
-    final inStrip = regions.where(
-      (r) =>
-          r.kind == ReservedRegionKind.occlusion &&
-          r.isActive &&
-          r.bounds.right > stripStart &&
-          r.bounds.left < stripEnd &&
-          r.bounds.right <= size.width + 1 &&
-          r.bounds.bottom <= size.height + 1,
-    );
-
-    double? top;
-    double? bottom;
-    for (final region in inStrip) {
-      if (region.bounds.center.dy < size.height / 2) {
-        if (top == null || region.bounds.bottom > top) {
-          top = region.bounds.bottom;
-        }
-      } else {
-        final room = size.height - region.bounds.top + kDuoBarRegionGap;
-        if (bottom == null || room > bottom) bottom = room;
-      }
-    }
-
-    // Every system-reserved strip has the camera or the status cluster
-    // somewhere in it, so an empty strip means nothing has been reported for
-    // this pose yet (regions arrive a moment after launch and after a pose
-    // change). Until then stay clear of where the cluster can be instead of
-    // starting underneath it.
-    final unknown = inStrip.isEmpty;
-    return (
-      top:
-          top ??
-          (unknown ? kDuoStatusClusterFallbackHeight : kDuoBarEdgeMargin),
-      bottom: bottom ?? kDuoBarEdgeMargin,
-    );
-  }
-
-  /// Top clearance of [barInsets].
-  static double topClearance({
-    required Size size,
-    required DuoPose pose,
-    required List<ReservedRegion> regions,
-  }) => barInsets(size: size, pose: pose, regions: regions).top;
 }
 
 /// Hands the resolved [DuoPose] to everything below, so the bar, the title
@@ -237,14 +149,6 @@ class DuoPoseScope extends InheritedWidget {
   bool updateShouldNotify(DuoPoseScope oldWidget) => pose != oldWidget.pose;
 }
 
-/// Space the system leaves between the controls and a free edge of the
-/// window, above the first control and below the tab capsule.
-const double kDuoBarEdgeMargin = 24.0;
-
-/// Space the system leaves between the controls and a reserved region that
-/// sits below them.
-const double kDuoBarRegionGap = 11.0;
-
 /// The band at the top of the page that holds the title on iPhone Duo, as
 /// UIKit lays it out in this window: the title at the leading edge with the
 /// controls in the trailing bar, and the page content below it.
@@ -265,17 +169,6 @@ abstract final class DuoTitleBand {
       largeTitleMidY: barMid,
       inlineTitleMidY: barMid,
       titleMinX: NavigationToolbar.kMiddleSpacing,
-    );
-  }
-
-  /// Rebuilds [builder] when a new measurement arrives.
-  static Widget builder({
-    required Widget Function(BuildContext context, DuoTitleBandMetrics band)
-    builder,
-  }) {
-    return ValueListenableBuilder<DuoTitleBandMetrics?>(
-      valueListenable: SystemVerticalBar.titleBand,
-      builder: (context, _, _) => builder(context, of(context)),
     );
   }
 }

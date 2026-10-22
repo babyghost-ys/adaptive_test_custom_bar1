@@ -103,7 +103,6 @@ class _IOS26ScaffoldState extends State<IOS26Scaffold> {
   void initState() {
     super.initState();
     if (AdaptiveCapabilities.systemVerticalBarEdge) {
-      SystemVerticalBar.regions.addListener(_onEdgeChanged);
       _edge = SystemVerticalBar.edge..addListener(_onEdgeChanged);
       SystemVerticalBar.titleBand.addListener(_onEdgeChanged);
     }
@@ -131,7 +130,6 @@ class _IOS26ScaffoldState extends State<IOS26Scaffold> {
   @override
   void dispose() {
     if (_edge != null) {
-      SystemVerticalBar.regions.removeListener(_onEdgeChanged);
       _edge!.removeListener(_onEdgeChanged);
       SystemVerticalBar.titleBand.removeListener(_onEdgeChanged);
     }
