@@ -15,6 +15,7 @@ import '../../controls/button/adaptive_button.dart';
 import '../navigator/adaptive_navigator.dart';
 import 'adaptive_scaffold.dart';
 import '../tab_bar/ios26_native_tab_bar.dart';
+import 'body_placement.dart';
 import 'native_bottom_bar_layout.dart';
 import '../app_bar/ios26_native_toolbar.dart';
 
@@ -45,6 +46,7 @@ class IOS26Scaffold extends StatefulWidget {
     this.tabBarHidden = false,
     this.resizeToAvoidBottomInset,
     this.backgroundColor,
+    this.bodyPlacement = const BodyPlacement(underTop: true, underBottom: true),
     @visibleForTesting this.debugVerticalBarEdge,
     required this.children,
   });
@@ -79,6 +81,9 @@ class IOS26Scaffold extends StatefulWidget {
   final Color? backgroundColor;
   final bool tabBarHidden;
   final bool? resizeToAvoidBottomInset;
+
+  /// Which bars the body runs under; see [BodyPlacement.resolve].
+  final BodyPlacement bodyPlacement;
   final List<Widget> children;
 
   /// Replaces the system's vertical bar edge in widget tests, where the
@@ -102,7 +107,20 @@ class _IOS26ScaffoldState extends State<IOS26Scaffold> {
       SystemVerticalBar.regions.addListener(_onEdgeChanged);
       _edge = SystemVerticalBar.edge..addListener(_onEdgeChanged);
       SystemVerticalBar.titleBand.addListener(_onEdgeChanged);
-      nativeNavigationBarBottom.addListener(_onEdgeChanged);
+    }
+    // This page's own bar metrics, on every iOS version. A value shared by
+    // all pages would hand this page the inset of whichever bar reported last.
+    widget.scrollController?.contentTopInset.addListener(_onEdgeChanged);
+  }
+
+  @override
+  void didUpdateWidget(IOS26Scaffold oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.scrollController != widget.scrollController) {
+      oldWidget.scrollController?.contentTopInset.removeListener(
+        _onEdgeChanged,
+      );
+      widget.scrollController?.contentTopInset.addListener(_onEdgeChanged);
     }
   }
 
@@ -117,8 +135,8 @@ class _IOS26ScaffoldState extends State<IOS26Scaffold> {
       SystemVerticalBar.regions.removeListener(_onEdgeChanged);
       _edge!.removeListener(_onEdgeChanged);
       SystemVerticalBar.titleBand.removeListener(_onEdgeChanged);
-      nativeNavigationBarBottom.removeListener(_onEdgeChanged);
     }
+    widget.scrollController?.contentTopInset.removeListener(_onEdgeChanged);
     super.dispose();
   }
 
@@ -228,13 +246,18 @@ class _IOS26ScaffoldState extends State<IOS26Scaffold> {
         color: textColor,
         fontSize: 17, // iOS default
       ),
-      child: widget.children.length == 1
-          ? widget.children.first
-          : IndexedStack(
-              index: widget.bottomNavigationBar?.selectedIndex ?? 0,
-              sizing: StackFit.expand,
-              children: widget.children,
-            ),
+      // Innermost, so it sees every inset: the top bar's below, the tab
+      // bar's from NativeBottomBarLayout around it.
+      child: PlacedBody(
+        placement: widget.bodyPlacement,
+        child: widget.children.length == 1
+            ? widget.children.first
+            : IndexedStack(
+                index: widget.bottomNavigationBar?.selectedIndex ?? 0,
+                sizing: StackFit.expand,
+                children: widget.children,
+              ),
+      ),
     );
 
     // iPhone Duo (inner display, and the cover display while folded): the
@@ -339,18 +362,16 @@ class _IOS26ScaffoldState extends State<IOS26Scaffold> {
     );
 
     if (showTopToolbar || trailingInset > 0) {
-      final barBottom = nativeNavigationBarBottom.value;
+      final pageInset = widget.scrollController?.contentTopInset.value;
       final topInset = !showTopToolbar
           ? 0.0
           : duoVerticalPose
           ? math.max(0.0, DuoTitleBand.of(context).contentTop - mq.padding.top)
-          // UIKit's measured bar, wherever it is hosted. A fixed height above
-          // the status inset leaves a gap where the bar shares its row with
-          // the status cluster (iPhone Duo held upright). A large title's bar
-          // changes height as it collapses; keep the fixed inset there so the
-          // body does not move while scrolling.
-          : barBottom != null && !widget.largeTitle
-          ? math.max(0.0, barBottom - mq.padding.top)
+          // UIKit's content inset for this page at rest: below the bar, and
+          // below an expanded large title. It stays put while a large title
+          // collapses, so the body never moves as the user scrolls.
+          : pageInset != null
+          ? math.max(0.0, pageInset - mq.padding.top)
           : kToolbarContentHeight;
       bodyContent = Padding(
         padding: EdgeInsets.only(

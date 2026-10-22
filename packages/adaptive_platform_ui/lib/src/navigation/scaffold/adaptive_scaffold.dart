@@ -5,10 +5,12 @@ import 'package:flutter/services.dart';
 import '../../core/platform_info.dart';
 import '../../style/sf_symbol.dart';
 import '../app_bar/adaptive_app_bar.dart';
+import '../app_bar/adaptive_navigation_scroll_controller.dart';
 import '../search/adaptive_navigation_search_bar.dart';
 import '../../content/badge/adaptive_badge.dart';
 import '../tab_bar/adaptive_bottom_navigation_bar.dart';
 import '../../controls/button/adaptive_button.dart';
+import 'body_placement.dart';
 import 'ios26_scaffold.dart';
 import 'native_bottom_bar_layout.dart';
 import '../search/ios26_search_tab_scaffold.dart';
@@ -128,8 +130,8 @@ class AdaptiveScaffold extends StatefulWidget {
     this.minimizeBehavior = TabBarMinimizeBehavior.automatic,
     this.enableBlur = true,
     this.enableToolbarGradient = true,
-    this.extendBodyBehindAppBar = false,
-    this.extendBody = false,
+    this.extendBodyBehindAppBar,
+    this.extendBody,
     this.backgroundColor,
     this.customHeaderBackgroundColor,
     this.customHeaderHeight = 0,
@@ -179,17 +181,21 @@ class AdaptiveScaffold extends StatefulWidget {
   /// This parameter is kept for backwards compatibility but has no effect.
   final bool enableToolbarGradient;
 
-  /// Whether to extend the body behind the app bar (iOS only)
-  /// When true, the body will extend behind the app bar, allowing for
-  /// immersive content. When false, the body will start below the app bar.
-  final bool extendBodyBehindAppBar;
+  /// Whether the body runs under the top bar, like
+  /// [Scaffold.extendBodyBehindAppBar]. The bar's height then stays in
+  /// [MediaQuery.padding] for the body's scroll view to apply.
+  ///
+  /// Null decides for you: on iOS a body that is itself a vertical scroll
+  /// view runs under the glass bar on iOS 26+, and under a large title on
+  /// every version; anything else sits below the bar. Android keeps the body
+  /// below its app bar.
+  final bool? extendBodyBehindAppBar;
 
-  /// Whether the body extends under [bottomNavigationBar] on Android and on
-  /// iOS 18 and below, like [Scaffold.extendBody]. Set it when the bar is
-  /// a custom floating one with margins, so the body shows through them
-  /// instead of the scaffold background (#144). On iOS 26+ the body already
-  /// sits under the native tab bar.
-  final bool extendBody;
+  /// Whether the body runs under [bottomNavigationBar], like
+  /// [Scaffold.extendBody]. Null decides for you as
+  /// [extendBodyBehindAppBar] does: under the glass tab bar of iOS 26+ for a
+  /// body that is a scroll view, above the bar otherwise.
+  final bool? extendBody;
 
   /// Background colour of the page on every platform. Null keeps the
   /// platform default: the Material or Cupertino theme's scaffold colour
@@ -265,6 +271,32 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
   /// [AdaptiveToolbarHost] is installed above the navigator.
   ToolbarRegistry? _toolbarRegistry;
 
+  /// Links the body's scroll view to the native bar when the app brought no
+  /// controller of its own: UIKit reports this page's bar metrics through
+  /// it, and follows its offset to collapse a large title.
+  AdaptiveNavigationScrollController? _pageScroll;
+  AdaptiveAppBar? _appBarSource;
+  AdaptiveAppBar? _appBarWithScroll;
+
+  /// [AdaptiveScaffold.appBar], with the page's own controller filled in on
+  /// the native iOS path.
+  AdaptiveAppBar? get _appBar {
+    final appBar = widget.appBar;
+    if (appBar == null ||
+        !PlatformInfo.isIOS ||
+        !appBar.useNativeToolbar ||
+        appBar.scrollController != null) {
+      return appBar;
+    }
+    if (!identical(appBar, _appBarSource)) {
+      _appBarSource = appBar;
+      _appBarWithScroll = appBar.copyWith(
+        scrollController: _pageScroll ??= AdaptiveNavigationScrollController(),
+      );
+    }
+    return _appBarWithScroll;
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -280,11 +312,21 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
         oldWidget.bottomNavigationBar != widget.bottomNavigationBar) {
       _syncToolbarEntry();
     }
+    if (oldWidget.bottomNavigationBar?.selectedIndex !=
+        widget.bottomNavigationBar?.selectedIndex) {
+      // Another tab's scroll view takes over the shared controller once the
+      // new tab is on stage.
+      final scroll = _appBar?.scrollController;
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => scroll?.activeChanged(),
+      );
+    }
   }
 
   @override
   void dispose() {
     _toolbarRegistry?.remove(this);
+    _pageScroll?.dispose();
     super.dispose();
   }
 
@@ -352,7 +394,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
     registry.upsert(
       ToolbarEntry(
         id: this,
-        appBar: widget.appBar,
+        appBar: _appBar,
         route: ModalRoute.of(context),
         navigator: navigator,
         enclosingRoutes: enclosingRoutes,
@@ -493,9 +535,24 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
       // `StatefulNavigationShell`, `pages[index]`...), so it is mounted
       // exactly once. Earlier versions built one copy per tab, which ran
       // every page's `initState` once per destination (#76).
-      Widget body = widget.body ?? const SizedBox.shrink();
+      final placement = BodyPlacement.resolve(
+        body: widget.body,
+        largeTitle: widget.appBar?.largeTitle ?? false,
+        extendBehindTop: widget.extendBodyBehindAppBar,
+        extendBehindBottom: widget.extendBody,
+      );
+      Widget body =
+          (placement.underTop || placement.underBottom
+              ? BodyPlacement.withInsetSlivers(widget.body)
+              : widget.body) ??
+          const SizedBox.shrink();
       final chrome = ToolbarChromeScope.maybeOf(context);
-      final navigation = widget.appBar?.scrollController;
+      final navigation = _appBar?.scrollController;
+      if (navigation != null) {
+        // A plain vertical scroll view in the body attaches to this, so the
+        // native bar follows it without the app wiring a controller.
+        body = PrimaryScrollController(controller: navigation, child: body);
+      }
       if (_usesFixedToolbar(context) &&
           (chrome?.hostsToolbar ?? false) &&
           !(chrome?.hostsDuoControls ?? false) &&
@@ -543,7 +600,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
       return _wrapWithDrawerIfNeeded(
         IOS26Scaffold(
           largeTitle: widget.appBar?.largeTitle ?? false,
-          scrollController: widget.appBar?.scrollController,
+          scrollController: navigation,
           bottomNavigationBar: bottomBar,
           title: widget.appBar?.title,
           actions: widget.appBar?.actions,
@@ -561,6 +618,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
           useFixedToolbar: _usesFixedToolbar(context),
           tabBarHidden: widget.tabBarHidden,
           resizeToAvoidBottomInset: widget.resizeToAvoidBottomInset,
+          bodyPlacement: placement,
           children: childrenList,
         ),
       );
@@ -992,8 +1050,8 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
         resizeToAvoidBottomInset: widget.resizeToAvoidBottomInset,
         bottomNavigationBar: bottomNavBar,
         floatingActionButton: widget.floatingActionButton,
-        extendBodyBehindAppBar: widget.extendBodyBehindAppBar,
-        extendBody: widget.extendBody,
+        extendBodyBehindAppBar: widget.extendBodyBehindAppBar ?? false,
+        extendBody: widget.extendBody ?? false,
         backgroundColor: widget.backgroundColor,
         drawer: widget.drawer,
         endDrawer: widget.endDrawer,
@@ -1059,8 +1117,8 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
       body: widget.body ?? const SizedBox.shrink(),
       resizeToAvoidBottomInset: widget.resizeToAvoidBottomInset,
       floatingActionButton: widget.floatingActionButton,
-      extendBodyBehindAppBar: widget.extendBodyBehindAppBar,
-      extendBody: widget.extendBody,
+      extendBodyBehindAppBar: widget.extendBodyBehindAppBar ?? false,
+      extendBody: widget.extendBody ?? false,
       backgroundColor: widget.backgroundColor,
       drawer: widget.drawer,
       endDrawer: widget.endDrawer,

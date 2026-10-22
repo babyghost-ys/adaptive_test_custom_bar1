@@ -31,23 +31,20 @@ class AdaptiveAppBar {
     this.titleWidget,
     this.cupertinoNavigationBar,
     this.appBar,
-  }) : assert(
-         !largeTitle || scrollController != null,
-         'largeTitle requires an AdaptiveNavigationScrollController',
-       );
+  });
 
   /// Title for the app bar
   final String? title;
 
   /// Native scrolling large title on iOS 15+, including iOS 18.
-  /// Requires the fixed toolbar host, a plain string title and one controller
-  /// shared with the page's AdaptiveListView. No extra title spacer is needed.
+  /// The page's scroll view collapses it; no controller or spacer is needed.
   /// Other platform and explicit legacy paths keep their compact bars.
   final bool largeTitle;
 
-  /// Connect to the same controller as AdaptiveListView for native scroll-edge
-  /// treatment on iOS 15+. Also drives title collapse when [largeTitle] is true.
-  /// Requires the fixed toolbar host and a plain string title.
+  /// Optional. On the native iOS path [AdaptiveScaffold] creates one for the
+  /// page and offers it to the body as its [PrimaryScrollController], so a
+  /// plain scroll view links to the native bar without one. Supply your own
+  /// only when the page needs the controller itself.
   final AdaptiveNavigationScrollController? scrollController;
 
   /// Optional subtitle displayed below the title

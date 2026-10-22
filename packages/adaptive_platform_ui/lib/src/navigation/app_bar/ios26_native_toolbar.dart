@@ -130,14 +130,9 @@ class _IOS26NativeToolbarState extends State<IOS26NativeToolbar> {
 
   void _syncScroll() {
     final controller = widget.scrollController;
-    if (controller == null ||
-        !controller.hasClients ||
-        controller.positions.length != 1) {
-      return;
-    }
-    final position = controller.position;
+    if (controller == null || controller.activePosition == null) return;
     _channel?.invokeMethod<void>('setScrollOffset', {
-      'offset': position.pixels - position.minScrollExtent,
+      'offset': controller.activeOffset,
       'generation': _scrollGeneration,
     });
   }
@@ -196,14 +191,9 @@ class _IOS26NativeToolbarState extends State<IOS26NativeToolbar> {
   void _syncNavigationPage() {
     final controller = widget.scrollController;
     if (controller == null) return;
-    final position = controller.positions.length == 1
-        ? controller.position
-        : null;
     _channel?.invokeMethod<void>('setNavigationPage', {
       'title': widget.titleWidget == null ? (widget.title ?? '') : '',
-      'offset': position == null
-          ? controller.initialScrollOffset
-          : position.pixels - position.minScrollExtent,
+      'offset': controller.activeOffset,
       'generation': _scrollGeneration,
     });
   }
@@ -380,9 +370,7 @@ class _IOS26NativeToolbarState extends State<IOS26NativeToolbar> {
       'largeTitle': widget.largeTitle,
       'verticalNavigation': widget.verticalNavigation,
       'scrollLinked': widget.scrollController != null,
-      'scrollOffset': widget.scrollController?.hasClients == true
-          ? widget.scrollController!.offset
-          : 0.0,
+      'scrollOffset': widget.scrollController?.activeOffset ?? 0.0,
       if (!widget.showsGradient) 'showsGradient': false,
       if (widget.tintColor != null) 'tint': _colorToARGB(widget.tintColor!),
       'navigationBarColor': widget.navigationBarColor?.toARGB32(),

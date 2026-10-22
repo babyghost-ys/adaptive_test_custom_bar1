@@ -94,6 +94,7 @@ Page<void> detailPage(GoRouterState state, String title, Widget content) =>
       name: state.uri.path,
       child: AdaptiveScaffold(
         backgroundColor: paper,
+        extendBody: true,
         appBar: AdaptiveAppBar(
           title: title,
           navigationBarColor: red,
@@ -101,7 +102,7 @@ Page<void> detailPage(GoRouterState state, String title, Widget content) =>
           hidesNavigationButtonBackground: true,
           tintColor: Colors.white,
         ),
-        body: SafeArea(bottom: false, child: content),
+        body: content,
       ),
     );
 
@@ -244,6 +245,7 @@ class _InvestmentHomeState extends State<InvestmentHome> {
           builder: (context, constraints) {
             return AdaptiveScaffold(
               backgroundColor: paper,
+              extendBody: true,
               scaffoldKey: drawerKey,
               appBar: AdaptiveAppBar(
                 title: [
@@ -335,7 +337,7 @@ class _InvestmentHomeState extends State<InvestmentHome> {
                   ),
                 ],
               ),
-              body: SafeArea(bottom: false, child: widget.shell),
+              body: widget.shell,
             );
           },
         ),
