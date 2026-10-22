@@ -50,6 +50,7 @@ final class NativeNavigationHost {
     var routePopPermissions: [String: Bool] = [:]
     var appliedTints: [ObjectIdentifier: UIColor?] = [:]
     var sharedAppearanceKeys: [ObjectIdentifier: String] = [:]
+    var clearScrollEdgeAppearances: [ObjectIdentifier: (base: UINavigationBarAppearance, clear: UINavigationBarAppearance)] = [:]
     var defaultBarAppearances: [ObjectIdentifier: (UINavigationBarAppearance, UINavigationBarAppearance?,
                                                            UINavigationBarAppearance?, UINavigationBarAppearance?)] = [:]
     var rootContent: UIViewController { tabs ?? content }
@@ -376,9 +377,16 @@ final class NativeNavigationHost {
             assign(destination, \.searchBarPlacementAllowsToolbarIntegration,
                    source.searchBarPlacementAllowsToolbarIntegration)
         }
+        let largeTitleInContent: Bool
+        if #available(iOS 26.0, *) { largeTitleInContent = page.nativeLargeTitle } else { largeTitleInContent = false }
         applySharedAppearance(source, to: navigation)
+        let largeTitleColor = largeTitleInContent ? source.standardAppearance?.backgroundColor : nil
+        (destinationController as? NativeNavigationContent)?.setLargeTitleColor(largeTitleColor)
         assign(destination, \.standardAppearance, nil)
-        assign(destination, \.scrollEdgeAppearance, nil)
+        // Only this page's item stays clear at the scroll edge, so the shared
+        // opaque bar returns as soon as another page takes over.
+        assign(destination, \.scrollEdgeAppearance,
+               largeTitleColor == nil ? nil : clearScrollEdgeAppearance(for: navigation.navigationBar))
         assign(destination, \.compactAppearance, nil)
         assign(destination, \.compactScrollEdgeAppearance, nil)
         assign(destination, \.title, source.title)
@@ -417,6 +425,20 @@ final class NativeNavigationHost {
     /// lives on each navigation item, UIKit cross-fades the bar background
     /// between identical items on every push and pop; on Duo that exposes the
     /// page behind the vertical bar's status glass, which flashes light.
+    /// The shared bar's appearance without its background, for a page whose
+    /// content draws the bar colour behind an iOS 26+ large title. Cached
+    /// so republishing the page never hands UIKit a new instance.
+    func clearScrollEdgeAppearance(for bar: UINavigationBar) -> UINavigationBarAppearance {
+        let key = ObjectIdentifier(bar)
+        if let cached = clearScrollEdgeAppearances[key], cached.base === bar.standardAppearance {
+            return cached.clear
+        }
+        let clear = bar.standardAppearance.copy()
+        clear.configureWithTransparentBackground()
+        clearScrollEdgeAppearances[key] = (bar.standardAppearance, clear)
+        return clear
+    }
+
     func applySharedAppearance(_ source: UINavigationItem, to navigation: UINavigationController) {
         let bar = navigation.navigationBar
         let barKey = ObjectIdentifier(bar)

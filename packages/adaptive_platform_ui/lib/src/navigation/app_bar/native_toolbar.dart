@@ -316,8 +316,9 @@ class _NativeToolbarState extends State<NativeToolbar> {
     try {
       await channel.invokeMethod<void>(method, arguments);
     } catch (error) {
-      if (error is! PlatformException && error is! MissingPluginException)
+      if (error is! PlatformException && error is! MissingPluginException) {
         rethrow;
+      }
       // Only the latest request for this property may invalidate its cache.
       // Replies from a removed/recreated anchor have no authority here.
       if (mounted &&
@@ -434,8 +435,9 @@ class _NativeToolbarState extends State<NativeToolbar> {
     channel.setMethodCallHandler((call) async {
       if (!mounted ||
           generation != _channelGeneration ||
-          !identical(_channel, channel))
+          !identical(_channel, channel)) {
         return null;
+      }
       return _handleMethodCall(call);
     });
     if (widget.scrollController != null) {

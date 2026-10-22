@@ -450,10 +450,7 @@ class AdaptiveScaffoldState extends State<AdaptiveScaffold> {
         navigator: navigator,
         enclosingRoutes: enclosingRoutes,
         titleOverlay: _buildIOS26TitleOverlay(),
-        // `TickerMode.valuesOf` replaces this, but only exists in Flutter
-        // releases after 3.35; `of` works on every supported version.
-        // ignore: deprecated_member_use
-        visible: TickerMode.of(context) && Visibility.of(context),
+        visible: TickerMode.valuesOf(context).enabled && Visibility.of(context),
         shownInPlace: Visibility.of(context),
         tabBar: _tabBarForChrome,
         scrollController: _pageScrollLink,

@@ -125,15 +125,17 @@ class _SearchTabsState extends State<NativeSearchTabScaffold> {
         // measurement so the next search frame does not start at a different
         // origin while UIKit is still presenting the field and keyboard.
         final top = (data['top'] as num?)?.toDouble() ?? _searchTopInset;
-        if (!bottom.isFinite || bottom < 0 || (top != null && !top.isFinite))
+        if (!bottom.isFinite || bottom < 0 || (top != null && !top.isFinite)) {
           return;
+        }
         if (_ready &&
             bottom == _bottomInset &&
             top == _searchTopInset &&
             safeTop == _safeTop &&
             safeLeft == _safeLeft &&
-            safeRight == _safeRight)
+            safeRight == _safeRight) {
           return;
+        }
         setState(() {
           _ready = true;
           _bottomInset = bottom;
@@ -168,7 +170,7 @@ class _SearchTabsState extends State<NativeSearchTabScaffold> {
     if (!identical(context, _searchScrollable)) {
       if (!_searchSelected ||
           !Visibility.of(context) ||
-          !TickerMode.of(context)) {
+          !TickerMode.valuesOf(context).enabled) {
         return false;
       }
       _searchScrollable = context;

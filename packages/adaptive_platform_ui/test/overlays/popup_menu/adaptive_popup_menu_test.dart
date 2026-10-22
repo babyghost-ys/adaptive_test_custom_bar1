@@ -90,5 +90,5 @@ void main() {
   // NOT covered here. That path lives in the private _MaterialPopupMenuButton and is
   // only selected when PlatformInfo.isAndroid — which reads the real host OS via
   // dart:io (ignores debugDefaultTargetPlatformOverride), so it's unreachable in a
-  // host widget test. The color change is covered by code review + CHANGELOG.
+  // host widget test. The color change is covered by code review.
 }

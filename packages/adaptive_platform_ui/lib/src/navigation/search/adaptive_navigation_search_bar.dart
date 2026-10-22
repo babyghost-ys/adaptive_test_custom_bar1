@@ -130,7 +130,8 @@ class _SearchBarState extends State<AdaptiveNavigationSearchBar> {
       'placeholder': widget.placeholder,
       'isDark': theme.brightness == Brightness.dark,
       'active':
-          TickerMode.of(context) && (ModalRoute.of(context)?.isCurrent ?? true),
+          TickerMode.valuesOf(context).enabled &&
+          (ModalRoute.of(context)?.isCurrent ?? true),
       'tint':
           (bar.foreground ??
                   CupertinoDynamicColor.resolve(theme.primaryColor, context))
@@ -208,8 +209,9 @@ class _SearchBarState extends State<AdaptiveNavigationSearchBar> {
           _channel = channel;
           channel.setMethodCallHandler((call) async {
             if (!mounted) return;
-            if (call.method == 'changed')
+            if (call.method == 'changed') {
               widget.onChanged(call.arguments as String? ?? '');
+            }
             if (call.method == 'layout') {
               final layout = call.arguments as Map;
               widget.controller._applyNativeLayout(

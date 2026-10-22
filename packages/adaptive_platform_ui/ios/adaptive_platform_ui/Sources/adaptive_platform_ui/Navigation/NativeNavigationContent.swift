@@ -15,6 +15,17 @@ protocol NativeNavigationPage: AnyObject {
 
 private final class NativeFlutterScrollView: UIScrollView {
     let viewport = UIView()
+    /// The bar colour behind an iOS 26+ large title. UIKit draws that title
+    /// inside the content scroll view, under the navigation bar, so an opaque
+    /// bar would hide it; the bar stays clear at the scroll edge instead and
+    /// this band carries its colour behind the title.
+    var largeTitleColor: UIColor? { didSet { setNeedsLayout() } }
+    private let largeTitleBackdrop: UIView = {
+        let backdrop = UIView()
+        backdrop.isUserInteractionEnabled = false
+        backdrop.accessibilityElementsHidden = true
+        return backdrop
+    }()
     override init(frame: CGRect) {
         super.init(frame: frame)
         addSubview(viewport)
@@ -30,6 +41,23 @@ private final class NativeFlutterScrollView: UIScrollView {
         // within the native scroll viewport, where UIKit can filter real pixels.
         viewport.frame = bounds
         viewport.subviews.first?.frame = viewport.bounds
+        layoutLargeTitleBackdrop()
+    }
+    private func layoutLargeTitleBackdrop() {
+        guard let color = largeTitleColor,
+              let title = subviews.first(where: {
+                  $0 !== viewport && $0 !== largeTitleBackdrop
+                      && NSStringFromClass(type(of: $0)).contains("LargeTitle")
+              }) else {
+            largeTitleBackdrop.removeFromSuperview()
+            return
+        }
+        largeTitleBackdrop.backgroundColor = color
+        largeTitleBackdrop.frame = CGRect(x: bounds.minX, y: bounds.minY, width: bounds.width,
+                                          height: max(0, title.frame.maxY - bounds.minY))
+        if let backdropIndex = subviews.firstIndex(of: largeTitleBackdrop),
+           let titleIndex = subviews.firstIndex(of: title), backdropIndex < titleIndex { return }
+        insertSubview(largeTitleBackdrop, belowSubview: title)
     }
 }
 
@@ -236,6 +264,9 @@ final class NativeNavigationContent: UIViewController {
     }
     func keepRetainedContentInFront() {
         if let retainedContent { backingScroll.viewport.bringSubviewToFront(retainedContent) }
+    }
+    func setLargeTitleColor(_ color: UIColor?) {
+        if backingScroll.largeTitleColor != color { backingScroll.largeTitleColor = color }
     }
     func setNativeBackground(style: UIUserInterfaceStyle) {
         // Resolve the exposed native background without overriding traits on

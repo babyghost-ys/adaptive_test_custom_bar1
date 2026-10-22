@@ -51,6 +51,31 @@ extension _MaterialScaffold on AdaptiveScaffoldState {
         appBar.leading == null) {
       return null;
     }
+    // As in the native toolbar, actions up to the last flexible spacer sit
+    // on the leading side; they replace the implied drawer or back button.
+    final split =
+        actions.lastIndexWhere(
+          (action) => action.spacerAfter == ToolbarSpacerType.flexible,
+        ) +
+        1;
+    final leadingActions = appBar.leading == null
+        ? actions.sublist(0, split)
+        : const <AdaptiveAppBarAction>[];
+    final trailingActions = actions.sublist(leadingActions.length);
+    Widget button(AdaptiveAppBarAction action) => Builder(
+      builder: (context) => action.title != null
+          ? TextButton(
+              onPressed: () => action.press(context),
+              child: Text(action.title!),
+            )
+          : IconButton(
+              icon: action.wrapWithBadge(
+                action.icon?.build() ?? const Icon(Icons.circle),
+              ),
+              tooltip: action.effectiveLabel,
+              onPressed: () => action.press(context),
+            ),
+    );
     return AppBar(
       backgroundColor: appBar.navigationBarColor,
       foregroundColor: appBar.tintColor,
@@ -62,24 +87,17 @@ extension _MaterialScaffold on AdaptiveScaffoldState {
         ).textTheme.bodySmall?.color?.withValues(alpha: 0.7),
       ),
       centerTitle: appBar.titleWidget != null,
-      leading: appBar.leading,
-      actions: [
-        for (final action in actions)
-          Builder(
-            builder: (context) => action.title != null
-                ? TextButton(
-                    onPressed: () => action.press(context),
-                    child: Text(action.title!),
-                  )
-                : IconButton(
-                    icon: action.wrapWithBadge(
-                      action.icon?.build() ?? const Icon(Icons.circle),
-                    ),
-                    tooltip: action.effectiveLabel,
-                    onPressed: () => action.press(context),
-                  ),
-          ),
-      ],
+      leading: leadingActions.isEmpty
+          ? appBar.leading
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [for (final action in leadingActions) button(action)],
+            ),
+      leadingWidth: leadingActions.length > 1
+          ? kMinInteractiveDimension * leadingActions.length +
+                NavigationToolbar.kMiddleSpacing
+          : null,
+      actions: [for (final action in trailingActions) button(action)],
     );
   }
 
