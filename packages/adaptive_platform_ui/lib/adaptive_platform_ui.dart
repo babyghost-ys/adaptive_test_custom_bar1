@@ -28,70 +28,70 @@
 library;
 
 // Platform utilities
-export 'src/platform/platform_info.dart';
+export 'src/core/platform_info.dart';
 
 // Animation utilities
-export 'src/utils/animation.dart';
+export 'src/core/animation.dart';
 
 // Styles
 export 'src/style/sf_symbol.dart';
 
 // Widgets
-export 'src/widgets/adaptive_app.dart';
-export 'src/widgets/adaptive_navigator.dart'
+export 'src/app/adaptive_app.dart';
+export 'src/navigation/navigator/adaptive_navigator.dart'
     show AdaptiveNavigator, AdaptivePage;
 
 // Fixed toolbar chrome (installed automatically by AdaptiveApp; exported so
 // apps with their own MaterialApp/CupertinoApp can wrap their builder)
-export 'src/toolbar/adaptive_toolbar_host.dart';
-export 'src/toolbar/toolbar_registry.dart';
-export 'src/widgets/adaptive_app_bar.dart';
-export 'src/widgets/adaptive_bottom_navigation_bar.dart';
-export 'src/widgets/adaptive_tab_search.dart';
-export 'src/widgets/adaptive_button.dart';
-export 'src/widgets/adaptive_switch.dart';
-export 'src/widgets/adaptive_checkbox.dart';
-export 'src/widgets/adaptive_radio.dart';
-export 'src/widgets/adaptive_card.dart';
-export 'src/widgets/adaptive_badge.dart';
-export 'src/widgets/adaptive_tooltip.dart';
-export 'src/widgets/adaptive_slider.dart';
-export 'src/widgets/adaptive_segmented_control.dart';
-export 'src/widgets/adaptive_alert_dialog.dart';
-export 'src/widgets/adaptive_popup_menu_button.dart';
-export 'src/widgets/adaptive_context_menu.dart';
-export 'src/widgets/adaptive_scaffold.dart';
-export 'src/widgets/adaptive_app_bar_action.dart';
-export 'src/widgets/adaptive_snackbar.dart';
-export 'src/widgets/adaptive_date_picker.dart';
-export 'src/widgets/adaptive_time_picker.dart';
-export 'src/widgets/adaptive_list_tile.dart';
-export 'src/widgets/adaptive_text_field.dart';
-export 'src/widgets/adaptive_text_form_field.dart';
-export 'src/widgets/adaptive_tab_view.dart';
-export 'src/widgets/adaptive_floating_action_button.dart';
-export 'src/widgets/adaptive_form_section.dart';
-export 'src/widgets/adaptive_expansion_tile.dart';
-export 'src/widgets/adaptive_blur_view.dart';
+export 'src/navigation/chrome/adaptive_toolbar_host.dart';
+export 'src/navigation/chrome/toolbar_registry.dart';
+export 'src/navigation/app_bar/adaptive_app_bar.dart';
+export 'src/navigation/tab_bar/adaptive_bottom_navigation_bar.dart';
+export 'src/navigation/search/adaptive_tab_search.dart';
+export 'src/controls/button/adaptive_button.dart';
+export 'src/controls/switch/adaptive_switch.dart';
+export 'src/controls/checkbox/adaptive_checkbox.dart';
+export 'src/controls/radio/adaptive_radio.dart';
+export 'src/content/card/adaptive_card.dart';
+export 'src/content/badge/adaptive_badge.dart';
+export 'src/overlays/tooltip/adaptive_tooltip.dart';
+export 'src/controls/slider/adaptive_slider.dart';
+export 'src/controls/segmented_control/adaptive_segmented_control.dart';
+export 'src/overlays/alert_dialog/adaptive_alert_dialog.dart';
+export 'src/overlays/popup_menu/adaptive_popup_menu_button.dart';
+export 'src/overlays/context_menu/adaptive_context_menu.dart';
+export 'src/navigation/scaffold/adaptive_scaffold.dart';
+export 'src/navigation/app_bar/adaptive_app_bar_action.dart';
+export 'src/overlays/snackbar/adaptive_snackbar.dart';
+export 'src/controls/pickers/adaptive_date_picker.dart';
+export 'src/controls/pickers/adaptive_time_picker.dart';
+export 'src/content/list_tile/adaptive_list_tile.dart';
+export 'src/controls/text_field/adaptive_text_field.dart';
+export 'src/controls/text_field/adaptive_text_form_field.dart';
+export 'src/navigation/tab_bar/adaptive_tab_view.dart';
+export 'src/navigation/scaffold/adaptive_floating_action_button.dart';
+export 'src/content/form_section/adaptive_form_section.dart';
+export 'src/content/expansion_tile/adaptive_expansion_tile.dart';
+export 'src/content/blur_view/adaptive_blur_view.dart';
 
 // iOS 26 specific widgets (for advanced usage)
-export 'src/widgets/ios26/ios26_button.dart';
-export 'src/widgets/ios26/ios26_switch.dart';
-export 'src/widgets/ios26/ios26_slider.dart';
-export 'src/widgets/ios26/ios26_segmented_control.dart';
-export 'src/widgets/ios26/ios26_alert_dialog.dart';
-export 'src/widgets/ios26/ios26_context_menu.dart';
-export 'src/widgets/ios26/ios26_native_search_tab_bar.dart';
-export 'src/widgets/ios26/ios26_native_tab_bar.dart';
-export 'src/widgets/ios26/ios26_scaffold_legacy.dart';
+export 'src/controls/button/ios26_button.dart';
+export 'src/controls/switch/ios26_switch.dart';
+export 'src/controls/slider/ios26_slider.dart';
+export 'src/controls/segmented_control/ios26_segmented_control.dart';
+export 'src/overlays/alert_dialog/ios26_alert_dialog.dart';
+export 'src/overlays/context_menu/ios26_context_menu.dart';
+export 'src/navigation/search/ios26_native_search_tab_bar.dart';
+export 'src/navigation/tab_bar/ios26_native_tab_bar.dart';
+export 'src/navigation/scaffold/ios26_scaffold_legacy.dart';
 
-export 'src/widgets/adaptive_navigation_scroll_controller.dart';
+export 'src/navigation/app_bar/adaptive_navigation_scroll_controller.dart';
 
-export 'src/widgets/adaptive_action_sheet.dart';
-export 'src/widgets/adaptive_bottom_sheet.dart';
-export 'src/widgets/adaptive_inline_date_picker.dart';
+export 'src/overlays/action_sheet/adaptive_action_sheet.dart';
+export 'src/overlays/bottom_sheet/adaptive_bottom_sheet.dart';
+export 'src/controls/pickers/adaptive_inline_date_picker.dart';
 export 'src/style/adaptive_native_fonts.dart';
 
-export 'src/widgets/adaptive_navigation_search_bar.dart';
+export 'src/navigation/search/adaptive_navigation_search_bar.dart';
 
-export 'src/widgets/adaptive_list_view.dart';
+export 'src/content/list_view/adaptive_list_view.dart';

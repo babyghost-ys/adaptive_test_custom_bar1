@@ -1,0 +1,463 @@
+import 'package:flutter/material.dart';
+import '../../core/platform_info.dart';
+import '../../style/sf_symbol.dart';
+import 'ios26_button.dart';
+
+/// An adaptive button that renders platform-specific button styles
+///
+/// On iOS: Uses the running system’s native UIButton.
+/// On Android: Uses Material Design button (ElevatedButton or TextButton)
+///
+/// Example:
+/// ```dart
+/// AdaptiveButton(
+///   onPressed: () {
+///     print('Button pressed');
+///   },
+///   label: 'Click Me',
+/// )
+/// ```
+class AdaptiveButton extends StatelessWidget {
+  /// Creates an adaptive button with a text label
+  const AdaptiveButton({
+    super.key,
+    required this.onPressed,
+    required this.label,
+    this.color,
+    this.textColor,
+    this.style = AdaptiveButtonStyle.filled,
+    this.size = AdaptiveButtonSize.medium,
+    this.padding,
+    this.borderRadius,
+    this.minSize,
+    this.enabled = true,
+    this.useSmoothRectangleBorder = true,
+    this.useNative = true,
+  }) : child = null,
+       icon = null,
+       iconColor = null,
+       sfSymbol = null;
+
+  /// Creates an adaptive button with a custom child widget
+  const AdaptiveButton.child({
+    super.key,
+    required this.onPressed,
+    required this.child,
+    this.color,
+    this.style = AdaptiveButtonStyle.filled,
+    this.size = AdaptiveButtonSize.medium,
+    this.padding,
+    this.borderRadius,
+    this.minSize,
+    this.enabled = true,
+    this.useSmoothRectangleBorder = true,
+    this.useNative = true,
+  }) : label = null,
+       textColor = null,
+       icon = null,
+       iconColor = null,
+       sfSymbol = null;
+
+  /// Creates an adaptive button with an icon
+  const AdaptiveButton.icon({
+    super.key,
+    required this.onPressed,
+    required this.icon,
+    this.color,
+    this.iconColor,
+    this.style = AdaptiveButtonStyle.filled,
+    this.size = AdaptiveButtonSize.medium,
+    this.padding,
+    this.borderRadius,
+    this.minSize,
+    this.enabled = true,
+    this.useSmoothRectangleBorder = true,
+    this.useNative = true,
+  }) : label = null,
+       textColor = null,
+       child = null,
+       sfSymbol = null;
+
+  /// Creates an adaptive button with a native SF Symbol icon (iOS only)
+  const AdaptiveButton.sfSymbol({
+    super.key,
+    required this.onPressed,
+    required this.sfSymbol,
+    this.color,
+    this.style = AdaptiveButtonStyle.glass,
+    this.size = AdaptiveButtonSize.medium,
+    this.padding,
+    this.borderRadius,
+    this.minSize,
+    this.enabled = true,
+    this.useSmoothRectangleBorder = true,
+    this.useNative = true,
+  }) : label = null,
+       textColor = null,
+       child = null,
+       icon = null,
+       iconColor = null;
+
+  /// The callback that is called when the button is tapped
+  final VoidCallback? onPressed;
+
+  /// The text label of the button (used in default constructor)
+  final String? label;
+
+  /// The widget below this widget in the tree (used in .child constructor)
+  final Widget? child;
+
+  /// The icon to display (used in .icon constructor)
+  final IconData? icon;
+
+  /// The SF Symbol to display (used in .sfSymbol constructor)
+  final SFSymbol? sfSymbol;
+
+  /// The color of the button
+  ///
+  /// On iOS: Uses iOS system colors
+  /// On Android: Uses Material theme colors
+  final Color? color;
+
+  /// The color of the button text (only for label mode)
+  final Color? textColor;
+
+  /// The color of the icon (only for icon mode)
+  final Color? iconColor;
+
+  /// The visual style of the button
+  final AdaptiveButtonStyle style;
+
+  /// The size preset for the button
+  final AdaptiveButtonSize size;
+
+  /// The amount of space to surround the child inside the button
+  final EdgeInsetsGeometry? padding;
+
+  /// The border radius of the button
+  final BorderRadius? borderRadius;
+
+  /// The minimum size of the button
+  final Size? minSize;
+
+  /// Whether the button is enabled
+  final bool enabled;
+
+  /// Whether to use smooth rectangle border (iOS 26+ only)
+  /// When false, uses perfectly circular/capsule shape
+  /// Default is true for smooth rectangle, set to false for circular
+  final bool useSmoothRectangleBorder;
+
+  /// Retained for source compatibility. All iOS buttons use UIButton;
+  /// this flag no longer selects a Flutter-drawn imitation.
+  final bool useNative;
+
+  @override
+  Widget build(BuildContext context) {
+    // UIKit chooses the appearance for the running iOS release.
+    if (PlatformInfo.isIOS) {
+      // SF Symbol mode - use native SF Symbol rendering
+      if (sfSymbol != null) {
+        return _wrapIOSButton(
+          IOS26Button.sfSymbol(
+            onPressed: onPressed,
+            sfSymbol: sfSymbol!,
+            style: _mapToIOS26Style(style),
+            size: _mapToIOS26Size(size),
+            color: color,
+            enabled: enabled,
+            padding: padding,
+            borderRadius: borderRadius,
+            minSize: minSize,
+            useSmoothRectangleBorder: useSmoothRectangleBorder,
+          ),
+        );
+      }
+
+      // Child mode - overlay widget on native button
+      if (child != null) {
+        return _wrapIOSButton(
+          IOS26Button.child(
+            onPressed: onPressed,
+            style: _mapToIOS26Style(style),
+            size: _mapToIOS26Size(size),
+            color: color,
+            enabled: enabled,
+            padding: padding,
+            borderRadius: borderRadius,
+            minSize: minSize,
+            useSmoothRectangleBorder: useSmoothRectangleBorder,
+            child: child!,
+          ),
+        );
+      }
+
+      // Icon mode - use child mode with Icon widget
+      if (icon != null) {
+        return _wrapIOSButton(
+          IOS26Button.child(
+            onPressed: onPressed,
+            style: _mapToIOS26Style(style),
+            size: _mapToIOS26Size(size),
+            color: color,
+            enabled: enabled,
+            padding: padding,
+            borderRadius: borderRadius,
+            minSize: minSize,
+            useSmoothRectangleBorder: useSmoothRectangleBorder,
+            child: Icon(icon, color: iconColor, size: 24),
+          ),
+        );
+      }
+
+      // Label mode
+      return _wrapIOSButton(
+        IOS26Button(
+          onPressed: onPressed,
+          label: label!,
+          textColor: textColor,
+          style: _mapToIOS26Style(style),
+          size: _mapToIOS26Size(size),
+          color: color,
+          enabled: enabled,
+          padding: padding,
+          borderRadius: borderRadius,
+          minSize: minSize,
+          useSmoothRectangleBorder: useSmoothRectangleBorder,
+        ),
+      );
+    }
+
+    // Android - Use Material Design button
+    if (PlatformInfo.isAndroid) {
+      return _buildMaterialButton(context);
+    }
+
+    // Fallback for other platforms (web, desktop, etc.)
+    return _buildMaterialButton(context);
+  }
+
+  // Wrap iOS buttons to prevent infinite width in Row/Flex
+  Widget _wrapIOSButton(Widget button) {
+    // Apply minSize constraint if provided
+    if (minSize != null) {
+      return ConstrainedBox(
+        constraints: BoxConstraints(
+          minWidth: minSize!.width,
+          minHeight: minSize!.height,
+        ),
+        child: button,
+      );
+    }
+
+    // No wrapper - button sizes itself to content
+    // User must wrap with Flexible in Row if needed
+    return button;
+  }
+
+  Widget _buildMaterialButton(BuildContext context) {
+    final effectiveOnPressed = enabled ? onPressed : null;
+
+    // Build child widget based on mode
+    Widget buttonChild;
+    if (sfSymbol != null) {
+      // SF Symbol fallback - use Material Icons
+      buttonChild = Icon(
+        Icons.circle, // Default fallback icon
+        color: sfSymbol!.color,
+        size: sfSymbol!.size,
+      );
+    } else if (icon != null) {
+      buttonChild = Icon(icon, color: iconColor);
+    } else if (child != null) {
+      buttonChild = child!;
+    } else {
+      buttonChild = Text(label ?? '');
+    }
+
+    switch (style) {
+      case AdaptiveButtonStyle.filled:
+        // Use theme's ElevatedButton style and only override explicitly provided values
+        return ElevatedButton(
+          onPressed: effectiveOnPressed,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: color, // null = use theme
+            foregroundColor: textColor, // null = use theme
+            padding: padding, // null = use theme
+            minimumSize: minSize, // null = use theme
+            shape: borderRadius != null
+                ? RoundedRectangleBorder(borderRadius: borderRadius!)
+                : null, // null = use theme
+          ),
+          child: buttonChild,
+        );
+
+      case AdaptiveButtonStyle.tinted:
+        return FilledButton.tonal(
+          onPressed: effectiveOnPressed,
+          style: FilledButton.styleFrom(
+            backgroundColor: color?.withValues(alpha: 0.15),
+            foregroundColor: textColor ?? color,
+            padding: padding,
+            minimumSize: minSize,
+            shape: borderRadius != null
+                ? RoundedRectangleBorder(borderRadius: borderRadius!)
+                : null,
+          ),
+          child: buttonChild,
+        );
+
+      case AdaptiveButtonStyle.bordered:
+        return OutlinedButton(
+          onPressed: effectiveOnPressed,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: textColor ?? color,
+            side: color != null ? BorderSide(color: color!) : null,
+            padding: padding,
+            minimumSize: minSize,
+            shape: borderRadius != null
+                ? RoundedRectangleBorder(borderRadius: borderRadius!)
+                : null,
+          ),
+          child: buttonChild,
+        );
+
+      case AdaptiveButtonStyle.plain:
+        // Explicitly use primary color if no color is provided
+        final effectiveColor =
+            color ?? textColor ?? Theme.of(context).colorScheme.primary;
+        return TextButton(
+          onPressed: effectiveOnPressed,
+          style: ButtonStyle(
+            foregroundColor: WidgetStateProperty.all(effectiveColor),
+            padding: padding != null ? WidgetStateProperty.all(padding) : null,
+            minimumSize: minSize != null
+                ? WidgetStateProperty.all(minSize)
+                : null,
+            shape: borderRadius != null
+                ? WidgetStateProperty.all(
+                    RoundedRectangleBorder(borderRadius: borderRadius!),
+                  )
+                : null,
+          ),
+          child: buttonChild,
+        );
+
+      case AdaptiveButtonStyle.gray:
+        // Material doesn't have a direct "gray" style, use filled button with gray color
+        // Use theme-aware gray colors
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        return FilledButton(
+          onPressed: effectiveOnPressed,
+          style: FilledButton.styleFrom(
+            backgroundColor: isDark
+                ? Colors.grey.shade800
+                : Colors.grey.shade300,
+            foregroundColor: isDark
+                ? Colors.grey.shade300
+                : Colors.grey.shade800,
+            padding: padding ?? _getDefaultPadding(),
+            minimumSize: minSize ?? Size.zero,
+            shape: RoundedRectangleBorder(
+              borderRadius: borderRadius ?? BorderRadius.circular(8.0),
+            ),
+          ),
+          child: buttonChild,
+        );
+
+      case AdaptiveButtonStyle.glass:
+      case AdaptiveButtonStyle.prominentGlass:
+        // Material doesn't have glass effects, fallback to tinted style
+        return FilledButton.tonal(
+          onPressed: effectiveOnPressed,
+          style: FilledButton.styleFrom(
+            backgroundColor: color?.withValues(alpha: 0.15),
+            foregroundColor: textColor ?? color,
+            padding: padding,
+            minimumSize: minSize,
+            shape: borderRadius != null
+                ? RoundedRectangleBorder(borderRadius: borderRadius!)
+                : null,
+          ),
+          child: buttonChild,
+        );
+    }
+  }
+
+  IOS26ButtonStyle _mapToIOS26Style(AdaptiveButtonStyle style) {
+    switch (style) {
+      case AdaptiveButtonStyle.filled:
+        return IOS26ButtonStyle.filled;
+      case AdaptiveButtonStyle.tinted:
+        return IOS26ButtonStyle.tinted;
+      case AdaptiveButtonStyle.gray:
+        return IOS26ButtonStyle.gray;
+      case AdaptiveButtonStyle.bordered:
+        return IOS26ButtonStyle.bordered;
+      case AdaptiveButtonStyle.plain:
+        return IOS26ButtonStyle.plain;
+      case AdaptiveButtonStyle.glass:
+        return IOS26ButtonStyle.glass;
+      case AdaptiveButtonStyle.prominentGlass:
+        return IOS26ButtonStyle.prominentGlass;
+    }
+  }
+
+  IOS26ButtonSize _mapToIOS26Size(AdaptiveButtonSize size) {
+    switch (size) {
+      case AdaptiveButtonSize.small:
+        return IOS26ButtonSize.small;
+      case AdaptiveButtonSize.medium:
+        return IOS26ButtonSize.medium;
+      case AdaptiveButtonSize.large:
+        return IOS26ButtonSize.large;
+    }
+  }
+
+  EdgeInsetsGeometry _getDefaultPadding() {
+    switch (size) {
+      case AdaptiveButtonSize.small:
+        return const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0);
+      case AdaptiveButtonSize.medium:
+        return const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0);
+      case AdaptiveButtonSize.large:
+        return const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0);
+    }
+  }
+}
+
+/// Button style variants that adapt to each platform
+enum AdaptiveButtonStyle {
+  /// Solid filled button (primary action)
+  filled,
+
+  /// Tinted/tonal button with subtle background
+  tinted,
+
+  /// Gray button with neutral appearance
+  gray,
+
+  /// Outlined/bordered button
+  bordered,
+
+  /// Plain text button
+  plain,
+
+  /// Glass effect button (iOS 26+ only)
+  glass,
+
+  /// Prominent glass button (iOS 26+ only)
+  prominentGlass,
+}
+
+/// Button size presets
+enum AdaptiveButtonSize {
+  /// Small button (28pt height on iOS)
+  small,
+
+  /// Medium button (36pt height on iOS) - default
+  medium,
+
+  /// Large button (44pt height on iOS)
+  large,
+}

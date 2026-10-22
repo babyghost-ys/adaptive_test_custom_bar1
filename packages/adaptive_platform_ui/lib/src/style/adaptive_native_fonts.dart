@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import '../platform/platform_info.dart';
+import '../core/platform_info.dart';
 
 /// One font family for the package's native iOS components.
 ///
