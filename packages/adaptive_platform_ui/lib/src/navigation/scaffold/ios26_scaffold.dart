@@ -1,12 +1,11 @@
 import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/foundation.dart'
-    show ValueListenable, defaultTargetPlatform, TargetPlatform;
+import 'package:flutter/foundation.dart' show ValueListenable;
 import '../../core/platform_info.dart';
 import '../../devices/duo/system_vertical_bar.dart';
 import '../../style/sf_symbol.dart';
-import '../../devices/duo/duo_vertical_bar.dart';
+import '../../devices/duo/duo_layout.dart';
 import '../chrome/toolbar_chrome_scope.dart';
 import '../app_bar/adaptive_app_bar_action.dart';
 import '../app_bar/adaptive_navigation_scroll_controller.dart';
@@ -261,16 +260,8 @@ class _IOS26ScaffoldState extends State<IOS26Scaffold> {
     );
 
     // iPhone Duo (inner display, and the cover display while folded): the
-    // system reserves a trailing strip and moves *controls* (back button,
-    // actions) into a vertical bar on the trailing edge and leaves the title
-    // in place. Our toolbar is a hand-built UINavigationBar, which iOS never
-    // lays out vertically, so mirror that behaviour here: keep a title-only
-    // toolbar at the top (when there is a title) and render the controls in a
-    // trailing vertical bar of our own.
-    //
-    // With an AdaptiveToolbarHost above the navigator the host decides the
-    // pose and draws the one fixed vertical bar for every page, so this page
-    // keeps only its title. Without a host it draws its own bar.
+    // system reserves a trailing strip and UIKit lays the navigation bar out
+    // as a vertical bar in it, with the title kept at the top.
     final chrome = widget.useFixedToolbar
         ? ToolbarChromeScope.maybeOf(context)
         : null;
@@ -288,8 +279,6 @@ class _IOS26ScaffoldState extends State<IOS26Scaffold> {
                 SystemVerticalBarEdge.unknown,
           );
     final duoVerticalPose = pose != null;
-    final nativeVertical =
-        duoVerticalPose && defaultTargetPlatform == TargetPlatform.iOS;
     if (chrome == null &&
         pose != null &&
         !pose.reservedBySystem &&
@@ -304,18 +293,7 @@ class _IOS26ScaffoldState extends State<IOS26Scaffold> {
       );
     }
     final hasTitle = widget.title != null || widget.titleWidget != null;
-    final hasControls =
-        widget.leading != null ||
-        heroLeading != null ||
-        (widget.actions != null && widget.actions!.isNotEmpty);
     final showTopToolbar = duoVerticalPose ? hasTitle : hasToolbarContent;
-    final tabs = widget.tabBarHidden ? null : widget.bottomNavigationBar;
-    final hasTabs = tabs?.items?.isNotEmpty ?? false;
-    final showDuoSideBar =
-        duoVerticalPose &&
-        !nativeVertical &&
-        (hasControls || hasTabs) &&
-        chrome == null;
 
     // The Liquid Glass toolbar is drawn as a Positioned overlay on top of the
     // body (see below), so, unlike CupertinoPageScaffold with a translucent
@@ -401,87 +379,38 @@ class _IOS26ScaffoldState extends State<IOS26Scaffold> {
     final stackContent = Stack(
       children: [
         bodyContent,
-        // Top toolbar - iOS 26 Liquid Glass style. On iPhone Duo it carries
-        // only the title; the controls live in the trailing vertical bar.
+        // The native bar. On iPhone Duo UIKit lays it out as the vertical bar.
         if (showTopToolbar && !(chrome?.hostsToolbar ?? false))
           Positioned(
             left: 0,
             right: 0,
             top: 0,
-            height: nativeVertical
-                ? mq.size.height
-                : duoVerticalPose
-                ? DuoTitleBand.of(context).contentTop
-                : null,
-            child: duoVerticalPose && !nativeVertical
-                // On iPhone Duo the title sits at the leading edge; the
-                // controls are in the trailing bar.
-                ? Stack(
-                    fit: StackFit.expand,
-                    clipBehavior: Clip.none,
-                    children: [
-                      const DuoTitleBackdrop(),
-                      DuoToolbarTitle(
-                        title: widget.title,
-                        titleWidget: widget.titleWidget,
-                      ),
-                    ],
-                  )
-                : IOS26NativeToolbar(
-                    title: widget.title,
-                    largeTitle: widget.largeTitle,
-                    scrollController: widget.scrollController,
-                    verticalNavigation: nativeVertical,
-                    leadingText: nativeVertical && heroLeading != null
-                        ? ''
-                        : null,
-                    onLeadingTap: () => Navigator.of(context).maybePop(),
-                    leading: duoVerticalPose
-                        ? null
-                        : (widget.leading ?? heroLeading),
-                    showNativeView: showNativeToolbar,
-                    covered: coveredByPopup,
-                    actions: duoVerticalPose && !nativeVertical
-                        ? null
-                        : widget.actions,
-                    tintColor: widget.tintColor,
-                    navigationBarColor: widget.navigationBarColor,
-                    navigationBarShadow: widget.navigationBarShadow,
-                    hidesNavigationButtonBackground:
-                        widget.hidesNavigationButtonBackground,
-                    titleWidget: widget.titleWidget,
-                    onActionTap: (index) {
-                      // Call the appropriate action callback
-                      if (widget.actions != null &&
-                          index >= 0 &&
-                          index < widget.actions!.length) {
-                        widget.actions![index].onPressed();
-                      }
-                    },
-                  ),
-          ),
-        // iPhone Duo: controls in a vertical bar on the trailing edge
-        if (showDuoSideBar)
-          Positioned(
-            top: 0,
-            bottom: 0,
-            left: barOnLeft ? 0 : null,
-            right: barOnLeft ? null : 0,
-            width: pose.bandWidth,
-            child: DuoVerticalBar(
-              leading:
-                  widget.leading ??
-                  (heroLeading == null || nativeVertical
-                      ? null
-                      : DuoBarBackButton(
-                          onPressed: () => Navigator.of(context).maybePop(),
-                        )),
-              actions: nativeVertical
-                  ? const <AdaptiveAppBarAction>[]
-                  : widget.actions ?? const <AdaptiveAppBarAction>[],
-              tabBar: tabs,
-              tint: widget.tintColor,
-              regions: SystemVerticalBar.currentRegions,
+            height: duoVerticalPose ? mq.size.height : null,
+            child: IOS26NativeToolbar(
+              title: widget.title,
+              largeTitle: widget.largeTitle,
+              scrollController: widget.scrollController,
+              verticalNavigation: duoVerticalPose,
+              leadingText: duoVerticalPose && heroLeading != null ? '' : null,
+              onLeadingTap: () => Navigator.of(context).maybePop(),
+              leading: duoVerticalPose ? null : (widget.leading ?? heroLeading),
+              showNativeView: showNativeToolbar,
+              covered: coveredByPopup,
+              actions: widget.actions,
+              tintColor: widget.tintColor,
+              navigationBarColor: widget.navigationBarColor,
+              navigationBarShadow: widget.navigationBarShadow,
+              hidesNavigationButtonBackground:
+                  widget.hidesNavigationButtonBackground,
+              titleWidget: widget.titleWidget,
+              onActionTap: (index) {
+                // Call the appropriate action callback
+                if (widget.actions != null &&
+                    index >= 0 &&
+                    index < widget.actions!.length) {
+                  widget.actions![index].onPressed();
+                }
+              },
             ),
           ),
       ],

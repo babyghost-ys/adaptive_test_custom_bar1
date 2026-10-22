@@ -111,13 +111,6 @@ public class AdaptivePlatformUiPlugin: NSObject, FlutterPlugin {
             withId: "adaptive_platform_ui/ios26_blur_view"
         )
 
-        // Register the Liquid Glass capsule used by the iPhone Duo trailing bar
-        let ios26GlassCapsuleFactory = iOS26GlassCapsuleFactory(messenger: registrar.messenger())
-        registrar.register(
-            ios26GlassCapsuleFactory,
-            withId: "adaptive_platform_ui/ios26_glass_capsule"
-        )
-
         // iPhone Duo: where the system puts its vertical bar (iOS 27.1)
         let verticalBarEdgeChannel = FlutterEventChannel(
             name: "adaptive_platform_ui/vertical_bar_edge",

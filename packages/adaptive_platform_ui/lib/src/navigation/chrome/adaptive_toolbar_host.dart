@@ -4,8 +4,7 @@ import '../../devices/duo/reserved_region.dart';
 
 import '../../core/platform_info.dart';
 import '../../devices/duo/system_vertical_bar.dart';
-import '../../devices/duo/duo_vertical_bar.dart';
-import '../../devices/duo/hosted_duo_bar.dart';
+import '../../devices/duo/duo_layout.dart';
 import 'hosted_top_toolbar.dart';
 import 'toolbar_blend.dart';
 import 'toolbar_chrome_scope.dart';
@@ -64,9 +63,7 @@ class _AdaptiveToolbarHostState extends State<AdaptiveToolbarHost>
   void initState() {
     super.initState();
     _blend = ToolbarBlend(registry: _registry, vsync: this);
-    // Reserved regions supply camera clearance for the bar.
     if (widget.debugRegions == null && PlatformInfo.isIOS26OrHigher()) {
-      SystemVerticalBar.regions.addListener(_onEdgeChanged);
       // The side the bar belongs on comes from the system, not from insets:
       // the leading Split View pane has none to read.
       _edge = SystemVerticalBar.edge..addListener(_onEdgeChanged);
@@ -81,9 +78,6 @@ class _AdaptiveToolbarHostState extends State<AdaptiveToolbarHost>
   @override
   void dispose() {
     _edge?.removeListener(_onEdgeChanged);
-    if (_edge != null) {
-      SystemVerticalBar.regions.removeListener(_onEdgeChanged);
-    }
     _blend.dispose();
     _registry.dispose();
     super.dispose();
@@ -91,7 +85,6 @@ class _AdaptiveToolbarHostState extends State<AdaptiveToolbarHost>
 
   @override
   Widget build(BuildContext context) {
-    final regions = widget.debugRegions ?? SystemVerticalBar.currentRegions;
     // The fixed chrome only exists where pages use the native iOS 26
     // toolbar; elsewhere pages keep their own Cupertino / Material bars.
     final hostsToolbar = widget.debugRegions != null || PlatformInfo.isIOS;
@@ -136,17 +129,6 @@ class _AdaptiveToolbarHostState extends State<AdaptiveToolbarHost>
               _BarInset(pose: pose, child: widget.child),
               if (hostsToolbar)
                 HostedTopToolbar(blend: _blend, titleOnly: pose != null),
-              if (pose != null && defaultTargetPlatform != TargetPlatform.iOS)
-                // The bar sits on whichever edge the pose names: the right in
-                // most poses, the left in the leading Split View pane.
-                Positioned(
-                  top: 0,
-                  bottom: 0,
-                  left: pose.onLeft ? 0 : null,
-                  right: pose.onLeft ? null : 0,
-                  width: pose.bandWidth,
-                  child: HostedDuoBar(blend: _blend, regions: regions),
-                ),
             ],
           ),
         ),
