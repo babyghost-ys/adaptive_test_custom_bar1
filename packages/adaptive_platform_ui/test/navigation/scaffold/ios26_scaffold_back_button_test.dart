@@ -1,6 +1,6 @@
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
-import 'package:adaptive_platform_ui/src/navigation/app_bar/ios26_native_toolbar.dart';
-import 'package:adaptive_platform_ui/src/navigation/scaffold/ios26_scaffold.dart';
+import 'package:adaptive_platform_ui/src/navigation/app_bar/native_toolbar.dart';
+import 'package:adaptive_platform_ui/src/navigation/scaffold/native_scaffold.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -12,7 +12,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         navigatorKey: nav,
-        home: const IOS26Scaffold(
+        home: const NativeScaffold(
           title: 'Home',
           useHeroBackButton: false,
           children: [SafeArea(child: Text('body:Home'))],
@@ -21,7 +21,7 @@ void main() {
     );
     nav.currentState!.push(
       MaterialPageRoute<void>(
-        builder: (_) => const IOS26Scaffold(
+        builder: (_) => const NativeScaffold(
           title: 'Detail',
           useHeroBackButton: false,
           children: [SafeArea(child: Text('body:Detail'))],
@@ -30,9 +30,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final toolbar = tester.widget<IOS26NativeToolbar>(
-      find.byType(IOS26NativeToolbar),
-    );
+    final toolbar = tester.widget<NativeToolbar>(find.byType(NativeToolbar));
     expect(toolbar.leading, isNotNull);
     final back = find.byType(AdaptiveButton);
     expect(back, findsOneWidget);

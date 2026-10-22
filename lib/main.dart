@@ -246,21 +246,36 @@ class _InvestmentHomeState extends State<InvestmentHome> {
             },
             items: const [
               AdaptiveNavigationDestination(
-                icon: 'chart.pie',
-                selectedIcon: 'chart.pie.fill',
+                icon: AdaptiveIcon(
+                  sfSymbol: 'chart.pie',
+                  icon: Icons.pie_chart_outline,
+                ),
+                selectedIcon: AdaptiveIcon(
+                  sfSymbol: 'chart.pie.fill',
+                  icon: Icons.pie_chart,
+                ),
                 label: 'Portfolio',
               ),
               AdaptiveNavigationDestination(
-                icon: 'chart.xyaxis.line',
+                icon: AdaptiveIcon(
+                  sfSymbol: 'chart.xyaxis.line',
+                  icon: Icons.show_chart,
+                ),
                 label: 'Markets',
               ),
               AdaptiveNavigationDestination(
-                icon: 'star',
-                selectedIcon: 'star.fill',
+                icon: AdaptiveIcon(sfSymbol: 'star', icon: Icons.star_outline),
+                selectedIcon: AdaptiveIcon(
+                  sfSymbol: 'star.fill',
+                  icon: Icons.star,
+                ),
                 label: 'Watchlist',
               ),
               AdaptiveNavigationDestination(
-                icon: 'clock.arrow.circlepath',
+                icon: AdaptiveIcon(
+                  sfSymbol: 'clock.arrow.circlepath',
+                  icon: Icons.history,
+                ),
                 label: 'Activity',
               ),
             ],

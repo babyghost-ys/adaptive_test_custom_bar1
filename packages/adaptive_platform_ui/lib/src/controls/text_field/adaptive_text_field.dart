@@ -41,7 +41,6 @@ class AdaptiveTextField extends StatelessWidget {
     this.inputFormatters,
     this.padding,
     this.decoration,
-    this.cupertinoDecoration,
   });
 
   /// Controls the text being edited.
@@ -126,10 +125,6 @@ class AdaptiveTextField extends StatelessWidget {
 
   /// The decoration to show around the text field (Material only).
   final InputDecoration? decoration;
-
-  /// Retained for source compatibility; UIKit owns iOS field chrome.
-  /// Flutter box decorations are not drawn behind the native text control.
-  final BoxDecoration? cupertinoDecoration;
 
   @override
   Widget build(BuildContext context) {

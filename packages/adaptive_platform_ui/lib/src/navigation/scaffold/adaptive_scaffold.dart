@@ -1,5 +1,6 @@
+import '../../style/adaptive_icon.dart';
 import '../../core/adaptive_style.dart';
-import '../tab_bar/ios26_native_tab_bar.dart';
+import '../tab_bar/native_tab_bar.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,9 +12,9 @@ import '../../content/badge/adaptive_badge.dart';
 import '../tab_bar/adaptive_bottom_navigation_bar.dart';
 import '../drawer/adaptive_drawer.dart';
 import 'body_placement.dart';
-import 'ios26_scaffold.dart';
+import 'native_scaffold.dart';
 import 'native_bottom_bar_layout.dart';
-import '../search/ios26_search_tab_scaffold.dart';
+import '../search/native_search_tab_scaffold.dart';
 import '../chrome/toolbar_chrome_scope.dart';
 import '../chrome/toolbar_registry.dart';
 import '../app_bar/adaptive_app_bar_action.dart';
@@ -36,24 +37,16 @@ class AdaptiveNavigationDestination {
     this.addSpacerAfter = false,
   });
 
-  /// Icon to display.
-  ///
-  /// Supported values include:
-  /// - SF Symbol name `String` for iOS native paths
-  /// - `IconData`
-  /// - `Widget`
-  /// - `ImageProvider` such as `AssetImage`, `FileImage`, or `NetworkImage`
-  final dynamic icon;
+  /// Icon to display. The native iOS tab bar uses its SF Symbol or image;
+  /// Flutter-drawn tab bars draw an image as a round avatar.
+  final AdaptiveIcon icon;
 
   /// Label text for the destination
   final String label;
 
-  /// Optional selected state icon.
-  ///
-  /// Accepts the same value types as [icon], including an SF Symbol name
-  /// `String` (e.g. `magazine.fill`) which the iOS 26+ native tab bar applies
-  /// when the destination is selected. Falls back to [icon] when null.
-  final dynamic selectedIcon;
+  /// Icon for the selected state, such as a filled symbol. Falls back to
+  /// [icon] when null.
+  final AdaptiveIcon? selectedIcon;
 
   /// Whether this is a search tab (iOS 26+)
   /// Search tabs are visually separated and transform into a search field
@@ -136,8 +129,6 @@ class AdaptiveScaffold extends StatefulWidget {
     this.resizeToAvoidBottomInset,
     this.floatingActionButton,
     this.minimizeBehavior = TabBarMinimizeBehavior.automatic,
-    this.enableBlur = true,
-    this.enableToolbarGradient = true,
     this.extendBodyBehindAppBar,
     this.extendBody,
     this.backgroundColor,
@@ -180,14 +171,6 @@ class AdaptiveScaffold extends StatefulWidget {
   /// Tab bar minimize behavior (iOS 26+ only)
   /// Controls how the tab bar minimizes when scrolling
   final TabBarMinimizeBehavior minimizeBehavior;
-
-  /// Enable Liquid Glass blur effect behind tab bar (iOS 26+ only)
-  /// When enabled, content behind the tab bar will be blurred
-  final bool enableBlur;
-
-  /// @deprecated No longer used. iOS 26+ uses native scroll edge effects.
-  /// This parameter is kept for backwards compatibility but has no effect.
-  final bool enableToolbarGradient;
 
   /// Whether the body runs under the top bar, like
   /// [Scaffold.extendBodyBehindAppBar]. The bar's height then stays in
@@ -586,7 +569,7 @@ class AdaptiveScaffoldState extends State<AdaptiveScaffold> {
       'Native tab search requires one search destination, selectedIndex and onTap.',
     );
     final page = nativeTabs
-        ? IOS26SearchTabScaffold(
+        ? NativeSearchTabScaffold(
             bar: bar!,
             headerBackgroundColor: widget.customHeaderBackgroundColor,
             headerHeight: widget.customHeaderHeight,
@@ -621,58 +604,15 @@ class AdaptiveScaffoldState extends State<AdaptiveScaffold> {
         : _buildCupertino(context, bottomBar);
   }
 
-  IconData _sfSymbolToCupertinoIcon(String sfSymbol) {
-    const iconMap = {
-      'house': CupertinoIcons.house,
-      'house.fill': CupertinoIcons.house_fill,
-      'magnifyingglass': CupertinoIcons.search,
-      'heart': CupertinoIcons.heart,
-      'heart.fill': CupertinoIcons.heart_fill,
-      'person': CupertinoIcons.person,
-      'person.fill': CupertinoIcons.person_fill,
-      'gear': CupertinoIcons.settings,
-      'star': CupertinoIcons.star,
-      'star.fill': CupertinoIcons.star_fill,
-      'bell': CupertinoIcons.bell,
-      'bell.fill': CupertinoIcons.bell_fill,
-      'bag': CupertinoIcons.bag,
-      'bag.fill': CupertinoIcons.bag_fill,
-      'bookmark': CupertinoIcons.bookmark,
-      'bookmark.fill': CupertinoIcons.bookmark_fill,
-      'info.circle': CupertinoIcons.info_circle,
-      'info.circle.fill': CupertinoIcons.info_circle_fill,
-      'plus.circle': CupertinoIcons.add_circled,
-      'plus': CupertinoIcons.add,
-      'checkmark.circle': CupertinoIcons.checkmark_circle,
-    };
-    return iconMap[sfSymbol] ?? CupertinoIcons.circle;
-  }
-
+  /// A Flutter-drawn tab icon: an image as a round avatar, anything else
+  /// as the icon's own widget or glyph.
   Widget _buildNavigationIconWidget({
-    required dynamic rawIcon,
+    required AdaptiveIcon rawIcon,
     Color? color,
-    required TargetPlatform platform,
   }) {
-    if (rawIcon is Widget) {
-      return color != null && rawIcon is ImageIcon
-          ? ImageIcon(rawIcon.image, color: color)
-          : rawIcon;
-    }
-
-    if (rawIcon is ImageProvider) {
-      return _NavigationImageIcon(image: rawIcon);
-    }
-
-    final IconData iconData;
-    if (rawIcon is String) {
-      iconData = platform == TargetPlatform.iOS
-          ? _sfSymbolToCupertinoIcon(rawIcon)
-          : Icons.circle;
-    } else {
-      iconData = rawIcon as IconData;
-    }
-
-    return color != null ? Icon(iconData, color: color) : Icon(iconData);
+    final image = rawIcon.widget == null ? rawIcon.image : null;
+    if (image != null) return _NavigationImageIcon(image: image);
+    return rawIcon.build(color: color);
   }
 }
 

@@ -1,4 +1,4 @@
-import 'package:adaptive_platform_ui/src/navigation/app_bar/ios26_native_toolbar.dart';
+import 'package:adaptive_platform_ui/src/navigation/app_bar/native_toolbar.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -35,10 +35,7 @@ void main() {
                   child: const SizedBox.expand(),
                 ),
               ),
-              const IOS26NativeToolbar(
-                title: 'Cards',
-                verticalNavigation: true,
-              ),
+              const NativeToolbar(title: 'Cards', verticalNavigation: true),
             ],
           ),
         ),

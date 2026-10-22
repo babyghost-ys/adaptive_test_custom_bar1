@@ -15,9 +15,9 @@ import '../../native/sheet_platform_view_guard.dart';
 /// - Haptic feedback
 /// - Native gesture handling
 /// - Automatic light/dark mode support
-class IOS26Switch extends StatefulWidget {
+class NativeSwitch extends StatefulWidget {
   /// Creates an iOS 26 style switch
-  const IOS26Switch({
+  const NativeSwitch({
     super.key,
     required this.value,
     required this.onChanged,
@@ -38,10 +38,10 @@ class IOS26Switch extends StatefulWidget {
   final Color? thumbColor;
 
   @override
-  State<IOS26Switch> createState() => _IOS26SwitchState();
+  State<NativeSwitch> createState() => _NativeSwitchState();
 }
 
-class _IOS26SwitchState extends State<IOS26Switch> {
+class _NativeSwitchState extends State<NativeSwitch> {
   static int _nextId = 0;
   late final int _id;
   late final MethodChannel _channel;
@@ -92,7 +92,7 @@ class _IOS26SwitchState extends State<IOS26Switch> {
   }
 
   @override
-  void didUpdateWidget(IOS26Switch oldWidget) {
+  void didUpdateWidget(NativeSwitch oldWidget) {
     super.didUpdateWidget(oldWidget);
 
     // Update native side if properties changed

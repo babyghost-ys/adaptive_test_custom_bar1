@@ -403,9 +403,12 @@ void main() {
             body: const Text('Home'),
             bottomNavigationBar: AdaptiveBottomNavigationBar(
               items: const [
-                AdaptiveNavigationDestination(icon: Icons.home, label: 'Home'),
                 AdaptiveNavigationDestination(
-                  icon: Icons.search,
+                  icon: AdaptiveIcon(icon: Icons.home),
+                  label: 'Home',
+                ),
+                AdaptiveNavigationDestination(
+                  icon: AdaptiveIcon(icon: Icons.search),
                   label: 'Search',
                 ),
               ],
@@ -430,9 +433,12 @@ void main() {
             body: const Center(child: Text('Content')),
             bottomNavigationBar: AdaptiveBottomNavigationBar(
               items: const [
-                AdaptiveNavigationDestination(icon: Icons.home, label: 'Home'),
                 AdaptiveNavigationDestination(
-                  icon: Icons.settings,
+                  icon: AdaptiveIcon(icon: Icons.home),
+                  label: 'Home',
+                ),
+                AdaptiveNavigationDestination(
+                  icon: AdaptiveIcon(icon: Icons.settings),
                   label: 'Settings',
                 ),
               ],
@@ -537,9 +543,12 @@ void main() {
             body: const Text('Home'),
             bottomNavigationBar: AdaptiveBottomNavigationBar(
               items: const [
-                AdaptiveNavigationDestination(icon: Icons.home, label: 'Home'),
                 AdaptiveNavigationDestination(
-                  icon: Icons.person,
+                  icon: AdaptiveIcon(icon: Icons.home),
+                  label: 'Home',
+                ),
+                AdaptiveNavigationDestination(
+                  icon: AdaptiveIcon(icon: Icons.person),
                   label: 'Profile',
                 ),
               ],
@@ -563,9 +572,12 @@ void main() {
             body: const Text('Content'),
             bottomNavigationBar: AdaptiveBottomNavigationBar(
               items: const [
-                AdaptiveNavigationDestination(icon: Icons.home, label: 'Home'),
                 AdaptiveNavigationDestination(
-                  icon: Icons.search,
+                  icon: AdaptiveIcon(icon: Icons.home),
+                  label: 'Home',
+                ),
+                AdaptiveNavigationDestination(
+                  icon: AdaptiveIcon(icon: Icons.search),
                   label: 'Search',
                 ),
               ],
@@ -592,12 +604,12 @@ void main() {
             bottomNavigationBar: AdaptiveBottomNavigationBar(
               items: const [
                 AdaptiveNavigationDestination(
-                  icon: Icons.message,
+                  icon: AdaptiveIcon(icon: Icons.message),
                   label: 'Messages',
                   badgeCount: 5,
                 ),
                 AdaptiveNavigationDestination(
-                  icon: Icons.notifications,
+                  icon: AdaptiveIcon(icon: Icons.notifications),
                   label: 'Notifications',
                   badgeCount: 10,
                 ),
@@ -631,18 +643,21 @@ void _badgeTextTests() {
               onTap: (_) {},
               items: const [
                 AdaptiveNavigationDestination(
-                  icon: Icons.home,
+                  icon: AdaptiveIcon(icon: Icons.home),
                   label: 'Home',
                   badgeText: 'NEW',
                   badgeColor: Colors.green,
                   badgeTextColor: Colors.black,
                 ),
                 AdaptiveNavigationDestination(
-                  icon: Icons.info,
+                  icon: AdaptiveIcon(icon: Icons.info),
                   label: 'Info',
                   badgeCount: 3,
                 ),
-                AdaptiveNavigationDestination(icon: Icons.person, label: 'Me'),
+                AdaptiveNavigationDestination(
+                  icon: AdaptiveIcon(icon: Icons.person),
+                  label: 'Me',
+                ),
               ],
             ),
           ),

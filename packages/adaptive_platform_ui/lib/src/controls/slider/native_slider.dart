@@ -15,9 +15,9 @@ import '../../native/sheet_platform_view_guard.dart';
 /// - Haptic feedback
 /// - Native gesture handling (draggable)
 /// - Automatic light/dark mode support
-class IOS26Slider extends StatefulWidget {
+class NativeSlider extends StatefulWidget {
   /// Creates an iOS 26 style slider
-  const IOS26Slider({
+  const NativeSlider({
     super.key,
     required this.value,
     required this.onChanged,
@@ -54,10 +54,10 @@ class IOS26Slider extends StatefulWidget {
   final Color? thumbColor;
 
   @override
-  State<IOS26Slider> createState() => _IOS26SliderState();
+  State<NativeSlider> createState() => _NativeSliderState();
 }
 
-class _IOS26SliderState extends State<IOS26Slider> {
+class _NativeSliderState extends State<NativeSlider> {
   static int _nextId = 0;
   late final int _id;
   late final MethodChannel _channel;
@@ -119,7 +119,7 @@ class _IOS26SliderState extends State<IOS26Slider> {
   }
 
   @override
-  void didUpdateWidget(IOS26Slider oldWidget) {
+  void didUpdateWidget(NativeSlider oldWidget) {
     super.didUpdateWidget(oldWidget);
 
     // Update native side if properties changed

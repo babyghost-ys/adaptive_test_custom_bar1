@@ -17,15 +17,6 @@ class AdaptiveNavigationScrollController extends ScrollController {
     null,
   );
 
-  /// Retained for source compatibility. Content now paints across the full
-  /// viewport; UIKit owns its navigation background and scroll-edge effect.
-  @Deprecated(
-    'UIKit owns the scroll edge; do not clip content at a bar midpoint.',
-  )
-  final ValueNotifier<double?> compactUnderlapTop = ValueNotifier<double?>(
-    null,
-  );
-
   bool _disposed = false;
 
   /// Most recent first. A scaffold offers one controller to its whole body,
@@ -98,19 +89,6 @@ class AdaptiveNavigationScrollController extends ScrollController {
     _disposed = true;
     contentTopInset.dispose();
     navigationBarBottom.dispose();
-    compactUnderlapTop.dispose();
     super.dispose();
   }
-}
-
-/// Kept for source compatibility. AdaptiveListView now applies the complete
-/// native content inset, so a separate large-title spacer is unnecessary.
-@Deprecated(
-  'AdaptiveListView applies the native navigation inset automatically.',
-)
-class AdaptiveLargeTitleSpacer extends StatelessWidget {
-  const AdaptiveLargeTitleSpacer({super.key, required this.controller});
-  final AdaptiveNavigationScrollController controller;
-  @override
-  Widget build(BuildContext context) => const SizedBox.shrink();
 }

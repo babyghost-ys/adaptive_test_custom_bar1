@@ -71,7 +71,7 @@ extension _NativeScaffold on AdaptiveScaffoldState {
     }
 
     return _wrapWithDrawerIfNeeded(
-      IOS26Scaffold(
+      NativeScaffold(
         largeTitle: appBar?.largeTitle ?? false,
         scrollController: navigation,
         bottomNavigationBar: bottomBar,
@@ -85,7 +85,6 @@ extension _NativeScaffold on AdaptiveScaffoldState {
             appBar?.hidesNavigationButtonBackground ?? false,
         titleWidget: titleOverlay,
         minimizeBehavior: widget.minimizeBehavior,
-        enableBlur: widget.enableBlur,
         backgroundColor: widget.backgroundColor,
         useHeroBackButton: widget.useHeroBackButton,
         useFixedToolbar: _usesFixedToolbar(context),

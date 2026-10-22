@@ -1,3 +1,4 @@
+import '../../style/adaptive_icon.dart';
 import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
@@ -36,8 +37,9 @@ class AdaptivePopupMenuItem<T> extends AdaptivePopupMenuEntry {
   /// Optional subtitle displayed below the label
   final String? subtitle;
 
-  /// Optional icon (SF Symbol String for iOS 26+, IconData for iOS <26 and Android)
-  final dynamic icon;
+  /// Optional icon: its SF Symbol in the native menu, its Material icon in
+  /// the Material one.
+  final AdaptiveIcon? icon;
 
   /// Optional image bytes (e.g. an avatar) displayed as the item's image,
   /// clipped to a circle. Takes precedence over [icon] when both are set.
@@ -87,9 +89,9 @@ enum PopupButtonStyle {
 }
 
 /// Native iOS 26 popup menu button implementation using platform views
-class IOS26PopupMenuButton<T> extends StatefulWidget {
+class NativePopupMenuButton<T> extends StatefulWidget {
   /// Creates a text-labeled popup menu button
-  const IOS26PopupMenuButton({
+  const NativePopupMenuButton({
     super.key,
     required this.buttonLabel,
     required this.items,
@@ -107,7 +109,7 @@ class IOS26PopupMenuButton<T> extends StatefulWidget {
        onTap = null;
 
   /// Creates a round, icon-only popup menu button
-  const IOS26PopupMenuButton.icon({
+  const NativePopupMenuButton.icon({
     super.key,
     required this.buttonIcon,
     required this.items,
@@ -126,7 +128,7 @@ class IOS26PopupMenuButton<T> extends StatefulWidget {
        onTap = null;
 
   /// Creates a popup menu button with a custom child widget
-  const IOS26PopupMenuButton.widget({
+  const NativePopupMenuButton.widget({
     super.key,
     required this.items,
     required this.onSelected,
@@ -197,11 +199,11 @@ class IOS26PopupMenuButton<T> extends StatefulWidget {
   bool get isIconButton => buttonIcon != null;
 
   @override
-  State<IOS26PopupMenuButton<T>> createState() =>
-      _IOS26PopupMenuButtonState<T>();
+  State<NativePopupMenuButton<T>> createState() =>
+      _NativePopupMenuButtonState<T>();
 }
 
-class _IOS26PopupMenuButtonState<T> extends State<IOS26PopupMenuButton<T>> {
+class _NativePopupMenuButtonState<T> extends State<NativePopupMenuButton<T>> {
   MethodChannel? _channel;
   bool? _lastIsDark;
   int? _lastTint;
@@ -219,7 +221,7 @@ class _IOS26PopupMenuButtonState<T> extends State<IOS26PopupMenuButton<T>> {
   }
 
   @override
-  void didUpdateWidget(IOS26PopupMenuButton<T> oldWidget) {
+  void didUpdateWidget(NativePopupMenuButton<T> oldWidget) {
     super.didUpdateWidget(oldWidget);
     // Sync any changes to brightness or tint
     _syncBrightnessIfNeeded();
@@ -305,7 +307,7 @@ class _IOS26PopupMenuButtonState<T> extends State<IOS26PopupMenuButton<T>> {
       } else if (e is AdaptivePopupMenuItem<T>) {
         labels.add(e.label);
         subtitles.add(e.subtitle ?? '');
-        symbols.add(e.icon is String ? e.icon as String : '');
+        symbols.add(e.icon?.sfSymbol ?? '');
         imageData.add(e.imageBytes);
         isDivider.add(false);
         enabled.add(e.enabled);
@@ -370,7 +372,7 @@ class _IOS26PopupMenuButtonState<T> extends State<IOS26PopupMenuButton<T>> {
         } else if (e is AdaptivePopupMenuItem<T>) {
           labels.add(e.label);
           subtitles.add(e.subtitle ?? '');
-          symbols.add(e.icon is String ? e.icon as String : '');
+          symbols.add(e.icon?.sfSymbol ?? '');
           imageData.add(e.imageBytes);
           isDivider.add(false);
           enabled.add(e.enabled);

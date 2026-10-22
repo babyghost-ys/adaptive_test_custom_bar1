@@ -8,8 +8,8 @@ import '../chrome/toolbar_registry.dart';
 
 /// UIKit owns native tabs and search above Flutter. This widget publishes
 /// state and consumes measured insets through a noninteractive channel anchor.
-class IOS26SearchTabScaffold extends StatefulWidget {
-  const IOS26SearchTabScaffold({
+class NativeSearchTabScaffold extends StatefulWidget {
+  const NativeSearchTabScaffold({
     super.key,
     required this.bar,
     required this.builder,
@@ -34,10 +34,10 @@ class IOS26SearchTabScaffold extends StatefulWidget {
   final double headerHeight;
 
   @override
-  State<IOS26SearchTabScaffold> createState() => _SearchTabsState();
+  State<NativeSearchTabScaffold> createState() => _SearchTabsState();
 }
 
-class _SearchTabsState extends State<IOS26SearchTabScaffold> {
+class _SearchTabsState extends State<NativeSearchTabScaffold> {
   MethodChannel? _channel;
   double _bottomInset = 0;
   double _safeTop = 0;
@@ -53,10 +53,8 @@ class _SearchTabsState extends State<IOS26SearchTabScaffold> {
         .map(
           (item) => {
             'title': item.label,
-            'symbol': item.icon is String ? item.icon : null,
-            'selectedSymbol': item.selectedIcon is String
-                ? item.selectedIcon
-                : null,
+            'symbol': item.icon.sfSymbol,
+            'selectedSymbol': item.selectedIcon?.sfSymbol,
             'isSearch': item.isSearch,
             'badge':
                 item.badgeText ??
@@ -83,7 +81,7 @@ class _SearchTabsState extends State<IOS26SearchTabScaffold> {
   };
 
   @override
-  void didUpdateWidget(IOS26SearchTabScaffold oldWidget) {
+  void didUpdateWidget(NativeSearchTabScaffold oldWidget) {
     super.didUpdateWidget(oldWidget);
     _channel?.invokeMethod<void>('configure', _configuration());
   }

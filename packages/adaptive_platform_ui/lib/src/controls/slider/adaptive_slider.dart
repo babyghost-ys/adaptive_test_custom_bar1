@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/adaptive_style.dart';
-import 'ios26_slider.dart';
+import 'native_slider.dart';
 
 /// An adaptive slider that renders platform-specific slider styles
 ///
@@ -85,7 +85,7 @@ class AdaptiveSlider extends StatelessWidget {
     switch (AdaptiveStyle.of(context)) {
       case AdaptiveStyle.native:
         // iOS 26+ - Use native iOS 26 slider
-        return IOS26Slider(
+        return NativeSlider(
           value: value,
           onChanged: onChanged,
           onChangeStart: onChangeStart,

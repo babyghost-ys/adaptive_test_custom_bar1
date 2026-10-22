@@ -41,7 +41,6 @@ class AdaptiveTextFormField extends StatelessWidget {
     this.inputFormatters,
     this.padding,
     this.decoration,
-    this.cupertinoDecoration,
     this.autovalidateMode,
     this.onTapOutside,
     this.autofillHints,
@@ -135,9 +134,6 @@ class AdaptiveTextFormField extends StatelessWidget {
 
   /// The decoration to show around the text field (Material only).
   final InputDecoration? decoration;
-
-  /// Retained for source compatibility; UIKit owns iOS text-field chrome.
-  final BoxDecoration? cupertinoDecoration;
 
   /// Used to enable/disable this form field auto validation and update its error text.
   final AutovalidateMode? autovalidateMode;
@@ -305,7 +301,6 @@ class _NativeTextFormFieldState extends FormFieldState<String> {
             onTap: config.onTap,
             inputFormatters: config.inputFormatters,
             padding: config.padding,
-            cupertinoDecoration: config.cupertinoDecoration,
           ),
           if (hasError && errorText != null)
             Padding(

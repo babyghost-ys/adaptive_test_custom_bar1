@@ -244,7 +244,7 @@ class AdaptiveAppBarAction {
               {
                 'title': entry.label,
                 if (entry.subtitle != null) 'subtitle': entry.subtitle,
-                if (entry.icon is String) 'icon': entry.icon,
+                if (entry.icon?.sfSymbol != null) 'icon': entry.icon!.sfSymbol,
                 if (!entry.enabled) 'enabled': false,
                 if (entry.isDestructive) 'destructive': true,
                 if (entry.selected) 'selected': true,

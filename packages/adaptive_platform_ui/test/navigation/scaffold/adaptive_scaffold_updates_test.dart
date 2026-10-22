@@ -55,8 +55,14 @@ void main() {
           selectedIndex: 0,
           onTap: (_) {},
           items: const [
-            AdaptiveNavigationDestination(icon: Icons.home, label: 'Home'),
-            AdaptiveNavigationDestination(icon: Icons.info, label: 'Info'),
+            AdaptiveNavigationDestination(
+              icon: AdaptiveIcon(icon: Icons.home),
+              label: 'Home',
+            ),
+            AdaptiveNavigationDestination(
+              icon: AdaptiveIcon(icon: Icons.info),
+              label: 'Info',
+            ),
           ],
           bottomNavigationBar: const SizedBox(height: 80),
         ),
@@ -92,7 +98,7 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: AdaptivePopupMenuButton.icon<String>(
-            icon: Icons.more_vert,
+            icon: AdaptiveIcon(icon: Icons.more_vert),
             iconSize: 31,
             items: [AdaptivePopupMenuItem<String>(label: 'One', value: 'one')],
             onSelected: (_, __) {},

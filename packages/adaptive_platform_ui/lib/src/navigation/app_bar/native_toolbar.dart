@@ -12,8 +12,8 @@ final nativeNavigationBarBottom = ValueNotifier<double?>(null);
 
 /// Native iOS 26 UINavigationBar widget using platform views
 /// Implements Liquid Glass design with native blur effects
-class IOS26NativeToolbar extends StatefulWidget {
-  const IOS26NativeToolbar({
+class NativeToolbar extends StatefulWidget {
+  const NativeToolbar({
     super.key,
     this.title,
     this.scrollController,
@@ -30,7 +30,6 @@ class IOS26NativeToolbar extends StatefulWidget {
     this.hidesNavigationButtonBackground = false,
     this.height = 44.0,
     this.showNativeView = true,
-    this.showsGradient = true,
     this.verticalNavigation = false,
     this.active = true,
     this.covered = false,
@@ -77,19 +76,15 @@ class IOS26NativeToolbar extends StatefulWidget {
   /// presented sheet.
   final bool covered;
 
-  /// Retained for source compatibility. UIKit owns the native scroll-edge
-  /// treatment; this flag does not install a custom bar background.
-  final bool showsGradient;
-
   /// Let UIKit place navigation actions in the system vertical bar on Duo.
   /// Uses a full-window, touch-transparent native controller.
   final bool verticalNavigation;
 
   @override
-  State<IOS26NativeToolbar> createState() => _IOS26NativeToolbarState();
+  State<NativeToolbar> createState() => _NativeToolbarState();
 }
 
-class _IOS26NativeToolbarState extends State<IOS26NativeToolbar> {
+class _NativeToolbarState extends State<NativeToolbar> {
   MethodChannel? _channel;
   int _channelGeneration = 0;
   int _propertyRevision = 0;
@@ -165,7 +160,7 @@ class _IOS26NativeToolbarState extends State<IOS26NativeToolbar> {
   }
 
   @override
-  void didUpdateWidget(IOS26NativeToolbar oldWidget) {
+  void didUpdateWidget(NativeToolbar oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.scrollController != widget.scrollController) {
       _scrollGeneration++;
@@ -371,7 +366,6 @@ class _IOS26NativeToolbarState extends State<IOS26NativeToolbar> {
       'verticalNavigation': widget.verticalNavigation,
       'scrollLinked': widget.scrollController != null,
       'scrollOffset': widget.scrollController?.activeOffset ?? 0.0,
-      if (!widget.showsGradient) 'showsGradient': false,
       if (widget.tintColor != null) 'tint': _colorToARGB(widget.tintColor!),
       'navigationBarColor': widget.navigationBarColor?.toARGB32(),
       'navigationBarShadow': widget.navigationBarShadow,
@@ -472,17 +466,6 @@ class _IOS26NativeToolbarState extends State<IOS26NativeToolbar> {
           controller?.contentTopInset.value = inset;
           controller?.navigationBarBottom.value = bottom;
           setState(() {});
-        }
-        break;
-      case 'onCompactUnderlapTop':
-        final args = call.arguments as Map?;
-        final top = (args?['top'] as num?)?.toDouble();
-        if (top != null &&
-            top.isFinite &&
-            top >= 0 &&
-            mounted &&
-            args?['generation'] == _scrollGeneration) {
-          widget.scrollController?.compactUnderlapTop.value = top;
         }
         break;
       case 'onLeadingTapped':

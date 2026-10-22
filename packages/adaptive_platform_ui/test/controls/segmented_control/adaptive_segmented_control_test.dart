@@ -245,12 +245,12 @@ void main() {
               actions: [
                 AdaptiveContextMenuAction(
                   title: 'Edit',
-                  icon: Icons.edit,
+                  icon: AdaptiveIcon(icon: Icons.edit),
                   onPressed: () {},
                 ),
                 AdaptiveContextMenuAction(
                   title: 'Delete',
-                  icon: Icons.delete,
+                  icon: AdaptiveIcon(icon: Icons.delete),
                   onPressed: () {},
                 ),
               ],
@@ -276,7 +276,7 @@ void main() {
               actions: [
                 AdaptiveContextMenuAction(
                   title: 'Share',
-                  icon: Icons.share,
+                  icon: AdaptiveIcon(icon: Icons.share),
                   onPressed: () {},
                 ),
               ],
@@ -305,7 +305,7 @@ void main() {
               actions: [
                 AdaptiveContextMenuAction(
                   title: 'Action',
-                  icon: Icons.check,
+                  icon: AdaptiveIcon(icon: Icons.check),
                   onPressed: () {
                     actionPressed = true;
                   },
@@ -410,7 +410,7 @@ void main() {
         MaterialApp(
           home: Scaffold(
             body: AdaptivePopupMenuButton.icon<String>(
-              icon: Icons.more_vert,
+              icon: AdaptiveIcon(icon: Icons.more_vert),
               items: const [
                 AdaptivePopupMenuItem(label: 'Settings', value: 'settings'),
               ],

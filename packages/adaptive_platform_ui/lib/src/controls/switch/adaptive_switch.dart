@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/adaptive_style.dart';
-import 'ios26_switch.dart';
+import 'native_switch.dart';
 
 /// An adaptive switch that renders platform-specific switch styles
 ///
@@ -59,7 +59,7 @@ class AdaptiveSwitch extends StatelessWidget {
     switch (AdaptiveStyle.of(context)) {
       case AdaptiveStyle.native:
         // iOS 26+ - Use native iOS 26 switch
-        return IOS26Switch(
+        return NativeSwitch(
           value: value,
           onChanged: onChanged,
           activeColor: activeColor,

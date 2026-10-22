@@ -2,7 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import '../../core/adaptive_style.dart';
 import '../../style/sf_symbol.dart';
-import 'ios26_button.dart';
+import 'native_button.dart';
 
 /// An adaptive button that renders platform-specific button styles
 ///
@@ -33,7 +33,6 @@ class AdaptiveButton extends StatelessWidget {
     this.minSize,
     this.enabled = true,
     this.useSmoothRectangleBorder = true,
-    this.useNative = true,
   }) : child = null,
        icon = null,
        iconColor = null,
@@ -52,7 +51,6 @@ class AdaptiveButton extends StatelessWidget {
     this.minSize,
     this.enabled = true,
     this.useSmoothRectangleBorder = true,
-    this.useNative = true,
   }) : label = null,
        textColor = null,
        icon = null,
@@ -73,7 +71,6 @@ class AdaptiveButton extends StatelessWidget {
     this.minSize,
     this.enabled = true,
     this.useSmoothRectangleBorder = true,
-    this.useNative = true,
   }) : label = null,
        textColor = null,
        child = null,
@@ -92,7 +89,6 @@ class AdaptiveButton extends StatelessWidget {
     this.minSize,
     this.enabled = true,
     this.useSmoothRectangleBorder = true,
-    this.useNative = true,
   }) : label = null,
        textColor = null,
        child = null,
@@ -149,10 +145,6 @@ class AdaptiveButton extends StatelessWidget {
   /// Default is true for smooth rectangle, set to false for circular
   final bool useSmoothRectangleBorder;
 
-  /// Retained for source compatibility. All iOS buttons use UIButton;
-  /// this flag no longer selects a Flutter-drawn imitation.
-  final bool useNative;
-
   @override
   Widget build(BuildContext context) {
     switch (AdaptiveStyle.of(context)) {
@@ -168,7 +160,7 @@ class AdaptiveButton extends StatelessWidget {
         // SF Symbol mode - use native SF Symbol rendering
         if (sfSymbol != null) {
           return _wrapIOSButton(
-            IOS26Button.sfSymbol(
+            NativeButton.sfSymbol(
               onPressed: onPressed,
               sfSymbol: sfSymbol!,
               style: _mapToIOS26Style(style),
@@ -186,7 +178,7 @@ class AdaptiveButton extends StatelessWidget {
         // Child mode - overlay widget on native button
         if (child != null) {
           return _wrapIOSButton(
-            IOS26Button.child(
+            NativeButton.child(
               onPressed: onPressed,
               style: _mapToIOS26Style(style),
               size: _mapToIOS26Size(size),
@@ -204,7 +196,7 @@ class AdaptiveButton extends StatelessWidget {
         // Icon mode - use child mode with Icon widget
         if (icon != null) {
           return _wrapIOSButton(
-            IOS26Button.child(
+            NativeButton.child(
               onPressed: onPressed,
               style: _mapToIOS26Style(style),
               size: _mapToIOS26Size(size),
@@ -221,7 +213,7 @@ class AdaptiveButton extends StatelessWidget {
 
         // Label mode
         return _wrapIOSButton(
-          IOS26Button(
+          NativeButton(
             onPressed: onPressed,
             label: label!,
             textColor: textColor,
@@ -388,33 +380,33 @@ class AdaptiveButton extends StatelessWidget {
     }
   }
 
-  IOS26ButtonStyle _mapToIOS26Style(AdaptiveButtonStyle style) {
+  NativeButtonStyle _mapToIOS26Style(AdaptiveButtonStyle style) {
     switch (style) {
       case AdaptiveButtonStyle.filled:
-        return IOS26ButtonStyle.filled;
+        return NativeButtonStyle.filled;
       case AdaptiveButtonStyle.tinted:
-        return IOS26ButtonStyle.tinted;
+        return NativeButtonStyle.tinted;
       case AdaptiveButtonStyle.gray:
-        return IOS26ButtonStyle.gray;
+        return NativeButtonStyle.gray;
       case AdaptiveButtonStyle.bordered:
-        return IOS26ButtonStyle.bordered;
+        return NativeButtonStyle.bordered;
       case AdaptiveButtonStyle.plain:
-        return IOS26ButtonStyle.plain;
+        return NativeButtonStyle.plain;
       case AdaptiveButtonStyle.glass:
-        return IOS26ButtonStyle.glass;
+        return NativeButtonStyle.glass;
       case AdaptiveButtonStyle.prominentGlass:
-        return IOS26ButtonStyle.prominentGlass;
+        return NativeButtonStyle.prominentGlass;
     }
   }
 
-  IOS26ButtonSize _mapToIOS26Size(AdaptiveButtonSize size) {
+  NativeButtonSize _mapToIOS26Size(AdaptiveButtonSize size) {
     switch (size) {
       case AdaptiveButtonSize.small:
-        return IOS26ButtonSize.small;
+        return NativeButtonSize.small;
       case AdaptiveButtonSize.medium:
-        return IOS26ButtonSize.medium;
+        return NativeButtonSize.medium;
       case AdaptiveButtonSize.large:
-        return IOS26ButtonSize.large;
+        return NativeButtonSize.large;
     }
   }
 

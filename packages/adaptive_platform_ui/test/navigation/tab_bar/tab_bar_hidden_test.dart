@@ -1,3 +1,4 @@
+import 'package:adaptive_platform_ui/src/navigation/tab_bar/native_tab_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
@@ -39,9 +40,12 @@ void main() {
               selectedIndex: 0,
               onTap: (_) {},
               items: const [
-                AdaptiveNavigationDestination(icon: Icons.home, label: 'Home'),
                 AdaptiveNavigationDestination(
-                  icon: Icons.settings,
+                  icon: AdaptiveIcon(icon: Icons.home),
+                  label: 'Home',
+                ),
+                AdaptiveNavigationDestination(
+                  icon: AdaptiveIcon(icon: Icons.settings),
                   label: 'Settings',
                 ),
               ],
@@ -73,11 +77,11 @@ void main() {
                 onTap: (_) {},
                 items: const [
                   AdaptiveNavigationDestination(
-                    icon: Icons.home,
+                    icon: AdaptiveIcon(icon: Icons.home),
                     label: 'Home',
                   ),
                   AdaptiveNavigationDestination(
-                    icon: Icons.settings,
+                    icon: AdaptiveIcon(icon: Icons.settings),
                     label: 'Settings',
                   ),
                 ],
@@ -96,15 +100,18 @@ void main() {
     });
   });
 
-  group('IOS26NativeTabBar hidden prop', () {
+  group('NativeTabBar hidden prop', () {
     testWidgets('accepts hidden prop', (WidgetTester tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: IOS26NativeTabBar(
+            body: NativeTabBar(
               hidden: true,
               destinations: const [
-                AdaptiveNavigationDestination(icon: Icons.home, label: 'Home'),
+                AdaptiveNavigationDestination(
+                  icon: AdaptiveIcon(icon: Icons.home),
+                  label: 'Home',
+                ),
               ],
               selectedIndex: 0,
               onTap: (_) {},
@@ -114,16 +121,19 @@ void main() {
       );
 
       // On non-iOS, renders the fallback widget
-      expect(find.byType(IOS26NativeTabBar), findsOneWidget);
+      expect(find.byType(NativeTabBar), findsOneWidget);
     });
 
     testWidgets('defaults hidden to false', (WidgetTester tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: IOS26NativeTabBar(
+            body: NativeTabBar(
               destinations: const [
-                AdaptiveNavigationDestination(icon: Icons.home, label: 'Home'),
+                AdaptiveNavigationDestination(
+                  icon: AdaptiveIcon(icon: Icons.home),
+                  label: 'Home',
+                ),
               ],
               selectedIndex: 0,
               onTap: (_) {},
@@ -132,7 +142,7 @@ void main() {
         ),
       );
 
-      expect(find.byType(IOS26NativeTabBar), findsOneWidget);
+      expect(find.byType(NativeTabBar), findsOneWidget);
     });
   });
 }

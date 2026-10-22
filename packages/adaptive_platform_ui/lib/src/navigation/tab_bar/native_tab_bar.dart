@@ -1,3 +1,4 @@
+import '../../style/adaptive_icon.dart';
 import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
@@ -6,8 +7,8 @@ import 'package:flutter/services.dart';
 import '../scaffold/adaptive_scaffold.dart';
 
 /// Native iOS 26 tab bar using UITabBar platform view
-class IOS26NativeTabBar extends StatefulWidget {
-  const IOS26NativeTabBar({
+class NativeTabBar extends StatefulWidget {
+  const NativeTabBar({
     super.key,
     required this.destinations,
     required this.selectedIndex,
@@ -40,10 +41,10 @@ class IOS26NativeTabBar extends StatefulWidget {
   final TabBarMinimizeBehavior minimizeBehavior;
 
   @override
-  State<IOS26NativeTabBar> createState() => _IOS26NativeTabBarState();
+  State<NativeTabBar> createState() => _NativeTabBarState();
 }
 
-class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
+class _NativeTabBarState extends State<NativeTabBar> {
   MethodChannel? _channel;
   int? _lastIndex;
   int? _lastTint;
@@ -75,7 +76,7 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
       widget.tint ?? CupertinoTheme.of(context).primaryColor;
 
   @override
-  void didUpdateWidget(covariant IOS26NativeTabBar oldWidget) {
+  void didUpdateWidget(covariant NativeTabBar oldWidget) {
     super.didUpdateWidget(oldWidget);
     _syncPropsToNativeIfNeeded();
   }
@@ -113,38 +114,25 @@ class _IOS26NativeTabBarState extends State<IOS26NativeTabBar> {
 
   /// Extract SF Symbol name from an icon value.
   /// Returns empty string for non-SF-Symbol icons (asset paths, IconData, widgets).
-  String _extractSymbol(Object? icon) {
-    if (icon is String && !icon.contains('/')) return icon;
-    return '';
-  }
+  String _extractSymbol(AdaptiveIcon? icon) => icon?.sfSymbol ?? '';
 
   /// Extract asset path from an icon value.
   /// Supports AssetImage, ImageIcon(AssetImage), and string paths containing '/'.
   /// Returns empty string for SF Symbols or other icon types.
-  String _extractAssetPath(Object? icon) {
-    if (icon is AssetImage) return icon.assetName;
-    if (icon is ImageIcon && icon.image is AssetImage) {
-      return (icon.image as AssetImage).assetName;
-    }
-    if (icon is String && icon.contains('/')) return icon;
-    return '';
-  }
+  String _extractAssetPath(AdaptiveIcon? icon) => switch (icon?.image) {
+    final AssetImage image => image.assetName,
+    _ => '',
+  };
 
-  String _extractFilePath(Object? icon) {
-    if (icon is FileImage) return icon.file.path;
-    if (icon is ImageIcon && icon.image is FileImage) {
-      return (icon.image as FileImage).file.path;
-    }
-    return '';
-  }
+  String _extractFilePath(AdaptiveIcon? icon) => switch (icon?.image) {
+    final FileImage image => image.file.path,
+    _ => '',
+  };
 
-  String _extractNetworkUrl(Object? icon) {
-    if (icon is NetworkImage) return icon.url;
-    if (icon is ImageIcon && icon.image is NetworkImage) {
-      return (icon.image as NetworkImage).url;
-    }
-    return '';
-  }
+  String _extractNetworkUrl(AdaptiveIcon? icon) => switch (icon?.image) {
+    final NetworkImage image => image.url,
+    _ => '',
+  };
 
   List<String> _mapSymbols() =>
       widget.destinations.map((e) => _extractSymbol(e.icon)).toList();

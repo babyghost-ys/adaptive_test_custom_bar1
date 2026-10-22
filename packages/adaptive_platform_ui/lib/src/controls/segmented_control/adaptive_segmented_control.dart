@@ -1,6 +1,7 @@
+import '../../style/adaptive_icon.dart';
 import 'package:flutter/material.dart';
 import '../../core/adaptive_style.dart';
-import 'ios26_segmented_control.dart';
+import 'native_segmented_control.dart';
 
 /// An adaptive segmented control that renders platform-specific styles
 ///
@@ -17,7 +18,7 @@ class AdaptiveSegmentedControl extends StatelessWidget {
     this.color,
     this.height = 36.0,
     this.shrinkWrap = false,
-    this.sfSymbols,
+    this.icons,
     this.iconSize,
     this.iconColor,
     this.textColor,
@@ -45,8 +46,9 @@ class AdaptiveSegmentedControl extends StatelessWidget {
   /// Whether the control should shrink to fit content
   final bool shrinkWrap;
 
-  /// Optional SF Symbol names or IconData
-  final List<dynamic>? sfSymbols;
+  /// Optional icons shown instead of [labels]: their SF Symbols on the
+  /// native control, their Material icons on the Material one.
+  final List<AdaptiveIcon>? icons;
 
   /// Icon size
   final double? iconSize;
@@ -63,7 +65,7 @@ class AdaptiveSegmentedControl extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return switch (AdaptiveStyle.of(context)) {
-      AdaptiveStyle.native => IOS26SegmentedControl(
+      AdaptiveStyle.native => NativeSegmentedControl(
         labels: labels,
         selectedIndex: selectedIndex,
         onValueChanged: onValueChanged,
@@ -71,7 +73,7 @@ class AdaptiveSegmentedControl extends StatelessWidget {
         color: color,
         height: height,
         shrinkWrap: shrinkWrap,
-        icons: sfSymbols,
+        icons: icons?.map((icon) => icon.sfSymbol ?? '').toList(),
         iconSize: iconSize,
         iconColor: iconColor,
         textColor: textColor,
@@ -90,19 +92,21 @@ class AdaptiveSegmentedControl extends StatelessWidget {
     final segments = <ButtonSegment<int>>[];
 
     // Check if using icons
-    final useIcons = sfSymbols != null && sfSymbols!.isNotEmpty;
-    final itemCount = useIcons ? sfSymbols!.length : labels.length;
+    final icons = this.icons;
+    final useIcons = icons != null && icons.isNotEmpty;
+    final itemCount = useIcons ? icons.length : labels.length;
 
     for (int i = 0; i < itemCount; i++) {
       if (useIcons) {
         // Icon mode
-        final dynamic icon = sfSymbols![i];
         segments.add(
           ButtonSegment<int>(
             value: i,
-            icon: icon is IconData
-                ? Icon(icon, size: iconSize ?? 20, color: iconColor)
-                : Icon(Icons.circle, size: iconSize ?? 20, color: iconColor),
+            icon: Icon(
+              icons[i].iconData,
+              size: iconSize ?? 20,
+              color: iconColor,
+            ),
           ),
         );
       } else {

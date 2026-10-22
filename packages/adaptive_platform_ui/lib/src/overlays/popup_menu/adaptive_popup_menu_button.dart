@@ -1,9 +1,10 @@
+import '../../style/adaptive_icon.dart';
 import 'package:flutter/material.dart';
 import '../../core/adaptive_style.dart';
 import '../action_sheet/adaptive_action_sheet.dart';
-import 'ios26_popup_menu_button.dart';
+import 'native_popup_menu_button.dart';
 
-export 'ios26_popup_menu_button.dart'
+export 'native_popup_menu_button.dart'
     show
         AdaptivePopupMenuItem,
         AdaptivePopupMenuDivider,
@@ -29,7 +30,7 @@ class AdaptivePopupMenuButton<T> {
     return Builder(
       key: key,
       builder: (context) => switch (AdaptiveStyle.of(context)) {
-        AdaptiveStyle.native => IOS26PopupMenuButton<T>(
+        AdaptiveStyle.native => NativePopupMenuButton<T>(
           buttonLabel: label,
           items: items,
           onSelected: onSelected,
@@ -69,7 +70,7 @@ class AdaptivePopupMenuButton<T> {
     return Builder(
       key: key,
       builder: (context) => switch (AdaptiveStyle.of(context)) {
-        AdaptiveStyle.native => IOS26PopupMenuButton<T>.widget(
+        AdaptiveStyle.native => NativePopupMenuButton<T>.widget(
           items: items,
           onSelected: onSelected,
           tint: tint,
@@ -90,14 +91,13 @@ class AdaptivePopupMenuButton<T> {
 
   /// Creates a round, icon-only popup menu button
   ///
-  /// [icon] can be either:
-  /// - String (SF Symbol) for iOS 26+
-  /// - IconData for iOS <26 and Android
+  /// [icon] shows its SF Symbol on the native button and its Material icon
+  /// on the Material one.
   /// [iconSize] is the glyph's point size on every platform; the button
   /// itself stays [size] wide and tall.
   static Widget icon<T>({
     Key? key,
-    required dynamic icon,
+    required AdaptiveIcon icon,
     required List<AdaptivePopupMenuEntry> items,
     required void Function(int index, AdaptivePopupMenuItem<T> entry)
     onSelected,
@@ -109,8 +109,8 @@ class AdaptivePopupMenuButton<T> {
     return Builder(
       key: key,
       builder: (context) => switch (AdaptiveStyle.of(context)) {
-        AdaptiveStyle.native => IOS26PopupMenuButton<T>.icon(
-          buttonIcon: icon is String ? icon : 'ellipsis.circle',
+        AdaptiveStyle.native => NativePopupMenuButton<T>.icon(
+          buttonIcon: icon.sfSymbol ?? 'ellipsis.circle',
           items: items,
           onSelected: onSelected,
           tint: tint,
@@ -197,9 +197,7 @@ class AdaptivePopupMenuButton<T> {
                   const SizedBox(width: 12),
                 ] else if (item.icon != null) ...[
                   Icon(
-                    item.icon is IconData
-                        ? item.icon as IconData
-                        : Icons.circle,
+                    item.icon!.iconData,
                     size: 20,
                     color: item.isDestructive
                         ? Theme.of(context).colorScheme.error
@@ -328,7 +326,7 @@ class _MaterialPopupMenuButton<T> extends StatefulWidget {
        iconSize = null;
 
   final String? label;
-  final dynamic icon; // IconData for Android
+  final AdaptiveIcon? icon;
   final Widget? child;
   final List<AdaptivePopupMenuEntry> items;
   final void Function(int index, AdaptivePopupMenuItem<T> entry) onSelected;
@@ -374,7 +372,7 @@ class _MaterialPopupMenuButtonState<T>
         height: widget.size,
         child: PopupMenuButton<int>(
           icon: Icon(
-            widget.icon is IconData ? widget.icon as IconData : Icons.more_vert,
+            widget.icon?.icon ?? Icons.more_vert,
             color: widget.tint,
             size: widget.iconSize,
           ),

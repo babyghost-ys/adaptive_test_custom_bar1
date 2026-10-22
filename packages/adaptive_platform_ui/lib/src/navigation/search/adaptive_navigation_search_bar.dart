@@ -31,7 +31,6 @@ class AdaptiveNavigationSearchController extends ValueNotifier<bool> {
     }
     scrollController.contentTopInset.value = bottom;
     scrollController.navigationBarBottom.value = bottom;
-    scrollController.compactUnderlapTop.value = underlapTop;
     final heightChanged = height != _navigationHeight;
     _navigationHeight = height;
     if (value != active) {

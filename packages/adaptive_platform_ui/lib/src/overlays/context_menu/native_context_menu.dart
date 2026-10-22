@@ -11,9 +11,9 @@ import '../../native/sheet_platform_view_guard.dart';
 
 /// Native iOS 26 context menu: a transparent platform view over [child] runs a
 /// `UIContextMenuInteraction`, lifting a snapshot of [child] as the preview.
-class IOS26ContextMenu extends StatefulWidget {
+class NativeContextMenu extends StatefulWidget {
   /// Creates a native context menu around [child]
-  const IOS26ContextMenu({
+  const NativeContextMenu({
     super.key,
     required this.actions,
     required this.child,
@@ -26,10 +26,10 @@ class IOS26ContextMenu extends StatefulWidget {
   final Widget child;
 
   @override
-  State<IOS26ContextMenu> createState() => _IOS26ContextMenuState();
+  State<NativeContextMenu> createState() => _NativeContextMenuState();
 }
 
-class _IOS26ContextMenuState extends State<IOS26ContextMenu> {
+class _NativeContextMenuState extends State<NativeContextMenu> {
   final _boundaryKey = GlobalKey();
   MethodChannel? _channel;
   bool? _lastIsDark;
@@ -66,7 +66,7 @@ class _IOS26ContextMenuState extends State<IOS26ContextMenu> {
                 creationParams: <String, dynamic>{
                   'labels': labels,
                   'sfSymbols': widget.actions
-                      .map((a) => a.icon is String ? a.icon as String : '')
+                      .map((a) => a.icon?.sfSymbol ?? '')
                       .toList(),
                   'enabled': widget.actions.map((a) => !a.isDisabled).toList(),
                   'isDestructive': widget.actions

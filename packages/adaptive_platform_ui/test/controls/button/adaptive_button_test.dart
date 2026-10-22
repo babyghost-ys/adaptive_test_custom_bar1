@@ -1,3 +1,4 @@
+import 'package:adaptive_platform_ui/src/controls/button/native_button.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -163,14 +164,14 @@ void main() {
     });
   });
 
-  group('IOS26Button', () {
+  group('NativeButton', () {
     testWidgets('creates iOS 26 button with label', (
       WidgetTester tester,
     ) async {
       await tester.pumpWidget(
         const CupertinoApp(
           home: CupertinoPageScaffold(
-            child: IOS26Button(onPressed: null, label: 'iOS 26 Button'),
+            child: NativeButton(onPressed: null, label: 'iOS 26 Button'),
           ),
         ),
       );
@@ -184,7 +185,7 @@ void main() {
       await tester.pumpWidget(
         const CupertinoApp(
           home: CupertinoPageScaffold(
-            child: IOS26Button.child(
+            child: NativeButton.child(
               onPressed: null,
               child: Text('iOS 26 Button'),
             ),
@@ -201,7 +202,7 @@ void main() {
       await tester.pumpWidget(
         CupertinoApp(
           home: CupertinoPageScaffold(
-            child: IOS26Button(
+            child: NativeButton(
               onPressed: () {
                 pressed = true;
               },
@@ -220,11 +221,11 @@ void main() {
     testWidgets('renders all iOS 26 button styles', (
       WidgetTester tester,
     ) async {
-      for (final style in IOS26ButtonStyle.values) {
+      for (final style in NativeButtonStyle.values) {
         await tester.pumpWidget(
           CupertinoApp(
             home: CupertinoPageScaffold(
-              child: IOS26Button(
+              child: NativeButton(
                 onPressed: () {},
                 style: style,
                 label: '$style',
@@ -239,11 +240,11 @@ void main() {
     });
 
     testWidgets('renders all iOS 26 button sizes', (WidgetTester tester) async {
-      for (final size in IOS26ButtonSize.values) {
+      for (final size in NativeButtonSize.values) {
         await tester.pumpWidget(
           CupertinoApp(
             home: CupertinoPageScaffold(
-              child: IOS26Button(onPressed: () {}, size: size, label: '$size'),
+              child: NativeButton(onPressed: () {}, size: size, label: '$size'),
             ),
           ),
         );

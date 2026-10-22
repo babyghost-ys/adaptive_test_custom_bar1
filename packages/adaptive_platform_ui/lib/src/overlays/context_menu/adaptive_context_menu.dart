@@ -1,6 +1,7 @@
+import '../../style/adaptive_icon.dart';
 import 'package:flutter/material.dart';
 import '../../core/adaptive_style.dart';
-import 'ios26_context_menu.dart';
+import 'native_context_menu.dart';
 
 /// A context menu action item
 class AdaptiveContextMenuAction {
@@ -19,8 +20,9 @@ class AdaptiveContextMenuAction {
   /// Callback when the action is pressed
   final VoidCallback onPressed;
 
-  /// Icon for the action (iOS 26+: SF Symbol string, iOS <26/Android: IconData)
-  final dynamic icon;
+  /// Icon for the action: its SF Symbol in the native menu, its Material
+  /// icon in the Material one.
+  final AdaptiveIcon? icon;
 
   /// Whether this is a destructive action (shown in red)
   final bool isDestructive;
@@ -94,9 +96,9 @@ class AdaptiveContextMenu extends StatelessWidget {
           enabled: !action.isDisabled,
           child: Row(
             children: [
-              if (action.icon != null && action.icon is IconData) ...[
+              if (action.icon != null) ...[
                 Icon(
-                  action.icon as IconData,
+                  action.icon!.iconData,
                   size: 20,
                   color: action.isDestructive
                       ? Colors.red
@@ -126,6 +128,6 @@ class AdaptiveContextMenu extends StatelessWidget {
   }
 
   Widget _buildIOS26ContextMenu(BuildContext context) {
-    return IOS26ContextMenu(actions: actions, child: child);
+    return NativeContextMenu(actions: actions, child: child);
   }
 }

@@ -1,9 +1,10 @@
+import '../../style/adaptive_icon.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import '../../core/adaptive_style.dart';
-import 'ios26_alert_dialog.dart';
+import 'native_alert_dialog.dart';
 
-export 'ios26_alert_dialog.dart' show AlertAction, AlertActionStyle;
+export 'native_alert_dialog.dart' show AlertAction, AlertActionStyle;
 
 /// Configuration for text input in alert dialog
 class AdaptiveAlertDialogInput {
@@ -41,10 +42,8 @@ class AdaptiveAlertDialog {
 
   /// Shows a standard adaptive alert dialog
   ///
-  /// The [icon] parameter accepts:
-  /// - iOS 26+: String (SF Symbol name, e.g., "checkmark.circle.fill")
-  /// - iOS <26: IconData (e.g., CupertinoIcons.checkmark_alt_circle_fill)
-  /// - Android: IconData (e.g., Icons.check_circle)
+  /// [icon] shows its SF Symbol in the native alert and its Material icon
+  /// in the Material dialog.
   ///
   /// Returns a Future that resolves to void when the dialog is dismissed
   static Future<void> show({
@@ -52,7 +51,7 @@ class AdaptiveAlertDialog {
     required String title,
     String? message,
     required List<AlertAction> actions,
-    dynamic icon,
+    AdaptiveIcon? icon,
     double? iconSize,
     Color? iconColor,
     String? oneTimeCode,
@@ -60,23 +59,15 @@ class AdaptiveAlertDialog {
     switch (AdaptiveStyle.of(context)) {
       case AdaptiveStyle.native:
         // iOS 26+ - Use native iOS 26 alert dialog
-        // Convert icon to String if needed for iOS 26 (expects SF Symbol)
-        String? iconString;
-        if (icon != null) {
-          if (icon is String) {
-            iconString = icon;
-          }
-          // If IconData is provided on iOS 26+, ignore it (iOS 26 uses SF Symbols)
-        }
 
         return showCupertinoDialog<void>(
           context: context,
           barrierColor: CupertinoColors.transparent,
-          builder: (context) => IOS26AlertDialog(
+          builder: (context) => NativeAlertDialog(
             title: title,
             message: message,
             actions: actions,
-            icon: iconString,
+            icon: icon?.sfSymbol,
             iconSize: iconSize,
             iconColor: iconColor,
             oneTimeCode: oneTimeCode,
@@ -109,29 +100,22 @@ class AdaptiveAlertDialog {
     String? message,
     required List<AlertAction> actions,
     required AdaptiveAlertDialogInput input,
-    dynamic icon,
+    AdaptiveIcon? icon,
     double? iconSize,
     Color? iconColor,
   }) {
     switch (AdaptiveStyle.of(context)) {
       case AdaptiveStyle.native:
         // iOS 26+ - Use native iOS 26 alert dialog with input
-        // Convert icon to String if needed for iOS 26 (expects SF Symbol)
-        String? iconString;
-        if (icon != null) {
-          if (icon is String) {
-            iconString = icon;
-          }
-        }
 
         return showCupertinoDialog<String?>(
           context: context,
           barrierColor: CupertinoColors.transparent,
-          builder: (context) => IOS26AlertDialog(
+          builder: (context) => NativeAlertDialog(
             title: title,
             message: message,
             actions: actions,
-            icon: iconString,
+            icon: icon?.sfSymbol,
             iconSize: iconSize,
             iconColor: iconColor,
             oneTimeCode: null,
@@ -160,7 +144,7 @@ class AdaptiveAlertDialog {
     required String title,
     String? message,
     required List<AlertAction> actions,
-    dynamic icon,
+    AdaptiveIcon? icon,
     double? iconSize,
     Color? iconColor,
     String? oneTimeCode,
@@ -173,8 +157,7 @@ class AdaptiveAlertDialog {
       builder: (context) {
         // Build custom content if icon, OTP, or textfield is present
         Widget? contentWidget;
-        final hasMaterialIcon =
-            icon != null && icon is IconData && iconSize != null;
+        final hasMaterialIcon = icon != null && iconSize != null;
         final hasOtpCode = oneTimeCode != null;
         final hasInput = input != null;
         final hasContentBelowMessage = hasOtpCode || hasInput;
@@ -186,7 +169,10 @@ class AdaptiveAlertDialog {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (hasMaterialIcon) ...[
-                Icon(icon, size: iconSize, color: iconColor ?? Colors.blue),
+                icon.build(
+                  size: iconSize,
+                  color: iconColor ?? Theme.of(context).colorScheme.primary,
+                ),
                 const SizedBox(height: 12),
               ],
               if (message != null) ...[

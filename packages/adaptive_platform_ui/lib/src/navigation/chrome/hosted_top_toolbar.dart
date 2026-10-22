@@ -2,7 +2,7 @@ import 'package:flutter/cupertino.dart';
 
 import '../app_bar/adaptive_navigation_scroll_controller.dart';
 import '../app_bar/adaptive_app_bar_action.dart';
-import '../app_bar/ios26_native_toolbar.dart';
+import '../app_bar/native_toolbar.dart';
 import 'toolbar_blend.dart';
 import 'toolbar_registry.dart';
 
@@ -236,7 +236,7 @@ class _HostedTopToolbarState extends State<HostedTopToolbar> {
           ignoring: !interactive,
           child: Align(
             alignment: Alignment.topCenter,
-            child: IOS26NativeToolbar(
+            child: NativeToolbar(
               // A native navigation controller must never be retargeted to a
               // different scroll view while UIKit is collapsing it.
               key: ValueKey(content.scrollController),
@@ -258,7 +258,6 @@ class _HostedTopToolbarState extends State<HostedTopToolbar> {
               navigationBarShadow: content.navigationBarShadow,
               hidesNavigationButtonBackground:
                   content.hidesNavigationButtonBackground,
-              showsGradient: false,
               onActionTap: (index) {
                 if (index >= 0 && index < content.actions.length) {
                   content.actions[index].onPressed();

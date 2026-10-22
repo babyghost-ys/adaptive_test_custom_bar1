@@ -13,7 +13,7 @@ import 'package:flutter/services.dart';
 /// @override
 /// void initState() {
 ///   super.initState();
-///   IOS26NativeSearchTabBar.enable(
+///   NativeSearchTabBar.enable(
 ///     tabs: [
 ///       NativeTabConfig(title: 'Home', sfSymbol: 'house.fill'),
 ///       NativeTabConfig(title: 'Search', sfSymbol: 'magnifyingglass', isSearchTab: true),
@@ -28,7 +28,7 @@ import 'package:flutter/services.dart';
 ///   );
 /// }
 /// ```
-class IOS26NativeSearchTabBar {
+class NativeSearchTabBar {
   static const MethodChannel _channel = MethodChannel(
     'adaptive_platform_ui/native_tab_bar',
   );

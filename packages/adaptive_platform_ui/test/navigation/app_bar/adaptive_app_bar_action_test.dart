@@ -242,7 +242,10 @@ void main() {
       }) => AdaptiveAppBarAction(
         iosSymbol: 'ellipsis',
         menuItems: [
-          AdaptivePopupMenuItem(label: hideLabel, icon: 'eye.slash'),
+          AdaptivePopupMenuItem(
+            label: hideLabel,
+            icon: AdaptiveIcon(sfSymbol: 'eye.slash'),
+          ),
           const AdaptivePopupMenuDivider(),
           const AdaptivePopupMenuItem(label: 'Delete', isDestructive: true),
           const AdaptivePopupMenuItem(label: 'Later', enabled: false),

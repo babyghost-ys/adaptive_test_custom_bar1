@@ -7,8 +7,8 @@ import 'package:flutter/services.dart';
 import '../../native/sheet_platform_view_guard.dart';
 
 /// Native iOS 26 segmented control implementation using platform views
-class IOS26SegmentedControl extends StatefulWidget {
-  const IOS26SegmentedControl({
+class NativeSegmentedControl extends StatefulWidget {
+  const NativeSegmentedControl({
     super.key,
     required this.labels,
     required this.selectedIndex,
@@ -61,10 +61,10 @@ class IOS26SegmentedControl extends StatefulWidget {
   final Color? selectedTextColor;
 
   @override
-  State<IOS26SegmentedControl> createState() => _IOS26SegmentedControlState();
+  State<NativeSegmentedControl> createState() => _NativeSegmentedControlState();
 }
 
-class _IOS26SegmentedControlState extends State<IOS26SegmentedControl> {
+class _NativeSegmentedControlState extends State<NativeSegmentedControl> {
   static int _nextId = 0;
   late final int _id;
   late final MethodChannel _channel;
@@ -141,7 +141,7 @@ class _IOS26SegmentedControlState extends State<IOS26SegmentedControl> {
   }
 
   @override
-  void didUpdateWidget(IOS26SegmentedControl oldWidget) {
+  void didUpdateWidget(NativeSegmentedControl oldWidget) {
     super.didUpdateWidget(oldWidget);
 
     if (widget.selectedIndex != oldWidget.selectedIndex) {

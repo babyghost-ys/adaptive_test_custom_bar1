@@ -138,7 +138,7 @@ extension _CupertinoScaffold on AdaptiveScaffoldState {
     required bool native,
   }) {
     if (native) {
-      return IOS26NativeTabBar(
+      return NativeTabBar(
         destinations: bar.items!,
         selectedIndex: bar.selectedIndex!,
         onTap: bar.onTap!,
@@ -160,13 +160,11 @@ extension _CupertinoScaffold on AdaptiveScaffoldState {
               _buildNavigationIconWidget(
                 rawIcon: destination.icon,
                 color: bar.unselectedItemColor,
-                platform: TargetPlatform.iOS,
               ),
             ),
             activeIcon: destination.wrapIfBadged(
               _buildNavigationIconWidget(
                 rawIcon: destination.selectedIcon ?? destination.icon,
-                platform: TargetPlatform.iOS,
               ),
             ),
             label: destination.label,

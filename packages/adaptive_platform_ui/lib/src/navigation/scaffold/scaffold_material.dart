@@ -113,22 +113,17 @@ extension _MaterialScaffold on AdaptiveScaffoldState {
         for (final destination in bar.items!)
           NavigationDestination(
             icon: destination.wrapIfBadged(
-              _buildNavigationIconWidget(
-                rawIcon: destination.icon,
-                platform: TargetPlatform.android,
-              ),
+              _buildNavigationIconWidget(rawIcon: destination.icon),
             ),
             selectedIcon: destination.wrapIfBadged(
               indicatorForeground == null
                   ? _buildNavigationIconWidget(
                       rawIcon: destination.selectedIcon ?? destination.icon,
-                      platform: TargetPlatform.android,
                     )
                   : IconTheme.merge(
                       data: IconThemeData(color: indicatorForeground),
                       child: _buildNavigationIconWidget(
                         rawIcon: destination.selectedIcon ?? destination.icon,
-                        platform: TargetPlatform.android,
                       ),
                     ),
             ),

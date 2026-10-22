@@ -1,6 +1,22 @@
 # Changelog
 
-## [Unreleased]
+## [2.0.0]
+
+Breaking release. See [MIGRATION.md](MIGRATION.md) for the before and after of each change.
+
+* **BREAKING**: `AdaptiveIcon(sfSymbol:, icon:, image:, widget:)` replaces `dynamic` icons in `AdaptiveNavigationDestination`, `AdaptivePopupMenuButton.icon`, `AdaptivePopupMenuItem`, `AdaptiveContextMenuAction`, `AdaptiveAlertDialog` and `AdaptiveSegmentedControl` (`sfSymbols` is now `icons`). A string SF Symbol no longer becomes a grey circle on Android.
+* **BREAKING**: the `IOS26*` renderers are no longer exported; they are internal `Native*` widgets now. Use the `Adaptive*` widgets.
+* **BREAKING**: removed parameters that had no effect: `AdaptiveScaffold.enableBlur` and `enableToolbarGradient`, `AdaptiveButton.useNative`, `cupertinoDecoration` on the text fields, `AdaptiveNavigationScrollController.compactUnderlapTop`, `AdaptiveLargeTitleSpacer` and `IOS26ScaffoldLegacy`.
+* **BREAKING**: `AdaptiveScaffold.extendBody` and `extendBodyBehindAppBar` are nullable. Null places the body between the bars, or under the glass bars of iOS 26+ when the body is itself a scroll view; Android behaves as before.
+* **NEW**: `AdaptiveThemeData` and `AdaptiveBarStyle` on `AdaptiveApp(theme:, darkTheme:)` set colours and bar style once; the Material and Cupertino themes are derived from them.
+* **NEW**: `AdaptiveStyle` (`native` or `material`), `AdaptiveStyleScope` and `AdaptiveApp(style:)` choose the family of controls; `AdaptiveCapabilities` replaces iOS version checks.
+* **NEW**: `AdaptiveDrawer` and a public `AdaptiveScaffoldState` with `openDrawer()` and `closeDrawer()`: a native panel on iOS, a Material drawer elsewhere.
+* **IMPROVEMENT**: the scaffold measures each page's native bar, so large titles work with a plain `ListView` and no scroll controller, and pages no longer need `SafeArea` or manual inset padding.
+* **IMPROVEMENT**: a tab root's app bar without a title shows the selected tab's label; iOS page bodies have a Material ancestor; Material, Cupertino and widgets localisations are included by default; iOS buttons default to the theme accent.
+* **IMPROVEMENT**: on web and desktop, the segmented control, tab view and popup menu use Material instead of Cupertino fallbacks.
+* **REMOVED**: the Flutter-drawn iPhone Duo bar, glass capsule and fallback toolbar; UIKit draws every iOS bar, including the Duo vertical bar. A custom Flutter `leading` widget is not shown in the Duo vertical bar.
+
+## [Unreleased before 2.0.0]
 * **IMPROVEMENT**: Removed the `foldable` dependency. Camera/status occlusions now come from the package-owned iOS layout bridge; toolbar placement still uses safe areas and UIKit traits. The testing-only `debugFold` override is now `debugRegions`, accepting package-owned reserved regions.
 * **NEW**: `AdaptiveNativeFonts.setFamily` sets one font family for the native iOS components and restyles them live, including navigation and tab bars (new `adaptive_platform_ui/native_fonts` channel)
 * **FIX**: package scaffolds, list tiles, form sections and expansion tiles replaced the inherited `DefaultTextStyle`, dropping an app-wide font family; they now merge their size and colour into it

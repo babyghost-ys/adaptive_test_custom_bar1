@@ -13,19 +13,19 @@ import '../tab_bar/adaptive_bottom_navigation_bar.dart';
 import '../../controls/button/adaptive_button.dart';
 import '../navigator/adaptive_navigator.dart';
 import 'adaptive_scaffold.dart';
-import '../tab_bar/ios26_native_tab_bar.dart';
+import '../tab_bar/native_tab_bar.dart';
 import 'body_placement.dart';
 import 'native_bottom_bar_layout.dart';
-import '../app_bar/ios26_native_toolbar.dart';
+import '../app_bar/native_toolbar.dart';
 
 /// Height of the iOS 26 Liquid Glass toolbar's content area (excluding the
-/// status bar), matching [IOS26NativeToolbar]'s default height. The toolbar is
+/// status bar), matching [NativeToolbar]'s default height. The toolbar is
 /// an overlay, so this amount is added to the body's top padding.
 const double kToolbarContentHeight = 44.0;
 
 /// Native iOS 26 scaffold with UITabBar
-class IOS26Scaffold extends StatefulWidget {
-  const IOS26Scaffold({
+class NativeScaffold extends StatefulWidget {
+  const NativeScaffold({
     super.key,
     this.bottomNavigationBar,
     this.title,
@@ -39,7 +39,6 @@ class IOS26Scaffold extends StatefulWidget {
     this.hidesNavigationButtonBackground = false,
     this.titleWidget,
     this.minimizeBehavior = TabBarMinimizeBehavior.automatic,
-    this.enableBlur = true,
     this.useHeroBackButton = true,
     this.useFixedToolbar = true,
     this.tabBarHidden = false,
@@ -69,7 +68,6 @@ class IOS26Scaffold extends StatefulWidget {
   /// When set, the native title is hidden and this widget is centered instead.
   final Widget? titleWidget;
   final TabBarMinimizeBehavior minimizeBehavior;
-  final bool enableBlur;
   final bool useHeroBackButton;
 
   /// Whether the fixed toolbar host, when there is one, draws this page's
@@ -91,10 +89,10 @@ class IOS26Scaffold extends StatefulWidget {
   final SystemVerticalBarEdge? debugVerticalBarEdge;
 
   @override
-  State<IOS26Scaffold> createState() => _IOS26ScaffoldState();
+  State<NativeScaffold> createState() => _NativeScaffoldState();
 }
 
-class _IOS26ScaffoldState extends State<IOS26Scaffold> {
+class _NativeScaffoldState extends State<NativeScaffold> {
   /// The system's vertical bar edge, for a page that draws its own bar and so
   /// has no host to ask. Null off iOS 26, where no channel answers.
   ValueListenable<SystemVerticalBarEdge>? _edge;
@@ -112,7 +110,7 @@ class _IOS26ScaffoldState extends State<IOS26Scaffold> {
   }
 
   @override
-  void didUpdateWidget(IOS26Scaffold oldWidget) {
+  void didUpdateWidget(NativeScaffold oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.scrollController != widget.scrollController) {
       oldWidget.scrollController?.contentTopInset.removeListener(
@@ -328,7 +326,7 @@ class _IOS26ScaffoldState extends State<IOS26Scaffold> {
               widget.bottomNavigationBar!.items!.isNotEmpty &&
               widget.bottomNavigationBar!.selectedIndex != null &&
               widget.bottomNavigationBar!.onTap != null
-          ? IOS26NativeTabBar(
+          ? NativeTabBar(
               destinations: widget.bottomNavigationBar!.items!,
               selectedIndex: widget.bottomNavigationBar!.selectedIndex!,
               onTap: widget.bottomNavigationBar!.onTap!,
@@ -384,7 +382,7 @@ class _IOS26ScaffoldState extends State<IOS26Scaffold> {
             right: 0,
             top: 0,
             height: duoVerticalPose ? mq.size.height : null,
-            child: IOS26NativeToolbar(
+            child: NativeToolbar(
               title: widget.title,
               largeTitle: widget.largeTitle,
               scrollController: widget.scrollController,

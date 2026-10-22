@@ -59,9 +59,9 @@ class AlertAction {
 }
 
 /// Native iOS 26 alert dialog implementation using platform views
-class IOS26AlertDialog extends StatefulWidget {
+class NativeAlertDialog extends StatefulWidget {
   /// Creates an iOS 26 alert dialog
-  const IOS26AlertDialog({
+  const NativeAlertDialog({
     super.key,
     required this.title,
     this.message,
@@ -98,10 +98,10 @@ class IOS26AlertDialog extends StatefulWidget {
   final AdaptiveAlertDialogInput? input;
 
   @override
-  State<IOS26AlertDialog> createState() => _IOS26AlertDialogState();
+  State<NativeAlertDialog> createState() => _NativeAlertDialogState();
 }
 
-class _IOS26AlertDialogState extends State<IOS26AlertDialog> {
+class _NativeAlertDialogState extends State<NativeAlertDialog> {
   MethodChannel? _channel;
   bool? _lastIsDark;
   int? _lastTint;
