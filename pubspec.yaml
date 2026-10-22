@@ -11,7 +11,12 @@ dependencies:
   adaptive_platform_ui:
     path: packages/adaptive_platform_ui
   go_router: ^18.1.1
+  bloc: ^9.2.1
+  equatable: ^3.0.0
 dev_dependencies:
+  bloc_test: ^10.0.0
   flutter_lints: ^6.0.0
+  flutter_test:
+    sdk: flutter
 flutter:
   uses-material-design: true
