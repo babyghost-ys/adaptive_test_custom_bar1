@@ -35,6 +35,7 @@ class NativeScaffold extends StatefulWidget {
     this.tintColor,
     this.navigationBarColor,
     this.navigationBarShadow = false,
+    this.titleStyle,
     this.hidesNavigationButtonBackground = false,
     this.titleWidget,
     this.useHeroBackButton = true,
@@ -58,6 +59,7 @@ class NativeScaffold extends StatefulWidget {
   /// Opaque native navigation background, including its scroll-edge appearance.
   final Color? navigationBarColor;
   final bool navigationBarShadow;
+  final TextStyle? titleStyle;
 
   /// Removes the shared glass background from native navigation buttons.
   final bool hidesNavigationButtonBackground;
@@ -392,6 +394,7 @@ class _NativeScaffoldState extends State<NativeScaffold> {
               tintColor: widget.tintColor,
               navigationBarColor: widget.navigationBarColor,
               navigationBarShadow: widget.navigationBarShadow,
+              titleStyle: widget.titleStyle,
               hidesNavigationButtonBackground:
                   widget.hidesNavigationButtonBackground,
               titleWidget: widget.titleWidget,

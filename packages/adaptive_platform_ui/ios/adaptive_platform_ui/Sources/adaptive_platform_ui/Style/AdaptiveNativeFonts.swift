@@ -70,6 +70,13 @@ enum AdaptiveNativeFonts {
         copy.titleTextAttributes.removeValue(forKey: .font)
         copy.largeTitleTextAttributes.removeValue(forKey: .font)
         copy.titleTextAttributes.merge(titleAttributes(size: 17, weight: .semibold)) { $1 }
+        // A title font the app set on its bar wins over the family.
+        if let custom = copy.titleTextAttributes[NativeBarAppearance.titleFontKey] {
+            copy.titleTextAttributes[.font] = custom
+        }
+        if let custom = copy.largeTitleTextAttributes[NativeBarAppearance.titleFontKey] {
+            copy.largeTitleTextAttributes[.font] = custom
+        }
         copy.largeTitleTextAttributes.merge(titleAttributes(size: 34, weight: .bold)) { $1 }
         let button = UIBarButtonItemAppearance(style: .plain)
         button.normal.titleTextAttributes = titleAttributes(size: 17, weight: .regular)

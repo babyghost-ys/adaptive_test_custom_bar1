@@ -23,6 +23,7 @@ class TopToolbarContent {
     this.tint,
     this.navigationBarColor,
     this.navigationBarShadow = false,
+    this.titleStyle,
     this.hidesNavigationButtonBackground = false,
     this.navigator,
   });
@@ -50,6 +51,7 @@ class TopToolbarContent {
       tint: appBar.tintColor,
       navigationBarColor: appBar.navigationBarColor,
       navigationBarShadow: appBar.navigationBarShadow ?? false,
+      titleStyle: appBar.titleStyle,
       hidesNavigationButtonBackground:
           appBar.hidesNavigationButtonBackground ?? false,
       navigator: entry.navigator,
@@ -69,6 +71,7 @@ class TopToolbarContent {
   final Color? tint;
   final Color? navigationBarColor;
   final bool navigationBarShadow;
+  final TextStyle? titleStyle;
   final bool hidesNavigationButtonBackground;
   final NavigatorState? navigator;
 
@@ -256,6 +259,7 @@ class _HostedTopToolbarState extends State<HostedTopToolbar> {
               tintColor: content.tint,
               navigationBarColor: content.navigationBarColor,
               navigationBarShadow: content.navigationBarShadow,
+              titleStyle: content.titleStyle,
               hidesNavigationButtonBackground:
                   content.hidesNavigationButtonBackground,
               onActionTap: (index) {

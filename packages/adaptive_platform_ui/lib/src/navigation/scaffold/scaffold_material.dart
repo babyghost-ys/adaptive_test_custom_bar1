@@ -79,6 +79,7 @@ extension _MaterialScaffold on AdaptiveScaffoldState {
     return AppBar(
       backgroundColor: appBar.navigationBarColor,
       foregroundColor: appBar.tintColor,
+      titleTextStyle: appBar.titleStyle,
       title: _buildAppBarTitle(
         crossAxisAlignment: CrossAxisAlignment.start,
         subtitleFontSize: 13,

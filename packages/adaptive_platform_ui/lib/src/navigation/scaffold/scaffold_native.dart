@@ -81,6 +81,7 @@ extension _NativeScaffold on AdaptiveScaffoldState {
         tintColor: appBar?.tintColor,
         navigationBarColor: appBar?.navigationBarColor,
         navigationBarShadow: appBar?.navigationBarShadow ?? false,
+        titleStyle: appBar?.titleStyle,
         hidesNavigationButtonBackground:
             appBar?.hidesNavigationButtonBackground ?? false,
         titleWidget: titleOverlay,

@@ -21,6 +21,7 @@ class AdaptiveAppBar {
     this.navigationBarColor,
     this.navigationBarShadow,
     this.hidesNavigationButtonBackground,
+    this.titleStyle,
     this.titleWidget,
     this.cupertinoNavigationBar,
     this.appBar,
@@ -28,6 +29,13 @@ class AdaptiveAppBar {
 
   /// Title for the app bar
   final String? title;
+
+  /// Font family, size and weight of [title]. On the native iOS path it is
+  /// applied to the navigation bar's title attributes, so UIKit still draws
+  /// the title; on Android it is the AppBar's `titleTextStyle`. The family
+  /// must be installed on the device or bundled with the app. Colour comes
+  /// from the bar's foreground, not from this style.
+  final TextStyle? titleStyle;
 
   /// Native scrolling large title on iOS 15+, including iOS 18.
   /// The page's scroll view collapses it; no controller or spacer is needed.
@@ -108,6 +116,7 @@ class AdaptiveAppBar {
     Color? navigationBarColor,
     bool? navigationBarShadow,
     bool? hidesNavigationButtonBackground,
+    TextStyle? titleStyle,
     Widget? titleWidget,
     PreferredSizeWidget? cupertinoNavigationBar,
     PreferredSizeWidget? appBar,
@@ -124,6 +133,7 @@ class AdaptiveAppBar {
       hidesNavigationButtonBackground:
           hidesNavigationButtonBackground ??
           this.hidesNavigationButtonBackground,
+      titleStyle: titleStyle ?? this.titleStyle,
       titleWidget: titleWidget ?? this.titleWidget,
       cupertinoNavigationBar:
           cupertinoNavigationBar ?? this.cupertinoNavigationBar,

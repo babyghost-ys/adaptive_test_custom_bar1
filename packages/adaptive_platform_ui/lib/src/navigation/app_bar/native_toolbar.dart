@@ -29,6 +29,7 @@ class NativeToolbar extends StatefulWidget {
     this.tintColor,
     this.navigationBarColor,
     this.navigationBarShadow = false,
+    this.titleStyle,
     this.hidesNavigationButtonBackground = false,
     this.height = 44.0,
     this.showNativeView = true,
@@ -62,6 +63,10 @@ class NativeToolbar extends StatefulWidget {
 
   /// Subtle native shadow below a [navigationBarColor] bar.
   final bool navigationBarShadow;
+
+  /// Font of the native title. Applied to the bar's appearance, so the system
+  /// still draws and collapses the title.
+  final TextStyle? titleStyle;
 
   /// Removes the shared glass background from native navigation buttons.
   final bool hidesNavigationButtonBackground;
@@ -161,7 +166,7 @@ class _NativeToolbarState extends State<NativeToolbar> {
     _syncPropsToNativeIfNeeded();
     // Render the title now, not after the page's first frame, so a heavy
     // page does not hold it back.
-    if (!_titleStarted && widget.titleWidget != null && _titleText == null) {
+    if (!_titleStarted && widget.titleWidget != null) {
       _titleStarted = true;
       _renderTitleImage();
     }
@@ -182,12 +187,6 @@ class _NativeToolbarState extends State<NativeToolbar> {
     }
     _syncPropsToNativeIfNeeded();
 
-    final text = _titleText;
-    if (text != null && !mapEquals(text, _sentTitleText)) {
-      _sentTitleText = text;
-      _channel?.invokeMethod<void>('setTitleText', text);
-    }
-
     if (widget.title != oldWidget.title) {
       final ch = _channel;
       // Skip when a titleWidget overlay is shown — the native title stays hidden
@@ -197,23 +196,18 @@ class _NativeToolbarState extends State<NativeToolbar> {
     }
   }
 
-  /// A plain [Text] title is drawn by UIKit itself from its text and style,
-  /// available the moment the bar is created. Any other widget is rendered to
-  /// an image instead (see [_renderTitleImage]).
-  Map<String, Object?>? get _titleText {
-    final title = widget.titleWidget;
-    if (title is! Text || title.data == null) return null;
-    final style = title.style;
+  Map<String, Object?>? _lastTitleStyle;
+
+  Map<String, Object?>? get _titleStyleMap {
+    final style = widget.titleStyle;
+    if (style == null) return null;
     return {
-      'text': title.data,
-      'fontFamily': style?.fontFamily,
-      'fontSize': style?.fontSize,
-      'fontWeight': style?.fontWeight?.value,
-      'color': style?.color?.toARGB32(),
+      'fontFamily': style.fontFamily,
+      'fontSize': style.fontSize,
+      'fontWeight': style.fontWeight?.value,
     };
   }
 
-  Map<String, Object?>? _sentTitleText;
   Uint8List? _titleBytes;
   (Uint8List, double)? _renderedTitle;
   bool _titleImageScheduled = false;
@@ -235,7 +229,7 @@ class _NativeToolbarState extends State<NativeToolbar> {
     {
       if (!mounted) return;
       final title = widget.titleWidget;
-      if (title == null || _titleText != null) {
+      if (title == null) {
         _renderedTitle = null;
         if (_titleBytes == null) return;
         _titleBytes = null;
@@ -410,20 +404,29 @@ class _NativeToolbarState extends State<NativeToolbar> {
 
     final barColor = widget.navigationBarColor?.toARGB32();
     final barShadow = widget.navigationBarShadow;
+    final titleStyle = _titleStyleMap;
     if (force ||
         _lastNavigationBarColor != barColor ||
-        _lastNavigationBarShadow != barShadow) {
+        _lastNavigationBarShadow != barShadow ||
+        !mapEquals(_lastTitleStyle, titleStyle)) {
       final previous = _lastNavigationBarColor;
       final previousShadow = _lastNavigationBarShadow;
+      final previousTitleStyle = _lastTitleStyle;
       _lastNavigationBarColor = barColor;
       _lastNavigationBarShadow = barShadow;
+      _lastTitleStyle = titleStyle;
       send(
         'navigationBarColor',
         'setNavigationBarColor',
-        {'navigationBarColor': barColor, 'navigationBarShadow': barShadow},
+        {
+          'navigationBarColor': barColor,
+          'navigationBarShadow': barShadow,
+          'titleStyle': titleStyle,
+        },
         () {
           _lastNavigationBarColor = previous;
           _lastNavigationBarShadow = previousShadow;
+          _lastTitleStyle = previousTitleStyle;
         },
       );
     }
@@ -491,7 +494,7 @@ class _NativeToolbarState extends State<NativeToolbar> {
     }
 
     final safePadding = MediaQuery.of(context).padding.top;
-    if ((widget.titleWidget != null && _titleText == null) ||
+    if ((widget.titleWidget != null) ||
         _titleBytes != null) {
       _scheduleTitleImage();
     }
@@ -500,7 +503,6 @@ class _NativeToolbarState extends State<NativeToolbar> {
       // Hide native title when a titleWidget overlay is provided
       if (widget.title != null && widget.titleWidget == null)
         'title': widget.title!,
-      if (_titleText case final text?) 'titleText': text,
       if (widget.leading == null && widget.leadingText != null)
         'leading': widget.leadingText!,
       if (widget.actions != null && widget.actions!.isNotEmpty)
@@ -515,6 +517,7 @@ class _NativeToolbarState extends State<NativeToolbar> {
       if (widget.tintColor != null) 'tint': _colorToARGB(widget.tintColor!),
       'navigationBarColor': widget.navigationBarColor?.toARGB32(),
       'navigationBarShadow': widget.navigationBarShadow,
+      'titleStyle': _titleStyleMap,
       'hidesNavigationButtonBackground': widget.hidesNavigationButtonBackground,
     };
 
@@ -581,7 +584,7 @@ class _NativeToolbarState extends State<NativeToolbar> {
       _syncNavigationPage();
     }
     _titleBytes = null;
-    if (widget.titleWidget != null && _titleText == null) {
+    if (widget.titleWidget != null) {
       _renderedTitle == null ? _scheduleTitleImage() : _sendTitleImage();
     }
     _syncScroll();
