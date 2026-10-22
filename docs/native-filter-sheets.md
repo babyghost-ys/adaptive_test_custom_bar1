@@ -1,122 +1,69 @@
-# Native filter sheets
+# Building the native filter sheet
 
-How the filter sheets in this app are built: a real UIKit sheet on iOS, a Material
-bottom sheet everywhere else, both drawn from one declarative description of the
-controls. Every code listing below is the actual source, included in full.
+Instructions for an AI agent that must add a filter sheet to a Flutter app, the way
+this repository does. Follow the steps in order. Every code listing is complete and
+can be copied as is.
 
-## Contents
+## What you are building
 
-1. [What it does](#what-it-does)
-2. [Why it is built this way](#why-it-is-built-this-way)
-3. [Architecture](#architecture)
-4. [The platform channel contract](#the-platform-channel-contract)
-5. [Package code](#package-code)
-6. [App code, end to end](#app-code-end-to-end)
-7. [Every control layout](#every-control-layout)
-8. [Problems found while testing, and the fixes](#problems-found-while-testing-and-the-fixes)
-9. [How it was tested](#how-it-was-tested)
-10. [Adding a filter sheet to a new page](#adding-a-filter-sheet-to-a-new-page)
+A filter button sits in a page's content. Tapping it opens a sheet of filter controls:
 
-## What it does
+* **iOS:** a real UIKit sheet (`UISheetPresentationController`) presented from the root
+  view controller. It floats above the whole window, so it covers the navigation bar
+  and tab bar, and it dims everything behind it. Swift draws every control.
+* **Android and other platforms:** a Material bottom sheet, drawn by Flutter from the
+  same control description, resting at the same heights and covering the bottom bar.
 
-Four pages have a filter button beside a section title. Tapping it opens a sheet:
+Behaviour the sheet must have:
 
-| Page | Sheet | Heights | Layouts used |
-|---|---|---|---|
-| Markets | movement, sort, price, type, change, symbols | half, draggable to full | blocks, chips, slider, swatches |
-| Activity | type, symbols, period, amount | half, draggable to full | stack, swatches, strip, slider |
-| Watchlist | movement | short | blocks |
-| Portfolio holdings | sort, movement, type, size, change, symbols | full only | strip, stack, blocks, sliders, swatches |
+* Half height that drags up to full height, a full-height-only mode, and a short mode.
+* Every edit reports back to Dart. Dart returns how many results the current choices
+  give, and the apply button shows that number live.
+* A reset icon that restores the cleared values.
+* Applying returns the chosen values. Dismissing without applying returns `null`, so
+  the page keeps its previous filter.
 
-On iOS the sheet is a `UISheetPresentationController`. It floats above the whole window,
-so it covers the navigation bar and tab bar, and it dims everything behind it. On
-Android and other platforms the same controls draw in a Material bottom sheet that
-rests at the same heights and covers the bottom bar.
-
-Every change reports back to Dart, which returns how many results the current choices
-give. The apply button shows that number live. The reset icon restores the cleared
-values. Dismissing without applying returns `null`, so the page keeps its old filter.
-
-## Why it is built this way
-
-* A Flutter route can only draw inside the Flutter view. This app's navigation bar
-  and tab bar are native UIKit views above it, so a Flutter sheet stops below them.
-  A `UISheetPresentationController` presented from the root view controller sits above
-  everything.
-* Native UIKit needs native views. Hosting a second Flutter view inside a native sheet
-  would mean a second engine and state passing, so the sheet is described to native
-  code as data instead (a list of controls) and UIKit draws it.
-* The page owns what the filter means. The sheet owns drawing, the draft, the live
-  count and the apply button. The page hands over controls and gets values back.
-* The Material fallback reads the same control list, so Android needs no second
-  description of the sheet.
-
-## Architecture
+## How the pieces fit
 
 ```
 page (Markets, Activity, ...)
-  |  builds controls + current values + cleared values + count()
+  |  supplies: controls, current values, cleared values, count()
   v
 AdaptiveFilterSheet.show(...)                 packages/adaptive_platform_ui
-  |-- native style (iOS) --> MethodChannel "adaptive_platform_ui/filter_sheet"
-  |                              show(spec)  --> NativeFilterSheet.swift
-  |                              <-- changed(values) -- count --> Dart count()
-  |                              <-- chosen values or null
-  '-- material style -----> showMaterialFilterSheet(...)  (all in Dart)
+  |-- iOS ----> MethodChannel "adaptive_platform_ui/filter_sheet"
+  |                 show(spec)         --> NativeFilterSheet.swift draws UIKit controls
+  |                 <-- changed(values) -- Dart count() --> int shown on apply button
+  |                 <-- chosen values map, or null
+  '-- other ---> showMaterialFilterSheet(...)    (Flutter, same control list)
 ```
 
-Values are plain data: a `List<String>` of chosen option ids for a choices control, a
-`double` for a slider. The page converts its own filter model to and from this map.
+The page never passes widgets to the sheet. It passes a list of control descriptions
+(data). The Swift code and the Material fallback each turn that list into controls.
+Values are plain data: a `List<String>` of chosen option ids for a choices control and
+a `double` for a slider.
 
-## The platform channel contract
+## Build steps
 
-Channel name: `adaptive_platform_ui/filter_sheet`.
+Do these in order.
 
-**Dart to native, `show`.** Arguments:
+1. Add the Dart API, the Material fallback and the Swift sheet to the package.
+2. Register the channel in the plugin and export the Dart API.
+3. Add shared value helpers to the app.
+4. For each page, write a pure data filter model.
+5. For each page, write a `show...FilterSheet` function describing its controls.
+6. Wire the filter button and the result into the page.
+7. Build and verify on an iOS simulator and an Android emulator.
 
-| Key | Type | Meaning |
-|---|---|---|
-| `title` | String | Heading |
-| `tint` | int (ARGB) | Accent colour of the apply button and selections |
-| `detents` | String | `halfAndFull`, `full` or `short` |
-| `controls` | List of Map | See below |
-| `values` | Map | Current value per control id |
-| `cleared` | Map | Value per control id that reset restores |
-| `count` | int | Initial result count |
+## Step 1: package code
 
-A choices control: `{type: 'choices', id, symbol, layout, multiple, columns, options: [{id, title, symbol, tint}]}`.
-A slider control: `{type: 'slider', id, symbol, min, max, prefix, suffix, decimals, anyLabel, anyAtMin}`.
+Create these three files exactly as listed.
 
-The result is the chosen values map, or `null` when dismissed.
+### 1a. Dart API and channel client
 
-**Native to Dart, `changed`.** Sent on every edit with the current values map. Dart
-answers with the result count as an `int`.
-
-## Package code
-
-### Register the channel in the plugin
-
-Add this to `register(with:)` in `AdaptivePlatformUiPlugin.swift`:
-
-```swift
-        let filterSheetChannel = FlutterMethodChannel(
-            name: "adaptive_platform_ui/filter_sheet", binaryMessenger: registrar.messenger())
-        let filterSheets = NativeFilterSheet(
-            channel: filterSheetChannel, hostProvider: { registrar.viewController })
-        filterSheetChannel.setMethodCallHandler { call, result in
-            filterSheets.handle(call, result: result)
-        }
-```
-
-### Export it
-
-In `packages/adaptive_platform_ui/lib/adaptive_platform_ui.dart`:
-
-```dart
-export 'src/overlays/filter_sheet/adaptive_filter_sheet.dart';
-```
-
-### Dart API and channel client
+Create `packages/adaptive_platform_ui/lib/src/overlays/filter_sheet/adaptive_filter_sheet.dart`. It defines the
+control types (`AdaptiveFilterChoices`, `AdaptiveFilterSlider`), the layouts
+(`AdaptiveFilterLayout`), the detents (`AdaptiveFilterDetents`) and `AdaptiveFilterSheet.show`,
+which uses the platform channel on iOS and the Material sheet elsewhere.
 
 ```dart
 // packages/adaptive_platform_ui/lib/src/overlays/filter_sheet/adaptive_filter_sheet.dart
@@ -337,7 +284,510 @@ class AdaptiveFilterSheet {
 }
 ```
 
-### Native sheet (Swift, UIKit)
+### 1b. Material fallback
+
+Create `packages/adaptive_platform_ui/lib/src/overlays/filter_sheet/material_filter_sheet.dart`.
+
+```dart
+// packages/adaptive_platform_ui/lib/src/overlays/filter_sheet/material_filter_sheet.dart
+import 'package:flutter/material.dart';
+
+import 'adaptive_filter_sheet.dart';
+
+/// The Material counterpart of the native filter sheet: a modal bottom sheet
+/// that rests at the detents the native one would, drawn from the same
+/// control specifications.
+Future<Map<String, Object>?> showMaterialFilterSheet({
+  required BuildContext context,
+  required String title,
+  required Color? tint,
+  required AdaptiveFilterDetents detents,
+  required List<AdaptiveFilterControl> controls,
+  required Map<String, Object> values,
+  required Map<String, Object> cleared,
+  required int Function(Map<String, Object>) count,
+}) => showModalBottomSheet<Map<String, Object>>(
+  context: context,
+  isScrollControlled: true,
+  useRootNavigator: true,
+  useSafeArea: true,
+  backgroundColor: Colors.transparent,
+  builder: (_) => _MaterialFilterSheet(
+    title: title,
+    tint: tint ?? Theme.of(context).colorScheme.primary,
+    detents: detents,
+    controls: controls,
+    initial: values,
+    cleared: cleared,
+    count: count,
+  ),
+);
+
+class _MaterialFilterSheet extends StatefulWidget {
+  const _MaterialFilterSheet({
+    required this.title,
+    required this.tint,
+    required this.detents,
+    required this.controls,
+    required this.initial,
+    required this.cleared,
+    required this.count,
+  });
+  final String title;
+  final Color tint;
+  final AdaptiveFilterDetents detents;
+  final List<AdaptiveFilterControl> controls;
+  final Map<String, Object> initial, cleared;
+  final int Function(Map<String, Object>) count;
+
+  @override
+  State<_MaterialFilterSheet> createState() => _MaterialFilterSheetState();
+}
+
+class _MaterialFilterSheetState extends State<_MaterialFilterSheet> {
+  late Map<String, Object> values = {...widget.initial};
+  final _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  bool get _isCleared {
+    for (final e in widget.cleared.entries) {
+      final v = values[e.key];
+      final c = e.value;
+      if (v is List && c is List) {
+        if (v.length != c.length || !v.every(c.contains)) return false;
+      } else if (v != c) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  void _set(String id, Object value) =>
+      setState(() => values = {...values, id: value});
+
+  List<String> _chosen(String id) => (values[id] as List<String>?) ?? const [];
+
+  void _choose(AdaptiveFilterChoices control, String option) {
+    final chosen = _chosen(control.id);
+    if (control.multiple) {
+      _set(control.id, [
+        if (chosen.contains(option))
+          ...chosen.where((e) => e != option)
+        else ...[
+          ...chosen,
+          option,
+        ],
+      ]);
+    } else {
+      _set(control.id, [option]);
+    }
+  }
+
+  (double initial, double min, List<double> snaps) get _sizes =>
+      switch (widget.detents) {
+        AdaptiveFilterDetents.halfAndFull => (0.5, 0.5, const [0.5, 0.95]),
+        AdaptiveFilterDetents.full => (0.95, 0.95, const [0.95]),
+        AdaptiveFilterDetents.short => (0.34, 0.34, const [0.34]),
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final (initial, min, snaps) = _sizes;
+    // A draggable sheet with one resting height treats every upward drag as
+    // a resize that cannot happen, so its list would never scroll. Single
+    // detents are a plain fixed-height sheet instead.
+    if (snaps.length == 1) {
+      return Align(
+        alignment: Alignment.bottomCenter,
+        child: FractionallySizedBox(
+          heightFactor: snaps.single,
+          child: _surface(context, _scroll),
+        ),
+      );
+    }
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: initial,
+      minChildSize: min,
+      maxChildSize: snaps.last,
+      snap: true,
+      snapSizes: snaps,
+      builder: _surface,
+    );
+  }
+
+  Widget _surface(BuildContext context, ScrollController scroll) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.surfaceContainerLow,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          Expanded(
+            child: ListView(
+              controller: scroll,
+              padding: EdgeInsets.zero,
+              children: [
+                Center(
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(vertical: 12),
+                    width: 32,
+                    height: 4,
+                    decoration: ShapeDecoration(
+                      color: scheme.onSurfaceVariant.withValues(alpha: 0.4),
+                      shape: const StadiumBorder(),
+                    ),
+                  ),
+                ),
+                _header(context),
+                for (final (i, c) in widget.controls.indexed)
+                  _band(context, c, shaded: i.isOdd),
+              ],
+            ),
+          ),
+          _footer(context),
+        ],
+      ),
+    );
+  }
+
+  Widget _header(BuildContext context) => Stack(
+    alignment: Alignment.centerRight,
+    children: [
+      Align(
+        alignment: Alignment.centerLeft,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 4, 72, 12),
+          child: Text(
+            widget.title,
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.only(right: 12),
+        child: IconButton(
+          tooltip: 'Reset filters',
+          onPressed: _isCleared
+              ? null
+              : () => setState(() => values = {...widget.cleared}),
+          icon: const Icon(Icons.restart_alt_rounded),
+        ),
+      ),
+    ],
+  );
+
+  Widget _footer(BuildContext context) => Padding(
+    padding: EdgeInsets.fromLTRB(
+      24,
+      8,
+      24,
+      MediaQuery.paddingOf(context).bottom + 12,
+    ),
+    child: SizedBox(
+      width: double.infinity,
+      child: FilledButton.icon(
+        style: FilledButton.styleFrom(
+          backgroundColor: widget.tint,
+          padding: const EdgeInsets.symmetric(vertical: 14),
+        ),
+        onPressed: () => Navigator.pop(context, values),
+        icon: const Icon(Icons.check_rounded),
+        label: Text(
+          '${widget.count(values)}',
+          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+        ),
+      ),
+    ),
+  );
+
+  Widget _band(
+    BuildContext context,
+    AdaptiveFilterControl control, {
+    required bool shaded,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    final edgeToEdge =
+        control is AdaptiveFilterChoices &&
+        control.layout == AdaptiveFilterLayout.stack;
+    final body = switch (control) {
+      final AdaptiveFilterChoices c => _choices(context, c),
+      final AdaptiveFilterSlider s => _slider(context, s),
+    };
+    return ColoredBox(
+      color: shaded ? scheme.surfaceContainer : Colors.transparent,
+      child: SizedBox(
+        width: double.infinity,
+        child: edgeToEdge
+            ? body
+            : Padding(
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (control.icon != null) ...[
+                      control.icon!.build(color: scheme.onSurfaceVariant),
+                      const SizedBox(height: 12),
+                    ],
+                    body,
+                  ],
+                ),
+              ),
+      ),
+    );
+  }
+
+  Widget _slider(BuildContext context, AdaptiveFilterSlider s) {
+    final value = (values[s.id] as double?) ?? s.min;
+    final atAny = s.anyAtMin ? value <= s.min : value >= s.max;
+    final text = atAny && s.anyLabel != null
+        ? s.anyLabel!
+        : '${s.prefix}${_format(value, s.decimals)}${s.suffix}';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          text,
+          style: Theme.of(
+            context,
+          ).textTheme.displaySmall?.copyWith(fontWeight: FontWeight.w600),
+        ),
+        Slider(
+          value: value.clamp(s.min, s.max),
+          min: s.min,
+          max: s.max,
+          activeColor: widget.tint,
+          onChanged: (v) => _set(s.id, v),
+        ),
+      ],
+    );
+  }
+
+  String _format(double v, int decimals) {
+    final fixed = v.toStringAsFixed(decimals);
+    final parts = fixed.split('.');
+    final whole = parts.first.replaceAllMapped(
+      RegExp(r'(\d)(?=(\d{3})+$)'),
+      (m) => '${m[1]},',
+    );
+    return parts.length > 1 ? '$whole.${parts[1]}' : whole;
+  }
+
+  Widget _choices(BuildContext context, AdaptiveFilterChoices c) {
+    final scheme = Theme.of(context).colorScheme;
+    bool on(AdaptiveFilterOption o) => _chosen(c.id).contains(o.id);
+    Color tintOf(AdaptiveFilterOption o) => o.tint ?? widget.tint;
+
+    switch (c.layout) {
+      case AdaptiveFilterLayout.segmented:
+        return SegmentedButton<String>(
+          showSelectedIcon: false,
+          segments: [
+            for (final o in c.options)
+              ButtonSegment(value: o.id, label: Text(o.title)),
+          ],
+          selected: {if (_chosen(c.id).isNotEmpty) _chosen(c.id).first},
+          onSelectionChanged: (s) => _choose(c, s.first),
+        );
+      case AdaptiveFilterLayout.blocks:
+        return LayoutBuilder(
+          builder: (context, box) {
+            final cell = (box.maxWidth - 2 * (c.columns - 1)) / c.columns;
+            return GridView.count(
+              crossAxisCount: c.columns,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: EdgeInsets.zero,
+              mainAxisSpacing: 2,
+              crossAxisSpacing: 2,
+              childAspectRatio: (cell / 84).clamp(1.0, 1.8),
+              children: [
+                for (final o in c.options)
+                  Material(
+                    color: on(o) ? tintOf(o) : scheme.surfaceContainerHighest,
+                    child: InkWell(
+                      onTap: () => _choose(c, o.id),
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (o.icon != null)
+                              o.icon!.build(
+                                color: on(o) ? Colors.white : tintOf(o),
+                                size: 28,
+                              ),
+                            const SizedBox(height: 8),
+                            Text(
+                              o.title,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: on(o) ? Colors.white : scheme.onSurface,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            );
+          },
+        );
+      case AdaptiveFilterLayout.stack:
+        return Column(
+          spacing: 2,
+          children: [
+            for (final o in c.options)
+              Material(
+                color: on(o)
+                    ? tintOf(o).withValues(alpha: 0.14)
+                    : scheme.surfaceContainerHighest,
+                child: InkWell(
+                  onTap: () => _choose(c, o.id),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: Stack(
+                      alignment: Alignment.centerRight,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 22,
+                          ),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text.rich(
+                              TextSpan(
+                                children: [
+                                  if (o.icon != null)
+                                    WidgetSpan(
+                                      alignment: PlaceholderAlignment.middle,
+                                      child: Padding(
+                                        padding: const EdgeInsets.only(
+                                          right: 14,
+                                        ),
+                                        child: o.icon!.build(color: tintOf(o)),
+                                      ),
+                                    ),
+                                  TextSpan(text: o.title),
+                                ],
+                              ),
+                              style: TextStyle(
+                                fontSize: 17,
+                                color: scheme.onSurface,
+                                fontWeight: on(o)
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
+                              ),
+                            ),
+                          ),
+                        ),
+                        if (on(o))
+                          Padding(
+                            padding: const EdgeInsets.only(right: 20),
+                            child: Icon(Icons.check_rounded, color: tintOf(o)),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      case AdaptiveFilterLayout.chips:
+      case AdaptiveFilterLayout.strip:
+        final chips = [
+          for (final o in c.options)
+            FilterChip(
+              avatar: o.icon?.build(
+                color: on(o) ? tintOf(o) : scheme.onSurfaceVariant,
+                size: 18,
+              ),
+              label: Text(o.title),
+              selected: on(o),
+              showCheckmark: false,
+              selectedColor: tintOf(o).withValues(alpha: 0.16),
+              side: BorderSide(
+                color: on(o) ? tintOf(o) : scheme.outlineVariant,
+              ),
+              shape: const StadiumBorder(),
+              onSelected: (_) => _choose(c, o.id),
+            ),
+        ];
+        return c.layout == AdaptiveFilterLayout.strip
+            ? SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                clipBehavior: Clip.none,
+                child: Wrap(spacing: 8, children: chips),
+              )
+            : Wrap(spacing: 8, runSpacing: 8, children: chips);
+      case AdaptiveFilterLayout.swatches:
+        return Wrap(
+          spacing: 14,
+          runSpacing: 14,
+          children: [
+            for (final o in c.options)
+              InkResponse(
+                onTap: () => _choose(c, o.id),
+                child: Stack(
+                  alignment: Alignment.bottomRight,
+                  children: [
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 160),
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          width: 2.5,
+                          color: on(o) ? widget.tint : Colors.transparent,
+                        ),
+                      ),
+                      child: CircleAvatar(
+                        radius: 30,
+                        backgroundColor: tintOf(o),
+                        child: Text(
+                          o.title,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (on(o))
+                      CircleAvatar(
+                        radius: 10,
+                        backgroundColor: widget.tint,
+                        child: const Icon(
+                          Icons.check_rounded,
+                          size: 14,
+                          color: Colors.white,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+          ],
+        );
+    }
+  }
+}
+```
+
+### 1c. Native sheet in Swift
+
+Create `packages/adaptive_platform_ui/ios/adaptive_platform_ui/Sources/adaptive_platform_ui/Overlays/NativeFilterSheet.swift`. It parses the control list, builds the
+sheet with `UISheetPresentationController`, draws each layout with UIKit, and calls back
+to Dart on every change.
 
 ```swift
 // packages/adaptive_platform_ui/ios/adaptive_platform_ui/Sources/adaptive_platform_ui/Overlays/NativeFilterSheet.swift
@@ -985,509 +1435,57 @@ final class FilterFlowView: UIView {
 }
 ```
 
-### Material fallback
+## Step 2: register and export
 
-```dart
-// packages/adaptive_platform_ui/lib/src/overlays/filter_sheet/material_filter_sheet.dart
-import 'package:flutter/material.dart';
+In `register(with:)` of `packages/adaptive_platform_ui/ios/adaptive_platform_ui/Sources/adaptive_platform_ui/Plugin/AdaptivePlatformUiPlugin.swift`, add:
 
-import 'adaptive_filter_sheet.dart';
-
-/// The Material counterpart of the native filter sheet: a modal bottom sheet
-/// that rests at the detents the native one would, drawn from the same
-/// control specifications.
-Future<Map<String, Object>?> showMaterialFilterSheet({
-  required BuildContext context,
-  required String title,
-  required Color? tint,
-  required AdaptiveFilterDetents detents,
-  required List<AdaptiveFilterControl> controls,
-  required Map<String, Object> values,
-  required Map<String, Object> cleared,
-  required int Function(Map<String, Object>) count,
-}) => showModalBottomSheet<Map<String, Object>>(
-  context: context,
-  isScrollControlled: true,
-  useRootNavigator: true,
-  useSafeArea: true,
-  backgroundColor: Colors.transparent,
-  builder: (_) => _MaterialFilterSheet(
-    title: title,
-    tint: tint ?? Theme.of(context).colorScheme.primary,
-    detents: detents,
-    controls: controls,
-    initial: values,
-    cleared: cleared,
-    count: count,
-  ),
-);
-
-class _MaterialFilterSheet extends StatefulWidget {
-  const _MaterialFilterSheet({
-    required this.title,
-    required this.tint,
-    required this.detents,
-    required this.controls,
-    required this.initial,
-    required this.cleared,
-    required this.count,
-  });
-  final String title;
-  final Color tint;
-  final AdaptiveFilterDetents detents;
-  final List<AdaptiveFilterControl> controls;
-  final Map<String, Object> initial, cleared;
-  final int Function(Map<String, Object>) count;
-
-  @override
-  State<_MaterialFilterSheet> createState() => _MaterialFilterSheetState();
-}
-
-class _MaterialFilterSheetState extends State<_MaterialFilterSheet> {
-  late Map<String, Object> values = {...widget.initial};
-  final _scroll = ScrollController();
-
-  @override
-  void dispose() {
-    _scroll.dispose();
-    super.dispose();
-  }
-
-  bool get _isCleared {
-    for (final e in widget.cleared.entries) {
-      final v = values[e.key];
-      final c = e.value;
-      if (v is List && c is List) {
-        if (v.length != c.length || !v.every(c.contains)) return false;
-      } else if (v != c) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  void _set(String id, Object value) =>
-      setState(() => values = {...values, id: value});
-
-  List<String> _chosen(String id) => (values[id] as List<String>?) ?? const [];
-
-  void _choose(AdaptiveFilterChoices control, String option) {
-    final chosen = _chosen(control.id);
-    if (control.multiple) {
-      _set(control.id, [
-        if (chosen.contains(option))
-          ...chosen.where((e) => e != option)
-        else ...[
-          ...chosen,
-          option,
-        ],
-      ]);
-    } else {
-      _set(control.id, [option]);
-    }
-  }
-
-  (double initial, double min, List<double> snaps) get _sizes =>
-      switch (widget.detents) {
-        AdaptiveFilterDetents.halfAndFull => (0.5, 0.5, const [0.5, 0.95]),
-        AdaptiveFilterDetents.full => (0.95, 0.95, const [0.95]),
-        AdaptiveFilterDetents.short => (0.34, 0.34, const [0.34]),
-      };
-
-  @override
-  Widget build(BuildContext context) {
-    final (initial, min, snaps) = _sizes;
-    // A draggable sheet with one resting height treats every upward drag as
-    // a resize that cannot happen, so its list would never scroll. Single
-    // detents are a plain fixed-height sheet instead.
-    if (snaps.length == 1) {
-      return Align(
-        alignment: Alignment.bottomCenter,
-        child: FractionallySizedBox(
-          heightFactor: snaps.single,
-          child: _surface(context, _scroll),
-        ),
-      );
-    }
-    return DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: initial,
-      minChildSize: min,
-      maxChildSize: snaps.last,
-      snap: true,
-      snapSizes: snaps,
-      builder: _surface,
-    );
-  }
-
-  Widget _surface(BuildContext context, ScrollController scroll) {
-    final scheme = Theme.of(context).colorScheme;
-    return Material(
-      color: scheme.surfaceContainerLow,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: [
-          Expanded(
-            child: ListView(
-              controller: scroll,
-              padding: EdgeInsets.zero,
-              children: [
-                Center(
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(vertical: 12),
-                    width: 32,
-                    height: 4,
-                    decoration: ShapeDecoration(
-                      color: scheme.onSurfaceVariant.withValues(alpha: 0.4),
-                      shape: const StadiumBorder(),
-                    ),
-                  ),
-                ),
-                _header(context),
-                for (final (i, c) in widget.controls.indexed)
-                  _band(context, c, shaded: i.isOdd),
-              ],
-            ),
-          ),
-          _footer(context),
-        ],
-      ),
-    );
-  }
-
-  Widget _header(BuildContext context) => Stack(
-    alignment: Alignment.centerRight,
-    children: [
-      Align(
-        alignment: Alignment.centerLeft,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 4, 72, 12),
-          child: Text(
-            widget.title,
-            style: Theme.of(context).textTheme.headlineSmall,
-          ),
-        ),
-      ),
-      Padding(
-        padding: const EdgeInsets.only(right: 12),
-        child: IconButton(
-          tooltip: 'Reset filters',
-          onPressed: _isCleared
-              ? null
-              : () => setState(() => values = {...widget.cleared}),
-          icon: const Icon(Icons.restart_alt_rounded),
-        ),
-      ),
-    ],
-  );
-
-  Widget _footer(BuildContext context) => Padding(
-    padding: EdgeInsets.fromLTRB(
-      24,
-      8,
-      24,
-      MediaQuery.paddingOf(context).bottom + 12,
-    ),
-    child: SizedBox(
-      width: double.infinity,
-      child: FilledButton.icon(
-        style: FilledButton.styleFrom(
-          backgroundColor: widget.tint,
-          padding: const EdgeInsets.symmetric(vertical: 14),
-        ),
-        onPressed: () => Navigator.pop(context, values),
-        icon: const Icon(Icons.check_rounded),
-        label: Text(
-          '${widget.count(values)}',
-          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
-        ),
-      ),
-    ),
-  );
-
-  Widget _band(
-    BuildContext context,
-    AdaptiveFilterControl control, {
-    required bool shaded,
-  }) {
-    final scheme = Theme.of(context).colorScheme;
-    final edgeToEdge =
-        control is AdaptiveFilterChoices &&
-        control.layout == AdaptiveFilterLayout.stack;
-    final body = switch (control) {
-      final AdaptiveFilterChoices c => _choices(context, c),
-      final AdaptiveFilterSlider s => _slider(context, s),
-    };
-    return ColoredBox(
-      color: shaded ? scheme.surfaceContainer : Colors.transparent,
-      child: SizedBox(
-        width: double.infinity,
-        child: edgeToEdge
-            ? body
-            : Padding(
-                padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (control.icon != null) ...[
-                      control.icon!.build(color: scheme.onSurfaceVariant),
-                      const SizedBox(height: 12),
-                    ],
-                    body,
-                  ],
-                ),
-              ),
-      ),
-    );
-  }
-
-  Widget _slider(BuildContext context, AdaptiveFilterSlider s) {
-    final value = (values[s.id] as double?) ?? s.min;
-    final atAny = s.anyAtMin ? value <= s.min : value >= s.max;
-    final text = atAny && s.anyLabel != null
-        ? s.anyLabel!
-        : '${s.prefix}${_format(value, s.decimals)}${s.suffix}';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          text,
-          style: Theme.of(
-            context,
-          ).textTheme.displaySmall?.copyWith(fontWeight: FontWeight.w600),
-        ),
-        Slider(
-          value: value.clamp(s.min, s.max),
-          min: s.min,
-          max: s.max,
-          activeColor: widget.tint,
-          onChanged: (v) => _set(s.id, v),
-        ),
-      ],
-    );
-  }
-
-  String _format(double v, int decimals) {
-    final fixed = v.toStringAsFixed(decimals);
-    final parts = fixed.split('.');
-    final whole = parts.first.replaceAllMapped(
-      RegExp(r'(\d)(?=(\d{3})+$)'),
-      (m) => '${m[1]},',
-    );
-    return parts.length > 1 ? '$whole.${parts[1]}' : whole;
-  }
-
-  Widget _choices(BuildContext context, AdaptiveFilterChoices c) {
-    final scheme = Theme.of(context).colorScheme;
-    bool on(AdaptiveFilterOption o) => _chosen(c.id).contains(o.id);
-    Color tintOf(AdaptiveFilterOption o) => o.tint ?? widget.tint;
-
-    switch (c.layout) {
-      case AdaptiveFilterLayout.segmented:
-        return SegmentedButton<String>(
-          showSelectedIcon: false,
-          segments: [
-            for (final o in c.options)
-              ButtonSegment(value: o.id, label: Text(o.title)),
-          ],
-          selected: {if (_chosen(c.id).isNotEmpty) _chosen(c.id).first},
-          onSelectionChanged: (s) => _choose(c, s.first),
-        );
-      case AdaptiveFilterLayout.blocks:
-        return LayoutBuilder(
-          builder: (context, box) {
-            final cell = (box.maxWidth - 2 * (c.columns - 1)) / c.columns;
-            return GridView.count(
-              crossAxisCount: c.columns,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              padding: EdgeInsets.zero,
-              mainAxisSpacing: 2,
-              crossAxisSpacing: 2,
-              childAspectRatio: (cell / 84).clamp(1.0, 1.8),
-              children: [
-                for (final o in c.options)
-                  Material(
-                    color: on(o) ? tintOf(o) : scheme.surfaceContainerHighest,
-                    child: InkWell(
-                      onTap: () => _choose(c, o.id),
-                      child: Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (o.icon != null)
-                              o.icon!.build(
-                                color: on(o) ? Colors.white : tintOf(o),
-                                size: 28,
-                              ),
-                            const SizedBox(height: 8),
-                            Text(
-                              o.title,
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                color: on(o) ? Colors.white : scheme.onSurface,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            );
-          },
-        );
-      case AdaptiveFilterLayout.stack:
-        return Column(
-          spacing: 2,
-          children: [
-            for (final o in c.options)
-              Material(
-                color: on(o)
-                    ? tintOf(o).withValues(alpha: 0.14)
-                    : scheme.surfaceContainerHighest,
-                child: InkWell(
-                  onTap: () => _choose(c, o.id),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: Stack(
-                      alignment: Alignment.centerRight,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 22,
-                          ),
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text.rich(
-                              TextSpan(
-                                children: [
-                                  if (o.icon != null)
-                                    WidgetSpan(
-                                      alignment: PlaceholderAlignment.middle,
-                                      child: Padding(
-                                        padding: const EdgeInsets.only(
-                                          right: 14,
-                                        ),
-                                        child: o.icon!.build(color: tintOf(o)),
-                                      ),
-                                    ),
-                                  TextSpan(text: o.title),
-                                ],
-                              ),
-                              style: TextStyle(
-                                fontSize: 17,
-                                color: scheme.onSurface,
-                                fontWeight: on(o)
-                                    ? FontWeight.w600
-                                    : FontWeight.w400,
-                              ),
-                            ),
-                          ),
-                        ),
-                        if (on(o))
-                          Padding(
-                            padding: const EdgeInsets.only(right: 20),
-                            child: Icon(Icons.check_rounded, color: tintOf(o)),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        );
-      case AdaptiveFilterLayout.chips:
-      case AdaptiveFilterLayout.strip:
-        final chips = [
-          for (final o in c.options)
-            FilterChip(
-              avatar: o.icon?.build(
-                color: on(o) ? tintOf(o) : scheme.onSurfaceVariant,
-                size: 18,
-              ),
-              label: Text(o.title),
-              selected: on(o),
-              showCheckmark: false,
-              selectedColor: tintOf(o).withValues(alpha: 0.16),
-              side: BorderSide(
-                color: on(o) ? tintOf(o) : scheme.outlineVariant,
-              ),
-              shape: const StadiumBorder(),
-              onSelected: (_) => _choose(c, o.id),
-            ),
-        ];
-        return c.layout == AdaptiveFilterLayout.strip
-            ? SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                clipBehavior: Clip.none,
-                child: Wrap(spacing: 8, children: chips),
-              )
-            : Wrap(spacing: 8, runSpacing: 8, children: chips);
-      case AdaptiveFilterLayout.swatches:
-        return Wrap(
-          spacing: 14,
-          runSpacing: 14,
-          children: [
-            for (final o in c.options)
-              InkResponse(
-                onTap: () => _choose(c, o.id),
-                child: Stack(
-                  alignment: Alignment.bottomRight,
-                  children: [
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 160),
-                      padding: const EdgeInsets.all(3),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          width: 2.5,
-                          color: on(o) ? widget.tint : Colors.transparent,
-                        ),
-                      ),
-                      child: CircleAvatar(
-                        radius: 30,
-                        backgroundColor: tintOf(o),
-                        child: Text(
-                          o.title,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ),
-                    if (on(o))
-                      CircleAvatar(
-                        radius: 10,
-                        backgroundColor: widget.tint,
-                        child: const Icon(
-                          Icons.check_rounded,
-                          size: 14,
-                          color: Colors.white,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-          ],
-        );
-    }
-  }
-}
+```swift
+        let filterSheetChannel = FlutterMethodChannel(
+            name: "adaptive_platform_ui/filter_sheet", binaryMessenger: registrar.messenger())
+        let filterSheets = NativeFilterSheet(
+            channel: filterSheetChannel, hostProvider: { registrar.viewController })
+        filterSheetChannel.setMethodCallHandler { call, result in
+            filterSheets.handle(call, result: result)
+        }
 ```
 
-## App code, end to end
+In `packages/adaptive_platform_ui/lib/adaptive_platform_ui.dart`, add:
 
-The Markets page shows every layer: the filter model, the sheet description, and the
-page wiring.
+```dart
+export 'src/overlays/filter_sheet/adaptive_filter_sheet.dart';
+```
 
-### Helpers shared by the sheets
+The package needs `AdaptiveIcon` (an SF Symbol name plus a Material `IconData`) and
+`AdaptiveStyle` (native on iOS, material elsewhere) from the same package.
+
+## The channel contract
+
+Channel name: `adaptive_platform_ui/filter_sheet`.
+
+**Dart to native, `show`.** Arguments:
+
+| Key | Type | Meaning |
+|---|---|---|
+| `title` | String | Heading |
+| `tint` | int (ARGB) | Accent colour of the apply button and selections |
+| `detents` | String | `halfAndFull`, `full` or `short` |
+| `controls` | List of Map | Control descriptions, below |
+| `values` | Map | Current value per control id |
+| `cleared` | Map | Value per control id that reset restores |
+| `count` | int | Initial result count |
+
+A choices control: `{type: 'choices', id, symbol, layout, multiple, columns, options: [{id, title, symbol, tint}]}`.
+A slider control: `{type: 'slider', id, symbol, min, max, prefix, suffix, decimals, anyLabel, anyAtMin}`.
+
+The result is the chosen values map, or `null` when dismissed.
+
+**Native to Dart, `changed`.** Sent on every edit with the current values map. Dart
+answers with the result count as an `int`.
+
+## Step 3: shared value helpers
+
+Create `lib/core/filtering/filter_values.dart`. It reads chosen ids and enums out of the
+values map and builds asset swatches.
 
 ```dart
 // lib/core/filtering/filter_values.dart
@@ -1533,7 +1531,13 @@ List<AdaptiveFilterOption> assetSwatches(List<Asset> assets) => [
 ];
 ```
 
-### The filter model (pure data)
+## Step 4: a filter model per page
+
+A filter model is pure data: no widgets, no channel. It extends `Equatable` (reset
+detection compares models), exposes `activeCount`, `copyWith`, and a method that
+applies the filter to the page's items.
+
+Markets:
 
 ```dart
 // lib/features/markets/models/market_filter.dart
@@ -1631,7 +1635,13 @@ class MarketFilter extends Equatable {
 }
 ```
 
-### The sheet description
+## Step 5: describe the sheet
+
+Write one `show<Name>FilterSheet(BuildContext, <Name>Filter)` function per page. It
+maps the model to the values map and back, lists the controls (each with an
+`AdaptiveIcon` carrying an SF Symbol and a Material icon), and passes the live count.
+
+Markets:
 
 ```dart
 // lib/features/markets/view/market_filter_sheet.dart
@@ -1804,7 +1814,10 @@ Future<MarketFilter?> showMarketFilterSheet(
 }
 ```
 
-### The page
+## Step 6: wire the page
+
+Keep the filter in the page state. Call the show function from `openFilters`. Rebuild
+with the result when it is not `null`. Put the filter button in the section header.
 
 ```dart
 // lib/features/markets/view/markets_page.dart
@@ -1871,7 +1884,7 @@ class _MarketsState extends State<Markets> {
 }
 ```
 
-### The filter button and section header
+The filter button, with an active-count badge, and the section header that places it:
 
 ```dart
 // lib/core/widgets/filter_button.dart
@@ -1954,11 +1967,24 @@ class FilterSectionHeader extends StatelessWidget {
 }
 ```
 
-## Every control layout
+## Choosing a layout for each control
 
-The other three pages show the remaining layouts and detents.
+| Layout | Use it for | Notes |
+|---|---|---|
+| `segmented` | Two or three exclusive choices | Native segmented control; single choice only |
+| `blocks` | A grid of icon tiles | Set `columns`; unselected tiles are darker than the band so they read on any background |
+| `stack` | Tall full-width bands | Chosen band is tinted and ticked; no band icon |
+| `chips` | Wrapping pills | Multiple lines allowed |
+| `strip` | One scrolling line of pills | Horizontal scroll |
+| `swatches` | Coloured discs with a label | Each option needs a `tint`; chosen disc gets a ring and tick |
+| `AdaptiveFilterSlider` | A numeric limit | Large live readout; `anyLabel` shows instead of a number at the unrestricted end |
 
-### Activity: stack, swatches, strip and a slider
+Detents: `halfAndFull` for most sheets, `full` for a very long sheet, `short` for one
+control.
+
+Worked examples of the other layouts and detents follow. Copy them as patterns.
+
+### Stack, swatches, strip and a slider (Activity)
 
 ```dart
 // lib/features/activity/models/activity_filter.dart
@@ -2162,7 +2188,7 @@ Future<ActivityFilter?> showActivityFilterSheet(
 }
 ```
 
-### Watchlist: a short sheet
+### A short sheet with one control (Watchlist)
 
 ```dart
 // lib/features/watchlist/models/watchlist_filter.dart
@@ -2261,7 +2287,7 @@ Future<WatchlistFilter?> showWatchlistFilterSheet(
 }
 ```
 
-### Portfolio holdings: a full-height sheet
+### A full-height sheet with six controls (Portfolio holdings)
 
 ```dart
 // lib/features/portfolio/models/holdings_filter.dart
@@ -2534,20 +2560,55 @@ Future<HoldingsFilter?> showHoldingsFilterSheet(
 }
 ```
 
-## Problems found while testing, and the fixes
+## Rules the implementation must follow
 
-| Symptom | Cause | Fix |
-|---|---|---|
-| Sheet did not open on the iPhone Duo; the button showed a touch ripple and nothing happened | The Duo screen is short, so a half and an expanded height both clamped to the same cap and tripped an assertion that required the expanded height to be larger | Relaxed the assertion to allow equal heights |
-| Asset discs rendered as squashed pills | The flow layout set button frames while fixed-size constraints fought them | `SwatchButton` reports a fixed `intrinsicContentSize`, and `FilterFlowView` measures children by intrinsic size |
-| Unselected colour blocks vanished on a white band | Blocks and band were both white | Unselected tile colour is darker than both band tones |
-| Block grid overflowed by 6 px on a 320 px screen | Fixed aspect ratio gave too little height for icon and label | Aspect ratio comes from cell width, clamped so the height never drops below the content |
-| Android sheet stopped above the bottom bar | It opened in the nested navigator of the shell | `showModalBottomSheet(useRootNavigator: true)` |
-| Android full-height sheet would not scroll | A `DraggableScrollableSheet` with equal min and max sizes treats an upward drag as a resize that cannot happen, so the list never scrolls | Single-detent sheets use a fixed-height `FractionallySizedBox` instead |
-| `Set.remove` used as a boolean in Swift failed to compile | It returns the removed element | Check `contains` first |
-| Taps on the Duo simulator missed their target | The simulator had rotated to portrait | Re-read the screenshot orientation before computing tap points |
+These are constraints that the code above already satisfies. Keep them if you change it.
 
-## How it was tested
+**Swift (UIKit)**
+
+* Present from the topmost presented view controller so the sheet stacks over anything
+  already shown, and refuse a second sheet while one is open.
+* Resolve the host view controller at presentation time, not during plugin registration.
+* Use `UIButton.Configuration` with a `configurationUpdateHandler` that reads
+  `isSelected`, and set the selection state yourself for single-choice groups.
+* `Set.remove(_:)` returns the removed element, not a Bool. Use `contains` first.
+* A fixed-size control inside the flow layout must report its size through
+  `intrinsicContentSize`. The flow layout measures children by intrinsic size and sets
+  their frames. Do not add width or height constraints to them.
+* Build the short detent with `UISheetPresentationController.Detent.custom` guarded by
+  `#available(iOS 16.0, *)`, and fall back to `.medium()`.
+* Rebuild every section only on reset. A slider drag must only update its readout, or the
+  drag breaks.
+* Compare normalised values (sorted lists, doubles) when deciding whether reset is
+  enabled.
+
+**Dart**
+
+* Set the channel handler only while a sheet is open and clear it in a `finally`.
+* A choices control's value is always a `List<String>`; a slider's is a `double`. Decode
+  channel results back into those types before returning them.
+* Open the Material sheet with `useRootNavigator: true` so it covers the bottom bar.
+* A `DraggableScrollableSheet` whose minimum and maximum sizes are equal never scrolls its
+  list, because it reads an upward drag as a resize. Use a fixed-height
+  `FractionallySizedBox` for single-detent sheets and reserve the draggable sheet for
+  `halfAndFull`.
+* Allow equal heights in any assertion that compares detents. A short screen can make two
+  heights collapse to the same value.
+* Derive block-grid cell height from the cell width, clamped to a minimum that fits the
+  icon and label, so narrow screens do not overflow.
+* Give every control an `AdaptiveIcon` so both platforms have an icon.
+* Never use a plain `Row` for the controls. Use a `Stack` with an `Align` for a title with a
+  trailing button, a `Wrap` for chips, and a `GridView` for blocks.
+
+**Design**
+
+* Separate sections with full-bleed colour bands that alternate, never with bordered
+  cards.
+* Respect the system colour scheme. Do not force light or dark.
+* Keep text minimal: icons name each control, and the only labels are option titles,
+  slider readouts and the apply count.
+
+## Step 7: verify
 
 Static checks:
 
@@ -2555,9 +2616,10 @@ Static checks:
 flutter analyze lib packages/adaptive_platform_ui/lib
 ```
 
-Widget tests with a real font (the default test font is wide enough to cause false
-overflows) at five sizes, plus 1.8x text scale. The sheet is opened, options are tapped,
-the count and the applied list are asserted. Load Roboto from the Flutter SDK:
+Widget tests with a real font, because the default test font is wide enough to cause
+false overflows. Load Roboto from the Flutter SDK, then open each sheet at several
+screen sizes and at 1.8x text scale, tap options, and assert the count and the applied
+list:
 
 ```dart
 Future<void> loadFonts() async {
@@ -2572,12 +2634,16 @@ Future<void> loadFonts() async {
 }
 ```
 
-Real devices:
+Run on real runtimes. Check each of these on every sheet: it opens, the controls render
+without clipping, choosing an option changes the apply count, applying filters the list
+and shows the badge on the filter button, reset restores the cleared values, a half
+height sheet drags to full, and a long sheet scrolls under the pinned apply button.
 
-* iPhone simulators (iPhone Duo on iOS 27.1, iPhone 17 Pro on iOS 26.2 and 27.0) built
-  and launched with XcodeBuildMCP, driven with the simulator control tool and checked
-  with `snapshot_ui`, which lists buttons and the live count text.
-* Android emulators (API 35 and API 37):
+* iOS: build and run on simulators with XcodeBuildMCP. Use `snapshot_ui` to read the
+  button labels and the live count text, and the simulator control tool for screenshots.
+  Re-read the screenshot orientation before computing tap coordinates, because a rotated
+  simulator misplaces taps.
+* Android:
 
 ```sh
 export PATH=$PATH:$HOME/Library/Android/sdk/platform-tools:$HOME/Library/Android/sdk/emulator
@@ -2588,21 +2654,17 @@ adb -s emulator-5554 shell input swipe 540 1500 540 300 400
 adb -s emulator-5554 exec-out screencap -p > shot.png
 ```
 
-Android screenshot coordinates are in physical pixels (1080 by 2400 on both emulators).
+Android screenshot coordinates are physical pixels (1080 by 2400 on the test emulators).
+Test an older and a newer API level, an iPhone on two iOS releases, and the iPhone Duo.
 
-## Adding a filter sheet to a new page
+## Adding a sheet to another page: checklist
 
-1. Write a pure data filter model with `activeCount`, `copyWith`, and an `apply` (or
-   equivalent) that returns the filtered items. Extend `Equatable` so reset detection
-   works.
-2. Write `show<Name>FilterSheet(BuildContext, <Name>Filter)` that maps the model to and
-   from the values map, describes the controls with an `AdaptiveIcon` (SF Symbol plus
-   Material icon) on each, and passes `count: (v) => _filter(v).apply(items).length`.
-3. In the page state, keep the filter, call the show function from `openFilters`, and
-   rebuild with the result when it is not `null`.
-4. Put `FilterSectionHeader(title: ..., onPressed: openFilters, activeCount: filter.activeCount)`
-   where the filter button should appear.
-
-Pick the layout per control: `segmented` for two or three exclusive choices, `blocks`
-for a grid of icon tiles, `stack` for tall bands, `chips` or `strip` for pills,
-`swatches` for coloured discs, and `AdaptiveFilterSlider` for a numeric limit.
+1. Write the pure data filter model with `activeCount`, `copyWith` and an apply method.
+2. Write `show<Name>FilterSheet` mapping the model to and from the values map, with
+   `count: (v) => _filter(v).apply(items).length`.
+3. Add the filter to the page state, call the show function from `openFilters`, and
+   rebuild with the result.
+4. Place `FilterSectionHeader(title: ..., onPressed: openFilters, activeCount: filter.activeCount)`
+   in the page.
+5. Pick a layout and detent for each control from the table above.
+6. Run the verification steps.
