@@ -5,6 +5,7 @@ import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 
 import 'package:native_widgets_on_duo/app/theme/palette.dart';
 import 'package:native_widgets_on_duo/app/theme/typography.dart';
+import 'package:native_widgets_on_duo/features/home/view/meridian_drawer.dart';
 import 'package:native_widgets_on_duo/features/investment/bloc/investment_bloc.dart';
 
 class InvestmentHome extends StatefulWidget {
@@ -45,75 +46,9 @@ class _InvestmentHomeState extends State<InvestmentHome> {
         ],
       ),
       onDrawerChanged: (open) => setState(() => menuOpen = open),
-      drawer: AdaptiveDrawer(
-        title: 'MERIDIAN',
-        subtitle: 'Demo investing',
-        backgroundColor: const Color(0xFFEEEDE7),
-        selectedId: 'account:${state.account}',
-        sections: const [
-          [
-            AdaptiveDrawerItem(
-              icon: AdaptiveIcon(
-                sfSymbol: 'square.grid.2x2.fill',
-                icon: Icons.grid_view_rounded,
-              ),
-              id: 'account:0',
-              title: 'All accounts',
-            ),
-            AdaptiveDrawerItem(
-              icon: AdaptiveIcon(
-                sfSymbol: 'person',
-                icon: Icons.person_outline,
-              ),
-              id: 'account:1',
-              title: 'Personal',
-            ),
-            AdaptiveDrawerItem(
-              icon: AdaptiveIcon(sfSymbol: 'leaf', icon: Icons.spa_outlined),
-              id: 'account:2',
-              title: 'Retirement',
-            ),
-            AdaptiveDrawerItem(
-              icon: AdaptiveIcon(
-                sfSymbol: 'shield',
-                icon: Icons.shield_outlined,
-              ),
-              id: 'account:3',
-              title: 'Tax-free',
-            ),
-          ],
-          [
-            AdaptiveDrawerItem(
-              icon: AdaptiveIcon(
-                sfSymbol: 'slider.horizontal.3',
-                icon: Icons.tune,
-              ),
-              id: 'preferences',
-              title: 'Preferences',
-            ),
-            AdaptiveDrawerItem(
-              icon: AdaptiveIcon(
-                sfSymbol: 'doc.text',
-                icon: Icons.description_outlined,
-              ),
-              id: 'statements',
-              title: 'Statements',
-            ),
-            AdaptiveDrawerItem(
-              icon: AdaptiveIcon(
-                sfSymbol: 'person.crop.circle',
-                icon: Icons.account_circle_outlined,
-              ),
-              id: 'profile',
-              title: 'Profile',
-            ),
-          ],
-        ],
-        onSelected: (id) => id.startsWith('account:')
-            ? context.read<InvestmentBloc>().add(
-                AccountSelected(int.parse(id.split(':').last)),
-              )
-            : context.push('/$id'),
+      drawer: const AdaptiveDrawer.custom(
+        backgroundColor: Color(0xFFEEEDE7),
+        child: MeridianDrawer(),
       ),
       bottomNavigationBar: AdaptiveBottomNavigationBar(
         selectedIndex: widget.shell.currentIndex,

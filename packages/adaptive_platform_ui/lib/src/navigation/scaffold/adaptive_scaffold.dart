@@ -11,6 +11,7 @@ import '../search/adaptive_navigation_search_bar.dart';
 import '../../content/badge/adaptive_badge.dart';
 import '../tab_bar/adaptive_bottom_navigation_bar.dart';
 import '../drawer/adaptive_drawer.dart';
+import '../drawer/drawer_cover.dart';
 import 'body_placement.dart';
 import 'native_scaffold.dart';
 import 'native_bottom_bar_layout.dart';
@@ -180,8 +181,9 @@ class AdaptiveScaffold extends StatefulWidget {
   final double customHeaderHeight;
 
   /// A panel displayed to the side of the body. An [AdaptiveDrawer] opens
-  /// as a native panel on iOS and a Material drawer elsewhere; any other
-  /// widget is a Material drawer everywhere. Open it with
+  /// as a native panel on iOS and a Material drawer elsewhere; an
+  /// [AdaptiveDrawer.custom], like any other widget, is a Material drawer
+  /// everywhere. Open it with
   /// [AdaptiveScaffoldState.openDrawer].
   final Widget? drawer;
 
@@ -250,10 +252,15 @@ class AdaptiveScaffoldState extends State<AdaptiveScaffold> {
   /// Material drawer.
   AdaptiveDrawer? get _nativeDrawer {
     final drawer = widget.drawer;
-    return _native && drawer is AdaptiveDrawer ? drawer : null;
+    return _native && drawer is AdaptiveDrawer && drawer.isNative
+        ? drawer
+        : null;
   }
 
   bool _nativeDrawerOpen = false;
+
+  final DrawerCoverPulse _drawerPulse = DrawerCoverPulse();
+  bool _customDrawerOpen = false;
 
   /// Whether this page renders the native iOS family.
   bool get _native => AdaptiveStyle.of(context) == AdaptiveStyle.native;
@@ -378,6 +385,7 @@ class AdaptiveScaffoldState extends State<AdaptiveScaffold> {
   void dispose() {
     _toolbarRegistry?.remove(this);
     _pageScroll?.dispose();
+    _drawerPulse.dispose();
     super.dispose();
   }
 
@@ -512,22 +520,55 @@ class AdaptiveScaffoldState extends State<AdaptiveScaffold> {
   }
 
   Widget _wrapWithDrawerIfNeeded(Widget child) {
-    final drawer = _nativeDrawer == null ? widget.drawer : null;
+    var drawer = _nativeDrawer == null ? widget.drawer : null;
+    final coversBars = _native && drawer is AdaptiveDrawer;
+    if (coversBars) {
+      drawer = DrawerCoverScope(
+        pulse: _drawerPulse,
+        isOpen: () => _customDrawerOpen,
+        child: drawer,
+      );
+    }
     if (drawer == null && widget.endDrawer == null) {
       return child;
     }
-    return Scaffold(
+    final scaffold = Scaffold(
       key: _scaffoldKey,
       backgroundColor: Colors.transparent,
       resizeToAvoidBottomInset: widget.resizeToAvoidBottomInset,
       body: child,
       drawer: drawer,
       endDrawer: widget.endDrawer,
-      drawerScrimColor: widget.drawerScrimColor,
-      onDrawerChanged: widget.onDrawerChanged,
+      // UIKit draws the backdrop beside a drawer that covers the bars.
+      drawerScrimColor: coversBars
+          ? Colors.transparent
+          : widget.drawerScrimColor,
+      onDrawerChanged: (open) {
+        _customDrawerOpen = open;
+        if (coversBars) {
+          // The bars beside the open panel are covered, so a tap there is a
+          // tap outside the drawer.
+          if (open) {
+            AdaptiveDrawer.coverTapped = closeDrawer;
+          } else if (AdaptiveDrawer.coverTapped == closeDrawer) {
+            AdaptiveDrawer.coverTapped = null;
+          }
+        }
+        _drawerPulse.ping();
+        widget.onDrawerChanged?.call(open);
+      },
       onEndDrawerChanged: widget.onEndDrawerChanged,
       drawerEnableOpenDragGesture: widget.drawerEnableOpenDragGesture,
       endDrawerEnableOpenDragGesture: widget.endDrawerEnableOpenDragGesture,
+    );
+    if (!coversBars) return scaffold;
+    // A drag on the open panel moves it without a callback; wake the follower.
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) {
+        if (_customDrawerOpen) _drawerPulse.ping();
+      },
+      child: scaffold,
     );
   }
 

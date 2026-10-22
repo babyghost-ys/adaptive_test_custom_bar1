@@ -6,6 +6,7 @@ final class NativeNavigationHost {
     static var installing = false
     static var pending: [(NativeNavigationHost) -> Void] = []
     static var routeChannel: FlutterMethodChannel?
+    static var drawerChannel: FlutterMethodChannel?
     weak var page: NativeNavigationPage?
     let flutter: FlutterViewController
     var content: NativeNavigationContent
@@ -83,6 +84,7 @@ final class NativeNavigationHost {
     static func registerNavigation(messenger: FlutterBinaryMessenger) {
         let channel = FlutterMethodChannel(name: "adaptive_platform_ui/navigation", binaryMessenger: messenger)
         routeChannel = channel
+        drawerChannel = FlutterMethodChannel(name: "adaptive_platform_ui/drawer", binaryMessenger: messenger)
         channel.setMethodCallHandler { call, result in
             guard let host = installed else { result(false); return }
             let args = call.arguments as? [String: Any] ?? [:]
@@ -102,6 +104,52 @@ final class NativeNavigationHost {
                 }
                 host.drawer = drawer
                 drawer.present(in: window)
+            case "setDrawerCover":
+                guard let window = host.window else { result(nil); return }
+                let cover: NativeDrawerCover
+                if let existing = host.drawerCover {
+                    cover = existing
+                } else {
+                    let background = UIColor(argb: args["background"] as? Int ?? 0xFFFFFFFF)
+                    cover = NativeDrawerCover(background: background)
+                    cover.frame = window.bounds
+                    cover.tapped = { drawerChannel?.invokeMethod("tapped", arguments: nil) }
+                    window.addSubview(cover)
+                    // Every view that shares a container with Flutter's
+                    // is a bar or its backdrop (the navigation bar, what
+                    // sits behind the status bar, the tab bar). Walk up
+                    // from Flutter's view and take each level's others.
+                    var bars: [UIView] = []
+                    var branch: UIView = host.flutter.view
+                    while let parent = branch.superview, parent !== window {
+                        bars += parent.subviews.filter { $0 !== branch && $0 !== cover }
+                        branch = parent
+                    }
+                    // Platform views (the Duo's bar) sit inside Flutter's
+                    // own view, above what Flutter draws.
+                    let flutterView: UIView = host.flutter.view
+                    bars += flutterView.subviews.filter {
+                        let name = String(describing: type(of: $0))
+                        return !name.contains("Overlay") && !name.contains("EdgeObserver")
+                    }
+                    cover.mask(bars)
+                    host.drawerCover = cover
+                    if window.safeAreaInsets.top > 0 {
+                        host.content.drawerStatusBarStyle = cover.statusBarStyle
+                        host.content.setNeedsStatusBarAppearanceUpdate()
+                    }
+                }
+                cover.update(
+                    x: CGFloat(args["x"] as? Double ?? 0),
+                    width: CGFloat(args["width"] as? Double ?? 320))
+                result(nil)
+            case "clearDrawerCover":
+                host.drawerCover?.restore()
+                host.drawerCover?.removeFromSuperview()
+                host.drawerCover = nil
+                host.content.drawerStatusBarStyle = nil
+                host.content.setNeedsStatusBarAppearanceUpdate()
+                result(nil)
             case "dismissDrawer":
                 host.drawer?.dismiss(selection: nil)
                 result(nil)
@@ -250,6 +298,7 @@ final class NativeNavigationHost {
     /// Whether a Flutter sheet or dialog covers the current page.
     var covered: Bool { coveredPage != nil && coveredPage === page }
     var drawer: NativeDrawer?
+    var drawerCover: NativeDrawerCover?
 
     /// UIKit resets a bar's tint adjustment when first responders change
     /// (a text field in the sheet taking focus), so this is reapplied on
