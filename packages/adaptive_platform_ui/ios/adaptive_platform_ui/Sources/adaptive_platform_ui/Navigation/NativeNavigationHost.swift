@@ -530,20 +530,23 @@ final class NativeNavigationHost {
             let args = call.arguments as? [String: Any] ?? [:]
             switch call.method {
             case "presentDrawer":
-                guard host.accountDrawer == nil, let window = host.window else { result(nil); return }
+                guard host.drawer == nil, let window = host.window else { result(nil); return }
                 let drawerContent = host.content
-                if window.safeAreaInsets.top > 0 {
-                    drawerContent.drawerStatusBarStyle = .darkContent
-                    drawerContent.setNeedsStatusBarAppearanceUpdate()
-                }
-                let drawer = NativeAccountDrawer(parameters: args) { [weak host] selection in
+                let drawer = NativeDrawer(parameters: args) { [weak host] selection in
                     drawerContent.drawerStatusBarStyle = nil
                     drawerContent.setNeedsStatusBarAppearanceUpdate()
-                    host?.accountDrawer = nil
+                    host?.drawer = nil
                     result(selection)
                 }
-                host.accountDrawer = drawer
+                if window.safeAreaInsets.top > 0 {
+                    drawerContent.drawerStatusBarStyle = drawer.statusBarStyle
+                    drawerContent.setNeedsStatusBarAppearanceUpdate()
+                }
+                host.drawer = drawer
                 drawer.present(in: window)
+            case "dismissDrawer":
+                host.drawer?.dismiss(selection: nil)
+                result(nil)
             case "preparePush": host.prepareNativePush(args, result: result)
             case "preparePop": host.prepareNativePop(args); result(nil)
             case "syncStack": host.synchronizeNativeStack(args, result: result)
@@ -1001,7 +1004,7 @@ final class NativeNavigationHost {
 
     /// Whether a Flutter sheet or dialog covers the current page.
     private var covered = false
-    private var accountDrawer: NativeAccountDrawer?
+    private var drawer: NativeDrawer?
 
     /// UIKit resets a bar's tint adjustment when first responders change
     /// (a text field in the sheet taking focus), so this is reapplied on

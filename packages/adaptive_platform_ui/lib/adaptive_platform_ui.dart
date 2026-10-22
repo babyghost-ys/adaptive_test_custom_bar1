@@ -62,6 +62,7 @@ export 'src/overlays/alert_dialog/adaptive_alert_dialog.dart';
 export 'src/overlays/popup_menu/adaptive_popup_menu_button.dart';
 export 'src/overlays/context_menu/adaptive_context_menu.dart';
 export 'src/navigation/scaffold/adaptive_scaffold.dart';
+export 'src/navigation/drawer/adaptive_drawer.dart';
 export 'src/navigation/app_bar/adaptive_app_bar_action.dart';
 export 'src/overlays/snackbar/adaptive_snackbar.dart';
 export 'src/controls/pickers/adaptive_date_picker.dart';

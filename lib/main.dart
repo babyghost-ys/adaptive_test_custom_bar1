@@ -1,9 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
@@ -150,271 +148,126 @@ class InvestmentHome extends StatefulWidget {
 }
 
 class _InvestmentHomeState extends State<InvestmentHome> {
-  final drawerKey = GlobalKey<ScaffoldState>();
+  final scaffoldKey = GlobalKey<AdaptiveScaffoldState>();
   bool menuOpen = false;
-
-  Future<void> _openAccounts(
-    BuildContext context,
-    InvestmentState state,
-    double width,
-  ) async {
-    if (defaultTargetPlatform != TargetPlatform.iOS) {
-      drawerKey.currentState?.openDrawer();
-      return;
-    }
-    final selection =
-        await const MethodChannel(
-          'adaptive_platform_ui/navigation',
-        ).invokeMethod<String>('presentDrawer', {
-          'width': math.min(320, width * 0.82),
-          'title': 'MERIDIAN',
-          'subtitle': 'Demo investing',
-          'selected': state.account,
-          'items': [
-            {
-              'id': 'account:0',
-              'title': 'All accounts',
-              'symbol': 'square.grid.2x2.fill',
-            },
-            {'id': 'account:1', 'title': 'Personal', 'symbol': 'person'},
-            {'id': 'account:2', 'title': 'Retirement', 'symbol': 'leaf'},
-            {'id': 'account:3', 'title': 'Tax-free', 'symbol': 'shield'},
-            {
-              'id': 'preferences',
-              'title': 'Preferences',
-              'symbol': 'slider.horizontal.3',
-            },
-            {'id': 'statements', 'title': 'Statements', 'symbol': 'doc.text'},
-            {
-              'id': 'profile',
-              'title': 'Profile',
-              'symbol': 'person.crop.circle',
-            },
-          ],
-        });
-    if (!context.mounted || selection == null) return;
-    if (selection.startsWith('account:')) {
-      context.read<InvestmentBloc>().add(
-        AccountSelected(int.parse(selection.split(':').last)),
-      );
-    } else {
-      context.push('/$selection');
-    }
-  }
 
   @override
   Widget build(BuildContext context) =>
       BlocBuilder<InvestmentBloc, InvestmentState>(
-        builder: (context, state) => LayoutBuilder(
-          builder: (context, constraints) {
-            return AdaptiveScaffold(
-              extendBody: true,
-              scaffoldKey: drawerKey,
-              appBar: AdaptiveAppBar(
-                title: [
-                  'Portfolio',
-                  'Markets',
-                  'Watchlist',
-                  'Activity',
-                ][widget.shell.currentIndex],
-                actions: [
-                  AdaptiveAppBarAction(
-                    iosSymbol: menuOpen ? 'xmark' : 'line.3.horizontal',
-                    icon: menuOpen ? Icons.close : Icons.menu_rounded,
-                    label: menuOpen ? 'Close accounts' : 'Open accounts',
-                    spacerAfter: ToolbarSpacerType.flexible,
-                    onPressed: () =>
-                        _openAccounts(context, state, constraints.maxWidth),
-                  ),
-                  AdaptiveAppBarAction(
-                    iosSymbol: 'magnifyingglass',
-                    icon: Icons.search,
-                    label: 'Search',
-                    onPressed: () => context.push('/search'),
-                  ),
-                ],
+        builder: (context, state) => AdaptiveScaffold(
+          key: scaffoldKey,
+          extendBody: true,
+          appBar: AdaptiveAppBar(
+            actions: [
+              AdaptiveAppBarAction(
+                iosSymbol: menuOpen ? 'xmark' : 'line.3.horizontal',
+                icon: menuOpen ? Icons.close : Icons.menu_rounded,
+                label: menuOpen ? 'Close accounts' : 'Open accounts',
+                spacerAfter: ToolbarSpacerType.flexible,
+                onPressed: () => scaffoldKey.currentState?.openDrawer(),
               ),
-              drawerScrimColor: const Color(0x73000000),
-              onDrawerChanged: (open) => setState(() => menuOpen = open),
-              drawerEnableOpenDragGesture:
-                  defaultTargetPlatform != TargetPlatform.iOS,
-              drawer: Drawer(
-                elevation: 32,
-                shadowColor: const Color(0xCC000000),
-                backgroundColor: const Color(0xFFEEEDE7),
-                shape: const RoundedRectangleBorder(),
-                width: math.min(320, constraints.maxWidth * 0.82),
-                child: AnnotatedRegion<SystemUiOverlayStyle>(
-                  value: SystemUiOverlayStyle.dark,
-                  child: ColoredBox(
-                    color: const Color(0xFFEEEDE7),
-                    child: SafeArea(
-                      child: AccountMenu(
-                        state: state,
-                        onSelect: (i) {
-                          context.read<InvestmentBloc>().add(
-                            AccountSelected(i),
-                          );
-                          drawerKey.currentState?.closeDrawer();
-                        },
-                      ),
-                    ),
-                  ),
+              AdaptiveAppBarAction(
+                iosSymbol: 'magnifyingglass',
+                icon: Icons.search,
+                label: 'Search',
+                onPressed: () => context.push('/search'),
+              ),
+            ],
+          ),
+          onDrawerChanged: (open) => setState(() => menuOpen = open),
+          drawer: AdaptiveDrawer(
+            title: 'MERIDIAN',
+            subtitle: 'Demo investing',
+            backgroundColor: const Color(0xFFEEEDE7),
+            selectedId: 'account:${state.account}',
+            sections: const [
+              [
+                AdaptiveDrawerItem(
+                  id: 'account:0',
+                  title: 'All accounts',
+                  sfSymbol: 'square.grid.2x2.fill',
+                  icon: Icons.grid_view_rounded,
                 ),
+                AdaptiveDrawerItem(
+                  id: 'account:1',
+                  title: 'Personal',
+                  sfSymbol: 'person',
+                  icon: Icons.person_outline,
+                ),
+                AdaptiveDrawerItem(
+                  id: 'account:2',
+                  title: 'Retirement',
+                  sfSymbol: 'leaf',
+                  icon: Icons.spa_outlined,
+                ),
+                AdaptiveDrawerItem(
+                  id: 'account:3',
+                  title: 'Tax-free',
+                  sfSymbol: 'shield',
+                  icon: Icons.shield_outlined,
+                ),
+              ],
+              [
+                AdaptiveDrawerItem(
+                  id: 'preferences',
+                  title: 'Preferences',
+                  sfSymbol: 'slider.horizontal.3',
+                  icon: Icons.tune,
+                ),
+                AdaptiveDrawerItem(
+                  id: 'statements',
+                  title: 'Statements',
+                  sfSymbol: 'doc.text',
+                  icon: Icons.description_outlined,
+                ),
+                AdaptiveDrawerItem(
+                  id: 'profile',
+                  title: 'Profile',
+                  sfSymbol: 'person.crop.circle',
+                  icon: Icons.account_circle_outlined,
+                ),
+              ],
+            ],
+            onSelected: (id) => id.startsWith('account:')
+                ? context.read<InvestmentBloc>().add(
+                    AccountSelected(int.parse(id.split(':').last)),
+                  )
+                : context.push('/$id'),
+          ),
+          bottomNavigationBar: AdaptiveBottomNavigationBar(
+            selectedIndex: widget.shell.currentIndex,
+            selectedItemColor: red,
+            onTap: (i) {
+              scaffoldKey.currentState?.closeDrawer();
+              widget.shell.goBranch(
+                i,
+                initialLocation: i == widget.shell.currentIndex,
+              );
+            },
+            items: const [
+              AdaptiveNavigationDestination(
+                icon: 'chart.pie',
+                selectedIcon: 'chart.pie.fill',
+                label: 'Portfolio',
               ),
-              bottomNavigationBar: AdaptiveBottomNavigationBar(
-                selectedIndex: widget.shell.currentIndex,
-                selectedItemColor: red,
-                onTap: (i) {
-                  drawerKey.currentState?.closeDrawer();
-                  widget.shell.goBranch(
-                    i,
-                    initialLocation: i == widget.shell.currentIndex,
-                  );
-                },
-                items: const [
-                  AdaptiveNavigationDestination(
-                    icon: 'chart.pie',
-                    selectedIcon: 'chart.pie.fill',
-                    label: 'Portfolio',
-                  ),
-                  AdaptiveNavigationDestination(
-                    icon: 'chart.xyaxis.line',
-                    label: 'Markets',
-                  ),
-                  AdaptiveNavigationDestination(
-                    icon: 'star',
-                    selectedIcon: 'star.fill',
-                    label: 'Watchlist',
-                  ),
-                  AdaptiveNavigationDestination(
-                    icon: 'clock.arrow.circlepath',
-                    label: 'Activity',
-                  ),
-                ],
+              AdaptiveNavigationDestination(
+                icon: 'chart.xyaxis.line',
+                label: 'Markets',
               ),
-              body: widget.shell,
-            );
-          },
+              AdaptiveNavigationDestination(
+                icon: 'star',
+                selectedIcon: 'star.fill',
+                label: 'Watchlist',
+              ),
+              AdaptiveNavigationDestination(
+                icon: 'clock.arrow.circlepath',
+                label: 'Activity',
+              ),
+            ],
+          ),
+          body: widget.shell,
         ),
       );
-}
-
-class AccountMenu extends StatelessWidget {
-  const AccountMenu({super.key, required this.state, required this.onSelect});
-  final InvestmentState state;
-  final ValueChanged<int> onSelect;
-  @override
-  Widget build(BuildContext context) => Material(
-    color: const Color(0xFFEEEDE7),
-    child: Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFFEEEDE7),
-        border: Border(right: BorderSide(color: Color(0xFFE2E1DA))),
-      ),
-      child: ListView(
-        padding: EdgeInsets.fromLTRB(
-          16,
-          26,
-          16,
-          24 + MediaQuery.paddingOf(context).bottom,
-        ),
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(left: 10),
-            child: label('MERIDIAN', size: 18, weight: FontWeight.w800),
-          ),
-          const SizedBox(height: 7),
-          Padding(
-            padding: const EdgeInsets.only(left: 10),
-            child: label('Demo investing', size: 12, color: muted),
-          ),
-          const SizedBox(height: 32),
-          for (var i = 0; i < 4; i++)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 7),
-              child: Semantics(
-                button: true,
-                selected: state.account == i,
-                child: Material(
-                  color: state.account == i ? Colors.white : Colors.transparent,
-                  borderRadius: BorderRadius.circular(12),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: () => onSelect(i),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 15,
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            [
-                              Icons.grid_view_rounded,
-                              Icons.person_outline,
-                              Icons.spa_outlined,
-                              Icons.shield_outlined,
-                            ][i],
-                            size: 20,
-                            color: state.account == i ? red : muted,
-                          ),
-                          const SizedBox(width: 11),
-                          Expanded(
-                            child: label(
-                              [
-                                'All accounts',
-                                'Personal',
-                                'Retirement',
-                                'Tax-free',
-                              ][i],
-                              size: 14,
-                              weight: state.account == i
-                                  ? FontWeight.w600
-                                  : FontWeight.w400,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          const SizedBox(height: 25),
-          const Divider(color: Color(0xFFDADAD2)),
-          const SizedBox(height: 16),
-          menuLink(context, Icons.tune, 'Preferences', '/preferences'),
-          menuLink(
-            context,
-            Icons.description_outlined,
-            'Statements',
-            '/statements',
-          ),
-          menuLink(
-            context,
-            Icons.account_circle_outlined,
-            'Profile',
-            '/profile',
-          ),
-        ],
-      ),
-    ),
-  );
-  Widget menuLink(
-    BuildContext context,
-    IconData icon,
-    String title,
-    String location,
-  ) => ListTile(
-    contentPadding: const EdgeInsets.symmetric(horizontal: 10),
-    leading: Icon(icon, size: 20, color: muted),
-    title: label(title, size: 13),
-    onTap: () {
-      Scaffold.maybeOf(context)?.closeDrawer();
-      context.push(location);
-    },
-  );
 }
 
 class PageScroll extends StatelessWidget {
@@ -422,18 +275,15 @@ class PageScroll extends StatelessWidget {
   final List<Widget> children;
   final String? storageKey;
   @override
-  Widget build(BuildContext context) => Material(
-    type: MaterialType.transparency,
-    child: ListView(
-      key: PageStorageKey(storageKey ?? 'page'),
-      padding: EdgeInsets.fromLTRB(
-        24,
-        28,
-        24,
-        MediaQuery.paddingOf(context).bottom + 28,
-      ),
-      children: children,
+  Widget build(BuildContext context) => ListView(
+    key: PageStorageKey(storageKey ?? 'page'),
+    padding: EdgeInsets.fromLTRB(
+      24,
+      28,
+      24,
+      MediaQuery.paddingOf(context).bottom + 28,
     ),
+    children: children,
   );
 }
 

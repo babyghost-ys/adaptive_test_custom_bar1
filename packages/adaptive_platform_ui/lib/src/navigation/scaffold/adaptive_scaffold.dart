@@ -11,6 +11,7 @@ import '../search/adaptive_navigation_search_bar.dart';
 import '../../content/badge/adaptive_badge.dart';
 import '../tab_bar/adaptive_bottom_navigation_bar.dart';
 import '../../controls/button/adaptive_button.dart';
+import '../drawer/adaptive_drawer.dart';
 import 'body_placement.dart';
 import 'ios26_scaffold.dart';
 import 'native_bottom_bar_layout.dart';
@@ -209,10 +210,10 @@ class AdaptiveScaffold extends StatefulWidget {
   final Color? customHeaderBackgroundColor;
   final double customHeaderHeight;
 
-  /// A panel displayed to the side of the body, often hidden on mobile.
-  /// On Android, passed directly to the Material Scaffold.
-  /// On iOS/iOS 26+, wrapped with a transparent Material Scaffold for drawer behavior.
-  /// Open programmatically via `Scaffold.of(context).openDrawer()`.
+  /// A panel displayed to the side of the body. An [AdaptiveDrawer] opens
+  /// as a native panel on iOS and a Material drawer elsewhere; any other
+  /// widget is a Material drawer everywhere. Open it with
+  /// [AdaptiveScaffoldState.openDrawer].
   final Widget? drawer;
 
   /// A panel displayed on the opposite side of the drawer.
@@ -260,11 +261,62 @@ class AdaptiveScaffold extends StatefulWidget {
   /// to prevent native platform views from bleeding through.
   final bool tabBarHidden;
 
+  /// The nearest [AdaptiveScaffoldState] above [context].
+  static AdaptiveScaffoldState of(BuildContext context) =>
+      context.findAncestorStateOfType<AdaptiveScaffoldState>()!;
+
   @override
-  State<AdaptiveScaffold> createState() => _AdaptiveScaffoldState();
+  State<AdaptiveScaffold> createState() => AdaptiveScaffoldState();
 }
 
-class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
+/// The state of an [AdaptiveScaffold]. Opens and closes its drawer, like
+/// [ScaffoldState]: give the scaffold a `GlobalKey<AdaptiveScaffoldState>`,
+/// or find it with [AdaptiveScaffold.of].
+class AdaptiveScaffoldState extends State<AdaptiveScaffold> {
+  final GlobalKey<ScaffoldState> _ownScaffoldKey = GlobalKey<ScaffoldState>();
+  GlobalKey<ScaffoldState> get _scaffoldKey =>
+      widget.scaffoldKey ?? _ownScaffoldKey;
+
+  /// An [AdaptiveDrawer] on iOS opens as a native panel instead of a
+  /// Material drawer.
+  AdaptiveDrawer? get _nativeDrawer {
+    final drawer = widget.drawer;
+    return PlatformInfo.isIOS && drawer is AdaptiveDrawer ? drawer : null;
+  }
+
+  bool _nativeDrawerOpen = false;
+
+  /// Whether the drawer is showing.
+  bool get isDrawerOpen =>
+      _nativeDrawerOpen || (_scaffoldKey.currentState?.isDrawerOpen ?? false);
+
+  /// Opens [AdaptiveScaffold.drawer].
+  Future<void> openDrawer() async {
+    final drawer = _nativeDrawer;
+    if (drawer == null) {
+      _scaffoldKey.currentState?.openDrawer();
+      return;
+    }
+    if (_nativeDrawerOpen) return;
+    _nativeDrawerOpen = true;
+    widget.onDrawerChanged?.call(true);
+    try {
+      await drawer.presentNative(context);
+    } finally {
+      _nativeDrawerOpen = false;
+      if (mounted) widget.onDrawerChanged?.call(false);
+    }
+  }
+
+  /// Closes the drawer without a selection.
+  void closeDrawer() {
+    if (_nativeDrawerOpen) {
+      AdaptiveDrawer.dismissNative();
+    } else {
+      _scaffoldKey.currentState?.closeDrawer();
+    }
+  }
+
   final GlobalKey<_MinimizableTabBarState> _tabBarKey =
       GlobalKey<_MinimizableTabBarState>();
 
@@ -279,22 +331,40 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
   AdaptiveBarStyle _barStyle = const AdaptiveBarStyle.system();
   AdaptiveAppBar? _appBarSource;
   AdaptiveBarStyle? _appBarSourceStyle;
+  AdaptiveBottomNavigationBar? _appBarSourceTabs;
   AdaptiveAppBar? _resolvedAppBar;
 
   /// [AdaptiveScaffold.appBar] as drawn: unset colours and flags taken from
-  /// the app's [AdaptiveBarStyle], and on the native iOS path the page's own
-  /// scroll controller filled in.
+  /// the app's [AdaptiveBarStyle], a tab root's missing title taken from its
+  /// selected tab, and on the native iOS path the page's own scroll
+  /// controller filled in.
   AdaptiveAppBar? get _appBar {
     final appBar = widget.appBar;
     if (appBar == null) return null;
-    if (!identical(appBar, _appBarSource) || _barStyle != _appBarSourceStyle) {
+    final tabs = widget.bottomNavigationBar;
+    if (!identical(appBar, _appBarSource) ||
+        _barStyle != _appBarSourceStyle ||
+        !identical(tabs, _appBarSourceTabs)) {
       _appBarSource = appBar;
       _appBarSourceStyle = _barStyle;
+      _appBarSourceTabs = tabs;
+      final items = tabs?.items;
+      final index = tabs?.selectedIndex;
+      final tabTitle =
+          appBar.title == null &&
+              appBar.titleWidget == null &&
+              items != null &&
+              index != null &&
+              index >= 0 &&
+              index < items.length
+          ? items[index].label
+          : null;
       final linksScroll =
           PlatformInfo.isIOS &&
           appBar.useNativeToolbar &&
           appBar.scrollController == null;
       _resolvedAppBar = appBar.copyWith(
+        title: tabTitle,
         navigationBarColor: appBar.navigationBarColor ?? _barStyle.color,
         tintColor: appBar.tintColor ?? _barStyle.foreground,
         navigationBarShadow: appBar.navigationBarShadow ?? _barStyle.shadow,
@@ -475,15 +545,16 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
   }
 
   Widget _wrapWithDrawerIfNeeded(Widget child) {
-    if (widget.drawer == null && widget.endDrawer == null) {
+    final drawer = _nativeDrawer == null ? widget.drawer : null;
+    if (drawer == null && widget.endDrawer == null) {
       return child;
     }
     return Scaffold(
-      key: widget.scaffoldKey,
+      key: _scaffoldKey,
       backgroundColor: Colors.transparent,
       resizeToAvoidBottomInset: widget.resizeToAvoidBottomInset,
       body: child,
-      drawer: widget.drawer,
+      drawer: drawer,
       endDrawer: widget.endDrawer,
       drawerScrimColor: widget.drawerScrimColor,
       onDrawerChanged: widget.onDrawerChanged,
@@ -553,11 +624,13 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
         extendBehindTop: widget.extendBodyBehindAppBar,
         extendBehindBottom: widget.extendBody,
       );
-      Widget body =
-          (placement.underTop || placement.underBottom
-              ? BodyPlacement.withInsetSlivers(widget.body)
-              : widget.body) ??
-          const SizedBox.shrink();
+      Widget body = _MaterialAncestor(
+        child:
+            (placement.underTop || placement.underBottom
+                ? BodyPlacement.withInsetSlivers(widget.body)
+                : widget.body) ??
+            const SizedBox.shrink(),
+      );
       final chrome = ToolbarChromeScope.maybeOf(context);
       final navigation = _appBar?.scrollController;
       if (navigation != null) {
@@ -764,11 +837,15 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
                 },
                 child: PlatformInfo.isIOS26OrHigher() && useNativeBottomBar
                     ? NativeBottomBarLayout(
-                        body: widget.body ?? const SizedBox.shrink(),
+                        body: _MaterialAncestor(
+                          child: widget.body ?? const SizedBox.shrink(),
+                        ),
                         bottomBar: _tabsInTrailingBar(context) ? null : tabBar,
                         barVisible: !widget.tabBarHidden,
                       )
-                    : widget.body ?? const SizedBox.shrink(),
+                    : _MaterialAncestor(
+                        child: widget.body ?? const SizedBox.shrink(),
+                      ),
               ),
             ),
             // Show tab bar at bottom for non-native cases
@@ -876,7 +953,9 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
       }
 
       // Wrap body with Stack if floatingActionButton is provided
-      Widget body = widget.body ?? const SizedBox.shrink();
+      Widget body = _MaterialAncestor(
+        child: widget.body ?? const SizedBox.shrink(),
+      );
       if (widget.floatingActionButton != null) {
         body = Stack(
           children: [
@@ -1049,7 +1128,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
       }
 
       return Scaffold(
-        key: widget.scaffoldKey,
+        key: _scaffoldKey,
         appBar: appBar,
         body: widget.body ?? const SizedBox.shrink(),
         resizeToAvoidBottomInset: widget.resizeToAvoidBottomInset,
@@ -1119,7 +1198,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
 
     // Always use Scaffold to ensure Material context
     return Scaffold(
-      key: widget.scaffoldKey,
+      key: _scaffoldKey,
       appBar: appBar,
       body: widget.body ?? const SizedBox.shrink(),
       resizeToAvoidBottomInset: widget.resizeToAvoidBottomInset,
@@ -1322,4 +1401,20 @@ class _AnimatedBackButtonState extends State<_AnimatedBackButton>
       ),
     );
   }
+}
+
+/// Gives an iOS page body the [Material] ancestor that ink effects and
+/// [ListTile] need, without changing its text style the way a [Material]
+/// does by default.
+class _MaterialAncestor extends StatelessWidget {
+  const _MaterialAncestor({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    type: MaterialType.transparency,
+    textStyle: DefaultTextStyle.of(context).style,
+    child: child,
+  );
 }
