@@ -1,8 +1,8 @@
+import '../../core/adaptive_style.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import '../../devices/duo/reserved_region.dart';
 
-import '../../core/platform_info.dart';
 import '../../devices/duo/system_vertical_bar.dart';
 import '../../devices/duo/duo_layout.dart';
 import 'hosted_top_toolbar.dart';
@@ -63,7 +63,8 @@ class _AdaptiveToolbarHostState extends State<AdaptiveToolbarHost>
   void initState() {
     super.initState();
     _blend = ToolbarBlend(registry: _registry, vsync: this);
-    if (widget.debugRegions == null && PlatformInfo.isIOS26OrHigher()) {
+    if (widget.debugRegions == null &&
+        AdaptiveCapabilities.systemVerticalBarEdge) {
       // The side the bar belongs on comes from the system, not from insets:
       // the leading Split View pane has none to read.
       _edge = SystemVerticalBar.edge..addListener(_onEdgeChanged);
@@ -87,7 +88,9 @@ class _AdaptiveToolbarHostState extends State<AdaptiveToolbarHost>
   Widget build(BuildContext context) {
     // The fixed chrome only exists where pages use the native iOS 26
     // toolbar; elsewhere pages keep their own Cupertino / Material bars.
-    final hostsToolbar = widget.debugRegions != null || PlatformInfo.isIOS;
+    final hostsToolbar =
+        widget.debugRegions != null ||
+        AdaptiveStyle.of(context) == AdaptiveStyle.native;
     final edge =
         widget.debugVerticalBarEdge ??
         _edge?.value ??

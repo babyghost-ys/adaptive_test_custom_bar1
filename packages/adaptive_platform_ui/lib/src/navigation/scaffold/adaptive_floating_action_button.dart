@@ -1,6 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import '../../core/platform_info.dart';
+import '../../core/adaptive_style.dart';
 
 /// An adaptive floating action button that renders platform-specific styles
 ///
@@ -66,18 +66,14 @@ class AdaptiveFloatingActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // iOS implementation
-    if (PlatformInfo.isIOS) {
-      return _buildIOSButton(context);
+    switch (AdaptiveStyle.of(context)) {
+      case AdaptiveStyle.native:
+        // iOS implementation
+        return _buildIOSButton(context);
+      case AdaptiveStyle.material:
+        // Android - Use Material FloatingActionButton
+        return _buildMaterialFAB(context);
     }
-
-    // Android - Use Material FloatingActionButton
-    if (PlatformInfo.isAndroid) {
-      return _buildMaterialFAB(context);
-    }
-
-    // Fallback to Material
-    return _buildMaterialFAB(context);
   }
 
   Widget _buildIOSButton(BuildContext context) {

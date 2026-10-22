@@ -1,6 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import '../../core/platform_info.dart';
+import '../../core/adaptive_style.dart';
 
 /// An adaptive list tile that renders platform-specific styles
 ///
@@ -66,12 +66,13 @@ class AdaptiveListTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (PlatformInfo.isIOS) {
-      return _buildCupertinoListTile(context);
+    switch (AdaptiveStyle.of(context)) {
+      case AdaptiveStyle.native:
+        return _buildCupertinoListTile(context);
+      case AdaptiveStyle.material:
+        // Android - Use Material ListTile
+        return _buildMaterialListTile(context);
     }
-
-    // Android - Use Material ListTile
-    return _buildMaterialListTile(context);
   }
 
   Widget _buildCupertinoListTile(BuildContext context) {

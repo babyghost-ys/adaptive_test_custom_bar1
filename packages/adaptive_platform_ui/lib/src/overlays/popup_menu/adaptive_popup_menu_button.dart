@@ -1,6 +1,5 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import '../../core/platform_info.dart';
+import '../../core/adaptive_style.dart';
 import '../action_sheet/adaptive_action_sheet.dart';
 import 'ios26_popup_menu_button.dart';
 
@@ -27,40 +26,26 @@ class AdaptivePopupMenuButton<T> {
     bool shrinkWrap = false,
     PopupButtonStyle buttonStyle = PopupButtonStyle.plain,
   }) {
-    // iOS 26+ - Use native iOS 26 popup menu button
-    if (PlatformInfo.isIOS) {
-      return IOS26PopupMenuButton<T>(
-        buttonLabel: label,
-        items: items,
-        onSelected: onSelected,
-        tint: tint,
-        height: height,
-        shrinkWrap: shrinkWrap,
-        buttonStyle: buttonStyle,
-      );
-    }
-
-    // Android - Use Material PopupMenuButton
-    if (PlatformInfo.isAndroid) {
-      return _MaterialPopupMenuButton<T>(
-        label: label,
-        items: items,
-        onSelected: onSelected,
-        tint: tint,
-        height: height,
-      );
-    }
-
-    // iOS <26 (iOS 18 and below) - Use CupertinoButton with action sheet (iOS fallback)
     return Builder(
-      builder: (context) => SizedBox(
-        height: height,
-        child: CupertinoButton(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          onPressed: () => _showMenu<T>(context, label, items, onSelected),
-          child: Text(label),
+      key: key,
+      builder: (context) => switch (AdaptiveStyle.of(context)) {
+        AdaptiveStyle.native => IOS26PopupMenuButton<T>(
+          buttonLabel: label,
+          items: items,
+          onSelected: onSelected,
+          tint: tint,
+          height: height,
+          shrinkWrap: shrinkWrap,
+          buttonStyle: buttonStyle,
         ),
-      ),
+        AdaptiveStyle.material => _MaterialPopupMenuButton<T>(
+          label: label,
+          items: items,
+          onSelected: onSelected,
+          tint: tint,
+          height: height,
+        ),
+      },
     );
   }
 
@@ -81,40 +66,25 @@ class AdaptivePopupMenuButton<T> {
       'onTap is only used with triggerOnLongPress: true (tap fires onTap, '
       'long-press opens the menu).',
     );
-    // iOS 26+ - Use gesture detector with native menu
-    if (PlatformInfo.isIOS) {
-      return IOS26PopupMenuButton<T>.widget(
-        items: items,
-        onSelected: onSelected,
-        tint: tint,
-        buttonStyle: buttonStyle,
-        triggerOnLongPress: triggerOnLongPress,
-        onTap: onTap,
-        child: child,
-      );
-    }
-
-    // Android - Use Material PopupMenuButton with custom child
-    if (PlatformInfo.isAndroid) {
-      return _MaterialPopupMenuButton<T>.widget(
-        items: items,
-        onSelected: onSelected,
-        tint: tint,
-        child: child,
-      );
-    }
-
-    // iOS <26 (iOS 18 and below) - Use GestureDetector with action sheet
     return Builder(
-      builder: (context) => GestureDetector(
-        onTap: triggerOnLongPress
-            ? onTap
-            : () => _showMenu<T>(context, null, items, onSelected),
-        onLongPress: triggerOnLongPress
-            ? () => _showMenu<T>(context, null, items, onSelected)
-            : null,
-        child: child,
-      ),
+      key: key,
+      builder: (context) => switch (AdaptiveStyle.of(context)) {
+        AdaptiveStyle.native => IOS26PopupMenuButton<T>.widget(
+          items: items,
+          onSelected: onSelected,
+          tint: tint,
+          buttonStyle: buttonStyle,
+          triggerOnLongPress: triggerOnLongPress,
+          onTap: onTap,
+          child: child,
+        ),
+        AdaptiveStyle.material => _MaterialPopupMenuButton<T>.widget(
+          items: items,
+          onSelected: onSelected,
+          tint: tint,
+          child: child,
+        ),
+      },
     );
   }
 
@@ -136,45 +106,27 @@ class AdaptivePopupMenuButton<T> {
     double? iconSize,
     PopupButtonStyle buttonStyle = PopupButtonStyle.glass,
   }) {
-    // iOS 26+ - Use native iOS 26 popup menu button (expects String - SF Symbol)
-    if (PlatformInfo.isIOS) {
-      return IOS26PopupMenuButton<T>.icon(
-        buttonIcon: icon is String ? icon : 'ellipsis.circle',
-        items: items,
-        onSelected: onSelected,
-        tint: tint,
-        size: size,
-        iconSize: iconSize,
-        buttonStyle: buttonStyle,
-      );
-    }
-
-    // Android - Use Material IconButton with PopupMenu
-    if (PlatformInfo.isAndroid) {
-      return _MaterialPopupMenuButton<T>.icon(
-        icon: icon,
-        items: items,
-        onSelected: onSelected,
-        tint: tint,
-        size: size,
-        iconSize: iconSize,
-      );
-    }
-
-    // iOS <26 (iOS 18 and below) - Use icon button with action sheet (iOS fallback)
     return Builder(
-      builder: (context) => SizedBox(
-        width: size,
-        height: size,
-        child: CupertinoButton(
-          padding: const EdgeInsets.all(4),
-          onPressed: () => _showMenu<T>(context, null, items, onSelected),
-          child: Icon(
-            icon is IconData ? icon : CupertinoIcons.ellipsis,
-            size: iconSize,
-          ),
+      key: key,
+      builder: (context) => switch (AdaptiveStyle.of(context)) {
+        AdaptiveStyle.native => IOS26PopupMenuButton<T>.icon(
+          buttonIcon: icon is String ? icon : 'ellipsis.circle',
+          items: items,
+          onSelected: onSelected,
+          tint: tint,
+          size: size,
+          iconSize: iconSize,
+          buttonStyle: buttonStyle,
         ),
-      ),
+        AdaptiveStyle.material => _MaterialPopupMenuButton<T>.icon(
+          icon: icon,
+          items: items,
+          onSelected: onSelected,
+          tint: tint,
+          size: size,
+          iconSize: iconSize,
+        ),
+      },
     );
   }
 
@@ -191,8 +143,8 @@ class AdaptivePopupMenuButton<T> {
     final menuContext =
         (navigator ?? Navigator.maybeOf(context))?.overlay?.context;
     if (menuContext == null) return;
-    if (PlatformInfo.isIOS) {
-      return _showMenu<T>(menuContext, null, items, onSelected);
+    if (AdaptiveStyle.of(context) == AdaptiveStyle.native) {
+      return _showActionSheet<T>(menuContext, items, onSelected);
     }
     final button = context.findRenderObject() as RenderBox?;
     final overlay = menuContext.findRenderObject() as RenderBox?;
@@ -210,62 +162,6 @@ class AdaptivePopupMenuButton<T> {
     if (selected != null && items[selected] is AdaptivePopupMenuItem<T>) {
       onSelected(selected, items[selected] as AdaptivePopupMenuItem<T>);
     }
-  }
-
-  static Widget _buildActionSheetContent<T>(AdaptivePopupMenuItem<T> item) {
-    final hasImage = item.imageBytes != null;
-    final hasSubtitle = item.subtitle != null && item.subtitle!.isNotEmpty;
-
-    if (!hasImage && !hasSubtitle) {
-      if (!item.selected) return Text(item.label);
-      return Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(CupertinoIcons.checkmark, size: 18),
-          const SizedBox(width: 8),
-          Text(item.label),
-        ],
-      );
-    }
-
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        if (item.selected) ...[
-          const Icon(CupertinoIcons.checkmark, size: 18),
-          const SizedBox(width: 8),
-        ],
-        if (hasImage) ...[
-          ClipOval(
-            child: Image.memory(
-              item.imageBytes!,
-              width: 32,
-              height: 32,
-              fit: BoxFit.cover,
-            ),
-          ),
-          const SizedBox(width: 10),
-        ],
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: hasImage
-              ? CrossAxisAlignment.start
-              : CrossAxisAlignment.center,
-          children: [
-            Text(item.label),
-            if (hasSubtitle)
-              Text(
-                item.subtitle!,
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: CupertinoColors.secondaryLabel,
-                ),
-              ),
-          ],
-        ),
-      ],
-    );
   }
 
   static List<PopupMenuEntry<int>> _materialMenuItems<T>(
@@ -350,103 +246,34 @@ class AdaptivePopupMenuButton<T> {
     return menuItems;
   }
 
-  static Future<void> _showMenu<T>(
+  /// The menu as the running system's action sheet.
+  static Future<void> _showActionSheet<T>(
     BuildContext context,
-    String? title,
     List<AdaptivePopupMenuEntry> items,
     void Function(int index, AdaptivePopupMenuItem<T> entry) onSelected,
   ) async {
-    if (PlatformInfo.isIOS) {
-      final entries = <int>[
-        for (var i = 0; i < items.length; i++)
-          if (items[i] is AdaptivePopupMenuItem<T> &&
-              (items[i] as AdaptivePopupMenuItem<T>).enabled)
-            i,
-      ];
-      final selected = await AdaptiveActionSheet.show(
-        anchorContext: context,
-        title: title,
-        actions: [
-          for (final i in entries)
-            AdaptiveSheetAction(
-              (items[i] as AdaptivePopupMenuItem<T>).label,
-              destructive: (items[i] as AdaptivePopupMenuItem<T>).isDestructive,
-            ),
-        ],
-      );
-      if (selected != null) {
-        final index = entries[selected];
-        onSelected(index, items[index] as AdaptivePopupMenuItem<T>);
-      }
-      return;
-    }
-    final selected = await showCupertinoModalPopup<int>(
-      context: context,
-      builder: (ctx) {
-        return CupertinoActionSheet(
-          title: title != null ? Text(title) : null,
-          actions: [
-            for (var i = 0; i < items.length; i++)
-              if (items[i] is AdaptivePopupMenuItem<T>)
-                CupertinoActionSheetAction(
-                  onPressed: () => Navigator.of(ctx).pop(i),
-                  isDestructiveAction:
-                      (items[i] as AdaptivePopupMenuItem<T>).isDestructive,
-                  child: _buildActionSheetContent<T>(
-                    items[i] as AdaptivePopupMenuItem<T>,
-                  ),
-                )
-              else
-                _buildSheetDivider(ctx, items[i]),
-          ],
-          cancelButton: CupertinoActionSheetAction(
-            onPressed: () => Navigator.of(ctx).pop(),
-            isDefaultAction: true,
-            child: Text(
-              PlatformInfo.isIOS
-                  ? CupertinoLocalizations.of(ctx).cancelButtonLabel
-                  : MaterialLocalizations.of(ctx).cancelButtonLabel,
-            ),
+    final entries = <int>[
+      for (var i = 0; i < items.length; i++)
+        if (items[i] is AdaptivePopupMenuItem<T> &&
+            (items[i] as AdaptivePopupMenuItem<T>).enabled)
+          i,
+    ];
+    final selected = await AdaptiveActionSheet.show(
+      anchorContext: context,
+      actions: [
+        for (final i in entries)
+          AdaptiveSheetAction(
+            (items[i] as AdaptivePopupMenuItem<T>).label,
+            destructive: (items[i] as AdaptivePopupMenuItem<T>).isDestructive,
           ),
-        );
-      },
+      ],
     );
-
     if (selected != null) {
-      final selectedEntry = items[selected];
-      if (selectedEntry is AdaptivePopupMenuItem<T>) {
-        onSelected(selected, selectedEntry);
-      }
+      final index = entries[selected];
+      onSelected(index, items[index] as AdaptivePopupMenuItem<T>);
     }
   }
 
-  /// The gap between two groups in the action sheet, carrying the group's
-  /// title when the divider has one; the sheet has no section of its own.
-  static Widget _buildSheetDivider(
-    BuildContext context,
-    AdaptivePopupMenuEntry entry,
-  ) {
-    final title = entry is AdaptivePopupMenuDivider ? entry.title : null;
-    if (title == null || title.isEmpty) return const SizedBox(height: 8);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
-      child: SizedBox(
-        width: double.infinity,
-        child: Text(
-          title,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: CupertinoColors.secondaryLabel.resolveFrom(context),
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// A Material divider, preceded by nothing for the first group and followed
-  /// by a disabled heading row when the divider carries a title.
   static List<PopupMenuEntry<int>> _materialDivider(
     BuildContext context,
     AdaptivePopupMenuEntry entry,

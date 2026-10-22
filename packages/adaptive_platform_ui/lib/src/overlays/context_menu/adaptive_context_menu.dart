@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../core/platform_info.dart';
+import '../../core/adaptive_style.dart';
 import 'ios26_context_menu.dart';
 
 /// A context menu action item
@@ -53,13 +53,14 @@ class AdaptiveContextMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // iOS 26+ - Native UIMenu with Liquid Glass
-    if (PlatformInfo.isIOS) {
-      return _buildIOS26ContextMenu(context);
+    switch (AdaptiveStyle.of(context)) {
+      case AdaptiveStyle.native:
+        // iOS 26+ - Native UIMenu with Liquid Glass
+        return _buildIOS26ContextMenu(context);
+      case AdaptiveStyle.material:
+        // Android - Use PopupMenuButton
+        return _buildAndroidContextMenu(context);
     }
-
-    // Android - Use PopupMenuButton
-    return _buildAndroidContextMenu(context);
   }
 
   Widget _buildAndroidContextMenu(BuildContext context) {

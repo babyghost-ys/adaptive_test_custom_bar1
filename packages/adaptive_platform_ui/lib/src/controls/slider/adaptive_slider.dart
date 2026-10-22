@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../core/platform_info.dart';
+import '../../core/adaptive_style.dart';
 import 'ios26_slider.dart';
 
 /// An adaptive slider that renders platform-specific slider styles
@@ -82,48 +82,33 @@ class AdaptiveSlider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // iOS 26+ - Use native iOS 26 slider
-    if (PlatformInfo.isIOS) {
-      return IOS26Slider(
-        value: value,
-        onChanged: onChanged,
-        onChangeStart: onChangeStart,
-        onChangeEnd: onChangeEnd,
-        min: min,
-        max: max,
-        activeColor: activeColor,
-        thumbColor: thumbColor,
-      );
+    switch (AdaptiveStyle.of(context)) {
+      case AdaptiveStyle.native:
+        // iOS 26+ - Use native iOS 26 slider
+        return IOS26Slider(
+          value: value,
+          onChanged: onChanged,
+          onChangeStart: onChangeStart,
+          onChangeEnd: onChangeEnd,
+          min: min,
+          max: max,
+          activeColor: activeColor,
+          thumbColor: thumbColor,
+        );
+      case AdaptiveStyle.material:
+        // Android - Use Material Design Slider
+        return Slider(
+          value: value,
+          onChanged: onChanged,
+          onChangeStart: onChangeStart,
+          onChangeEnd: onChangeEnd,
+          min: min,
+          max: max,
+          divisions: divisions,
+          label: label,
+          activeColor: activeColor,
+          thumbColor: thumbColor,
+        );
     }
-
-    // Android - Use Material Design Slider
-    if (PlatformInfo.isAndroid) {
-      return Slider(
-        value: value,
-        onChanged: onChanged,
-        onChangeStart: onChangeStart,
-        onChangeEnd: onChangeEnd,
-        min: min,
-        max: max,
-        divisions: divisions,
-        label: label,
-        activeColor: activeColor,
-        thumbColor: thumbColor,
-      );
-    }
-
-    // Fallback for other platforms (web, desktop, etc.)
-    return Slider(
-      value: value,
-      onChanged: onChanged,
-      onChangeStart: onChangeStart,
-      onChangeEnd: onChangeEnd,
-      min: min,
-      max: max,
-      divisions: divisions,
-      label: label,
-      activeColor: activeColor,
-      thumbColor: thumbColor,
-    );
   }
 }

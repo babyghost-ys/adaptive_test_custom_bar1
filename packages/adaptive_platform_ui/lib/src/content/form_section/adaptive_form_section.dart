@@ -91,13 +91,12 @@ class AdaptiveFormSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (PlatformInfo.isIOS) {
-      return _buildIOSFormSection(context);
+    switch (AdaptiveStyle.of(context)) {
+      case AdaptiveStyle.native:
+        return _buildIOSFormSection(context);
+      case AdaptiveStyle.material:
+        return _buildMaterialFormSection(context);
     }
-    if (PlatformInfo.isAndroid) {
-      return _buildMaterialFormSection(context);
-    }
-    return _buildMaterialFormSection(context);
   }
 
   Widget _buildIOSFormSection(BuildContext context) {

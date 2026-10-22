@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../core/platform_info.dart';
+import '../../core/adaptive_style.dart';
 import '../../controls/segmented_control/adaptive_segmented_control.dart';
 
 /// An adaptive tab bar view (horizontal swipeable tabs)
@@ -134,84 +134,17 @@ class _AdaptiveTabBarViewState extends State<AdaptiveTabBarView>
 
   @override
   Widget build(BuildContext context) {
-    // iOS implementation - Uses AdaptiveSegmentedControl
-    // On iOS 26+: Native segmented control with Liquid Glass
-    // On iOS <26: CupertinoSlidingSegmentedControl
-    if (PlatformInfo.isIOS) {
-      return Column(
-        children: [
-          // iOS segmented control as tab bar
-          Container(
-            color: widget.backgroundColor,
-            padding: const EdgeInsets.all(16.0),
-            child: AdaptiveSegmentedControl(
-              labels: widget.tabs,
-              selectedIndex: _currentIndex,
-              onValueChanged: _onSegmentChanged,
-              height: 40.0,
-              color: widget.selectedColor,
-              textColor: widget.unselectedColor,
-              selectedTextColor: _iosSelectedLabelColor,
-            ),
-          ),
-          // Content with PageView for iOS
-          Expanded(
-            child: PageView(
-              controller: _pageController,
-              onPageChanged: _onPageChanged,
-              children: widget.children,
-            ),
-          ),
-        ],
-      );
-    }
+    return switch (AdaptiveStyle.of(context)) {
+      AdaptiveStyle.native => _buildNative(),
+      AdaptiveStyle.material => _buildMaterial(context),
+    };
+  }
 
-    // Android - Material Design implementation
-    if (PlatformInfo.isAndroid) {
-      final theme = Theme.of(context);
-      final defaultBackgroundColor =
-          widget.backgroundColor ?? theme.primaryColor;
-      // Labels must contrast with what they are drawn on: white on the
-      // primary-coloured bar, the surface text colour on a transparent or
-      // light custom background (#37).
-      final bg = widget.backgroundColor;
-      final Color onBackground = bg == null
-          ? Colors.white
-          : bg.a < 0.5 ||
-                ThemeData.estimateBrightnessForColor(bg) == Brightness.light
-          ? theme.colorScheme.onSurface
-          : Colors.white;
-      final defaultSelectedColor = widget.selectedColor ?? onBackground;
-      final defaultSelectedLabelColor =
-          widget.selectedLabelColor ?? defaultSelectedColor;
-      final defaultUnselectedColor =
-          widget.unselectedColor ?? onBackground.withValues(alpha: 0.7);
-
-      return Column(
-        children: [
-          Material(
-            color: defaultBackgroundColor,
-            child: TabBar(
-              controller: _materialController,
-              tabs: widget.tabs.map((label) => Tab(text: label)).toList(),
-              indicatorColor: defaultSelectedColor,
-              labelColor: defaultSelectedLabelColor,
-              unselectedLabelColor: defaultUnselectedColor,
-            ),
-          ),
-          Expanded(
-            child: TabBarView(
-              controller: _materialController,
-              children: widget.children,
-            ),
-          ),
-        ],
-      );
-    }
-
-    // Fallback - iOS style
+  /// The running system's segmented control above a paged view.
+  Widget _buildNative() {
     return Column(
       children: [
+        // iOS segmented control as tab bar
         Container(
           color: widget.backgroundColor,
           padding: const EdgeInsets.all(16.0),
@@ -225,10 +158,53 @@ class _AdaptiveTabBarViewState extends State<AdaptiveTabBarView>
             selectedTextColor: _iosSelectedLabelColor,
           ),
         ),
+        // Content with PageView for iOS
         Expanded(
           child: PageView(
             controller: _pageController,
             onPageChanged: _onPageChanged,
+            children: widget.children,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// A Material [TabBar] above its [TabBarView].
+  Widget _buildMaterial(BuildContext context) {
+    final theme = Theme.of(context);
+    final defaultBackgroundColor = widget.backgroundColor ?? theme.primaryColor;
+    // Labels must contrast with what they are drawn on: white on the
+    // primary-coloured bar, the surface text colour on a transparent or
+    // light custom background (#37).
+    final bg = widget.backgroundColor;
+    final Color onBackground = bg == null
+        ? Colors.white
+        : bg.a < 0.5 ||
+              ThemeData.estimateBrightnessForColor(bg) == Brightness.light
+        ? theme.colorScheme.onSurface
+        : Colors.white;
+    final defaultSelectedColor = widget.selectedColor ?? onBackground;
+    final defaultSelectedLabelColor =
+        widget.selectedLabelColor ?? defaultSelectedColor;
+    final defaultUnselectedColor =
+        widget.unselectedColor ?? onBackground.withValues(alpha: 0.7);
+
+    return Column(
+      children: [
+        Material(
+          color: defaultBackgroundColor,
+          child: TabBar(
+            controller: _materialController,
+            tabs: widget.tabs.map((label) => Tab(text: label)).toList(),
+            indicatorColor: defaultSelectedColor,
+            labelColor: defaultSelectedLabelColor,
+            unselectedLabelColor: defaultUnselectedColor,
+          ),
+        ),
+        Expanded(
+          child: TabBarView(
+            controller: _materialController,
             children: widget.children,
           ),
         ),

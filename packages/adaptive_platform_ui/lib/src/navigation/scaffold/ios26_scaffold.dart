@@ -1,8 +1,8 @@
+import '../../core/adaptive_style.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
-import '../../core/platform_info.dart';
 import '../../devices/duo/system_vertical_bar.dart';
 import '../../style/sf_symbol.dart';
 import '../../devices/duo/duo_layout.dart';
@@ -102,7 +102,7 @@ class _IOS26ScaffoldState extends State<IOS26Scaffold> {
   @override
   void initState() {
     super.initState();
-    if (PlatformInfo.isIOS26OrHigher()) {
+    if (AdaptiveCapabilities.systemVerticalBarEdge) {
       SystemVerticalBar.regions.addListener(_onEdgeChanged);
       _edge = SystemVerticalBar.edge..addListener(_onEdgeChanged);
       SystemVerticalBar.titleBand.addListener(_onEdgeChanged);

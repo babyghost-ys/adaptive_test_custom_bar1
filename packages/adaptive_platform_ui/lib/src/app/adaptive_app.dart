@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import '../core/adaptive_style.dart';
 import '../core/theme/adaptive_theme.dart';
 import '../core/platform_info.dart';
 import '../navigation/chrome/adaptive_toolbar_host.dart';
@@ -96,6 +97,7 @@ class AdaptiveApp extends StatelessWidget {
     this.themeMode,
     this.theme,
     this.darkTheme,
+    this.style,
     this.materialLightTheme,
     this.materialDarkTheme,
     this.cupertinoLightTheme,
@@ -128,6 +130,7 @@ class AdaptiveApp extends StatelessWidget {
     this.themeMode,
     this.theme,
     this.darkTheme,
+    this.style,
     this.materialLightTheme,
     this.materialDarkTheme,
     this.cupertinoLightTheme,
@@ -204,6 +207,18 @@ class AdaptiveApp extends StatelessWidget {
   /// accent and bar style but uses the system's dark page background.
   final AdaptiveThemeData? darkTheme;
 
+  /// The family of controls for the whole app. Null uses the platform's own:
+  /// native UIKit controls on iOS, Material elsewhere. [AdaptiveStyle.material]
+  /// runs the Material app on iOS too.
+  final AdaptiveStyle? style;
+
+  AdaptiveStyle get _style {
+    final requested = style ?? AdaptiveStyle.platformDefault;
+    return requested == AdaptiveStyle.native && !PlatformInfo.isIOS
+        ? AdaptiveStyle.material
+        : requested;
+  }
+
   AdaptiveThemeData? get _darkData =>
       darkTheme ??
       (theme == null
@@ -278,11 +293,11 @@ class AdaptiveApp extends StatelessWidget {
         routerDelegate != null ||
         routeInformationParser != null;
 
-    if (PlatformInfo.isIOS) {
-      return _buildCupertinoApp(context, platform, isRouter);
-    }
-
-    return _buildMaterialApp(context, platform, isRouter);
+    final app = switch (_style) {
+      AdaptiveStyle.native => _buildCupertinoApp(context, platform, isRouter),
+      AdaptiveStyle.material => _buildMaterialApp(context, platform, isRouter),
+    };
+    return AdaptiveStyleScope(style: _style, child: app);
   }
 
   Widget _buildCupertinoApp(
@@ -531,12 +546,10 @@ class AdaptiveApp extends StatelessWidget {
   }
 
   PlatformTarget _detectPlatform() {
-    if (PlatformInfo.isIOS26OrHigher()) {
-      return PlatformTarget.ios26Plus;
-    } else if (PlatformInfo.isIOS18OrLower()) {
-      return PlatformTarget.ios18OrLower;
-    } else if (PlatformInfo.isIOS) {
-      return PlatformTarget.ios;
+    if (PlatformInfo.isIOS) {
+      return AdaptiveCapabilities.liquidGlass
+          ? PlatformTarget.ios26Plus
+          : PlatformTarget.ios18OrLower;
     } else if (PlatformInfo.isAndroid) {
       return PlatformTarget.android;
     } else if (PlatformInfo.isWeb) {

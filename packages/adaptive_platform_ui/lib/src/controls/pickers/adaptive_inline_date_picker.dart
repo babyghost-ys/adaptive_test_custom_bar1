@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../core/platform_info.dart';
+import '../../core/adaptive_style.dart';
 import '../../native/sheet_platform_view_guard.dart';
 
 /// How [AdaptiveInlineDatePicker] presents dates on iOS.
@@ -111,26 +111,28 @@ class _AdaptiveInlineDatePickerState extends State<AdaptiveInlineDatePicker> {
 
   @override
   Widget build(BuildContext context) {
-    if (PlatformInfo.isIOS && !kIsWeb) {
-      return PlatformViewSheetGuard(
-        child: UiKitView(
-          viewType: 'adaptive_platform_ui/ios26_date_picker',
-          creationParams: _params(),
-          creationParamsCodec: const StandardMessageCodec(),
-          gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
-            Factory<VerticalDragGestureRecognizer>(
-              () => VerticalDragGestureRecognizer(),
-            ),
-            Factory<TapGestureRecognizer>(() => TapGestureRecognizer()),
-          },
-        ),
-      );
+    switch (AdaptiveStyle.of(context)) {
+      case AdaptiveStyle.native:
+        return PlatformViewSheetGuard(
+          child: UiKitView(
+            viewType: 'adaptive_platform_ui/ios26_date_picker',
+            creationParams: _params(),
+            creationParamsCodec: const StandardMessageCodec(),
+            gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+              Factory<VerticalDragGestureRecognizer>(
+                () => VerticalDragGestureRecognizer(),
+              ),
+              Factory<TapGestureRecognizer>(() => TapGestureRecognizer()),
+            },
+          ),
+        );
+      case AdaptiveStyle.material:
+        return CalendarDatePicker(
+          initialDate: widget.initialDate,
+          firstDate: widget.firstDate,
+          lastDate: widget.lastDate,
+          onDateChanged: widget.onDateChanged,
+        );
     }
-    return CalendarDatePicker(
-      initialDate: widget.initialDate,
-      firstDate: widget.firstDate,
-      lastDate: widget.lastDate,
-      onDateChanged: widget.onDateChanged,
-    );
   }
 }

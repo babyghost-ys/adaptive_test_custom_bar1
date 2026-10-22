@@ -1,6 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import '../../core/platform_info.dart';
+import '../../core/adaptive_style.dart';
 import '../../native/sheet_platform_view_guard.dart';
 
 /// A modal sheet that rests at a fraction of the screen height, like a
@@ -33,43 +33,44 @@ class AdaptiveBottomSheet {
     bool isDismissible = true,
   }) {
     assert(heightFactor > 0 && heightFactor <= 1);
-    if (!PlatformInfo.isIOS) {
-      return showModalBottomSheet<T>(
-        context: context,
-        isScrollControlled: true,
-        useSafeArea: true,
-        showDragHandle: true,
-        isDismissible: isDismissible,
-        backgroundColor: backgroundColor,
-        builder: (context) => Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.viewInsetsOf(context).bottom,
+    switch (AdaptiveStyle.of(context)) {
+      case AdaptiveStyle.material:
+        return showModalBottomSheet<T>(
+          context: context,
+          isScrollControlled: true,
+          useSafeArea: true,
+          showDragHandle: true,
+          isDismissible: isDismissible,
+          backgroundColor: backgroundColor,
+          builder: (context) => Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.viewInsetsOf(context).bottom,
+            ),
+            child: FractionallySizedBox(
+              heightFactor: heightFactor,
+              child: Builder(builder: builder),
+            ),
           ),
-          child: FractionallySizedBox(
+        );
+      case AdaptiveStyle.native:
+        // Over another sheet, a second full-screen scrim would be split around
+        // native controls by Flutter's platform view compositing. The lower
+        // sheet dims itself instead, as UIKit dims a sheet behind a sheet.
+        final nested = ModalRoute.of(context) is PopupRoute;
+        return showModalBottomSheet<T>(
+          context: context,
+          isScrollControlled: true,
+          isDismissible: isDismissible,
+          backgroundColor: const Color(0x00000000),
+          elevation: 0,
+          barrierColor: nested ? const Color(0x00000000) : _scrim,
+          builder: (context) => _IOSSheet(
             heightFactor: heightFactor,
-            child: Builder(builder: builder),
+            backgroundColor: backgroundColor,
+            builder: builder,
           ),
-        ),
-      );
+        );
     }
-
-    // Over another sheet, a second full-screen scrim would be split around
-    // native controls by Flutter's platform view compositing. The lower
-    // sheet dims itself instead, as UIKit dims a sheet behind a sheet.
-    final nested = ModalRoute.of(context) is PopupRoute;
-    return showModalBottomSheet<T>(
-      context: context,
-      isScrollControlled: true,
-      isDismissible: isDismissible,
-      backgroundColor: const Color(0x00000000),
-      elevation: 0,
-      barrierColor: nested ? const Color(0x00000000) : _scrim,
-      builder: (context) => _IOSSheet(
-        heightFactor: heightFactor,
-        backgroundColor: backgroundColor,
-        builder: builder,
-      ),
-    );
   }
 }
 

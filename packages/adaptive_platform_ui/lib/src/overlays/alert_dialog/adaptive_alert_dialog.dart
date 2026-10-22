@@ -1,6 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import '../../core/platform_info.dart';
+import '../../core/adaptive_style.dart';
 import 'ios26_alert_dialog.dart';
 
 export 'ios26_alert_dialog.dart' show AlertAction, AlertActionStyle;
@@ -57,45 +57,46 @@ class AdaptiveAlertDialog {
     Color? iconColor,
     String? oneTimeCode,
   }) {
-    // iOS 26+ - Use native iOS 26 alert dialog
-    if (PlatformInfo.isIOS) {
-      // Convert icon to String if needed for iOS 26 (expects SF Symbol)
-      String? iconString;
-      if (icon != null) {
-        if (icon is String) {
-          iconString = icon;
+    switch (AdaptiveStyle.of(context)) {
+      case AdaptiveStyle.native:
+        // iOS 26+ - Use native iOS 26 alert dialog
+        // Convert icon to String if needed for iOS 26 (expects SF Symbol)
+        String? iconString;
+        if (icon != null) {
+          if (icon is String) {
+            iconString = icon;
+          }
+          // If IconData is provided on iOS 26+, ignore it (iOS 26 uses SF Symbols)
         }
-        // If IconData is provided on iOS 26+, ignore it (iOS 26 uses SF Symbols)
-      }
 
-      return showCupertinoDialog<void>(
-        context: context,
-        barrierColor: CupertinoColors.transparent,
-        builder: (context) => IOS26AlertDialog(
+        return showCupertinoDialog<void>(
+          context: context,
+          barrierColor: CupertinoColors.transparent,
+          builder: (context) => IOS26AlertDialog(
+            title: title,
+            message: message,
+            actions: actions,
+            icon: iconString,
+            iconSize: iconSize,
+            iconColor: iconColor,
+            oneTimeCode: oneTimeCode,
+            input: null, // No input for standard dialog
+          ),
+        );
+      case AdaptiveStyle.material:
+        // Android - Use Material Design AlertDialog
+        return _showMaterialDialog(
+          context: context,
           title: title,
           message: message,
           actions: actions,
-          icon: iconString,
+          icon: icon,
           iconSize: iconSize,
           iconColor: iconColor,
           oneTimeCode: oneTimeCode,
-          input: null, // No input for standard dialog
-        ),
-      );
+          input: null,
+        );
     }
-
-    // Android - Use Material Design AlertDialog
-    return _showMaterialDialog(
-      context: context,
-      title: title,
-      message: message,
-      actions: actions,
-      icon: icon,
-      iconSize: iconSize,
-      iconColor: iconColor,
-      oneTimeCode: oneTimeCode,
-      input: null,
-    );
   }
 
   /// Shows an adaptive alert dialog with text input
@@ -112,44 +113,45 @@ class AdaptiveAlertDialog {
     double? iconSize,
     Color? iconColor,
   }) {
-    // iOS 26+ - Use native iOS 26 alert dialog with input
-    if (PlatformInfo.isIOS) {
-      // Convert icon to String if needed for iOS 26 (expects SF Symbol)
-      String? iconString;
-      if (icon != null) {
-        if (icon is String) {
-          iconString = icon;
+    switch (AdaptiveStyle.of(context)) {
+      case AdaptiveStyle.native:
+        // iOS 26+ - Use native iOS 26 alert dialog with input
+        // Convert icon to String if needed for iOS 26 (expects SF Symbol)
+        String? iconString;
+        if (icon != null) {
+          if (icon is String) {
+            iconString = icon;
+          }
         }
-      }
 
-      return showCupertinoDialog<String?>(
-        context: context,
-        barrierColor: CupertinoColors.transparent,
-        builder: (context) => IOS26AlertDialog(
+        return showCupertinoDialog<String?>(
+          context: context,
+          barrierColor: CupertinoColors.transparent,
+          builder: (context) => IOS26AlertDialog(
+            title: title,
+            message: message,
+            actions: actions,
+            icon: iconString,
+            iconSize: iconSize,
+            iconColor: iconColor,
+            oneTimeCode: null,
+            input: input,
+          ),
+        );
+      case AdaptiveStyle.material:
+        // Android - Use Material Design AlertDialog with TextField
+        return _showMaterialDialog<String?>(
+          context: context,
           title: title,
           message: message,
           actions: actions,
-          icon: iconString,
+          icon: icon,
           iconSize: iconSize,
           iconColor: iconColor,
           oneTimeCode: null,
           input: input,
-        ),
-      );
+        );
     }
-
-    // Android - Use Material Design AlertDialog with TextField
-    return _showMaterialDialog<String?>(
-      context: context,
-      title: title,
-      message: message,
-      actions: actions,
-      icon: icon,
-      iconSize: iconSize,
-      iconColor: iconColor,
-      oneTimeCode: null,
-      input: input,
-    );
   }
 
   /// Internal helper method for showing Material dialogs

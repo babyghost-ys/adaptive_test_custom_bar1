@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
-import '../../core/platform_info.dart';
+import '../../core/adaptive_style.dart';
 import '../../native/sheet_platform_view_guard.dart';
 
 /// An adaptive text field that renders platform-specific styles
@@ -133,11 +133,12 @@ class AdaptiveTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (PlatformInfo.isIOS) {
-      return _NativeIOSTextField(configuration: this);
+    switch (AdaptiveStyle.of(context)) {
+      case AdaptiveStyle.native:
+        return _NativeIOSTextField(configuration: this);
+      case AdaptiveStyle.material:
+        return _buildMaterialTextField(context);
     }
-
-    return _buildMaterialTextField(context);
   }
 
   Widget _buildMaterialTextField(BuildContext context) {

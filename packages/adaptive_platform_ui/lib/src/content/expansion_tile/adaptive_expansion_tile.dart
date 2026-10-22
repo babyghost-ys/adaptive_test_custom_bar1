@@ -1,6 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:adaptive_platform_ui/src/core/platform_info.dart';
+import 'package:adaptive_platform_ui/src/core/adaptive_style.dart';
 
 /// A platform-adaptive expansion tile widget that provides expandable/collapsible content.
 ///
@@ -162,10 +162,12 @@ class _AdaptiveExpansionTileState extends State<AdaptiveExpansionTile>
 
   @override
   Widget build(BuildContext context) {
-    if (PlatformInfo.isIOS) {
-      return _buildIOSExpansionTile(context);
+    switch (AdaptiveStyle.of(context)) {
+      case AdaptiveStyle.native:
+        return _buildIOSExpansionTile(context);
+      case AdaptiveStyle.material:
+        return _buildMaterialExpansionTile(context);
     }
-    return _buildMaterialExpansionTile(context);
   }
 
   Widget _buildIOSExpansionTile(BuildContext context) {

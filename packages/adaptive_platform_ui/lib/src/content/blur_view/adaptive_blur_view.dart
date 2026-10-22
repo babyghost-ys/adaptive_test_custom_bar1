@@ -1,8 +1,8 @@
+import '../../core/adaptive_style.dart';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart' show CupertinoTheme;
 import 'package:flutter/services.dart';
-import '../../core/platform_info.dart';
 import '../../native/sheet_platform_view_guard.dart';
 
 /// A widget that applies a platform-specific blur effect to its background
@@ -32,7 +32,7 @@ class AdaptiveBlurView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // iOS 26+ uses native UIVisualEffectView
-    if (PlatformInfo.isIOS && PlatformInfo.isIOSVersionInRange(26, 99)) {
+    if (AdaptiveCapabilities.liquidGlass) {
       return Ios26NativeBlurView(
         blurStyle: blurStyle,
         borderRadius: borderRadius,

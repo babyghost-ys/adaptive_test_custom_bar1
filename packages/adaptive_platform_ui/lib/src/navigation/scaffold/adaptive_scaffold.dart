@@ -1,8 +1,8 @@
+import '../../core/adaptive_style.dart';
 import 'package:adaptive_platform_ui/src/navigation/tab_bar/ios26_native_tab_bar.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../core/platform_info.dart';
 import '../../style/sf_symbol.dart';
 import '../../core/theme/adaptive_theme.dart';
 import '../app_bar/adaptive_app_bar.dart';
@@ -281,10 +281,13 @@ class AdaptiveScaffoldState extends State<AdaptiveScaffold> {
   /// Material drawer.
   AdaptiveDrawer? get _nativeDrawer {
     final drawer = widget.drawer;
-    return PlatformInfo.isIOS && drawer is AdaptiveDrawer ? drawer : null;
+    return _native && drawer is AdaptiveDrawer ? drawer : null;
   }
 
   bool _nativeDrawerOpen = false;
+
+  /// Whether this page renders the native iOS family.
+  bool get _native => AdaptiveStyle.of(context) == AdaptiveStyle.native;
 
   /// Whether the drawer is showing.
   bool get isDrawerOpen =>
@@ -360,9 +363,7 @@ class AdaptiveScaffoldState extends State<AdaptiveScaffold> {
           ? items[index].label
           : null;
       final linksScroll =
-          PlatformInfo.isIOS &&
-          appBar.useNativeToolbar &&
-          appBar.scrollController == null;
+          _native && appBar.useNativeToolbar && appBar.scrollController == null;
       _resolvedAppBar = appBar.copyWith(
         title: tabTitle,
         navigationBarColor: appBar.navigationBarColor ?? _barStyle.color,
@@ -568,7 +569,7 @@ class AdaptiveScaffoldState extends State<AdaptiveScaffold> {
   Widget build(BuildContext context) {
     final bar = widget.bottomNavigationBar;
     final nativeTabs =
-        PlatformInfo.isIOS &&
+        _native &&
         bar?.useNativeBottomBar == true &&
         bar?.items?.isNotEmpty == true &&
         bar?.selectedIndex != null &&
@@ -613,7 +614,7 @@ class AdaptiveScaffoldState extends State<AdaptiveScaffold> {
     final useNativeBottomBar = bottomBar?.useNativeBottomBar ?? true;
 
     // iOS 26+ with native toolbar enabled - Use IOS26Scaffold
-    if (PlatformInfo.isIOS && useNativeToolbar) {
+    if (_native && useNativeToolbar) {
       // The body is the app's own tab switcher (an `IndexedStack`, a
       // `StatefulNavigationShell`, `pages[index]`...), so it is mounted
       // exactly once. Earlier versions built one copy per tab, which ran
@@ -711,7 +712,7 @@ class AdaptiveScaffoldState extends State<AdaptiveScaffold> {
 
     // iOS <26 (iOS 18 and below) OR iOS 26+ with useNativeToolbar: false
     // Use CupertinoPageScaffold with CupertinoTabBar if destinations provided
-    if (PlatformInfo.isIOS) {
+    if (_native) {
       Widget? effectiveLeading = _appBar?.leading;
 
       if (bottomBar?.items != null &&
@@ -736,7 +737,7 @@ class AdaptiveScaffoldState extends State<AdaptiveScaffold> {
                 (Navigator.maybeOf(context)?.canPop() ?? false))) {
           navigationBar = CupertinoNavigationBar(
             automaticallyImplyLeading:
-                PlatformInfo.isIOS26OrHigher() && useNativeToolbar
+                AdaptiveCapabilities.liquidGlass && useNativeToolbar
                 ? false
                 : true, // Let CupertinoNavigationBar handle back button naturally
             middle: _buildAppBarTitle(),
@@ -773,7 +774,7 @@ class AdaptiveScaffoldState extends State<AdaptiveScaffold> {
         Widget? tabBar;
 
         // iOS 26+ with useNativeBottomBar=true -> Use native tab bar
-        if (PlatformInfo.isIOS26OrHigher() && useNativeBottomBar) {
+        if (AdaptiveCapabilities.liquidGlass && useNativeBottomBar) {
           tabBar = _MinimizableTabBar(
             key: _tabBarKey,
             selectedIndex: bottomBar!.selectedIndex!,
@@ -835,7 +836,7 @@ class AdaptiveScaffoldState extends State<AdaptiveScaffold> {
                 onNotification: (notification) {
                   return false; // Let it bubble up
                 },
-                child: PlatformInfo.isIOS26OrHigher() && useNativeBottomBar
+                child: AdaptiveCapabilities.liquidGlass && useNativeBottomBar
                     ? NativeBottomBarLayout(
                         body: _MaterialAncestor(
                           child: widget.body ?? const SizedBox.shrink(),
@@ -849,7 +850,8 @@ class AdaptiveScaffoldState extends State<AdaptiveScaffold> {
               ),
             ),
             // Show tab bar at bottom for non-native cases
-            if (!PlatformInfo.isIOS26OrHigher() || !useNativeBottomBar) tabBar!,
+            if (!AdaptiveCapabilities.liquidGlass || !useNativeBottomBar)
+              tabBar!,
           ],
         );
 
@@ -859,7 +861,8 @@ class AdaptiveScaffoldState extends State<AdaptiveScaffold> {
               bodyWidget,
               Positioned(
                 right: 16,
-                bottom: (!PlatformInfo.isIOS26OrHigher() || !useNativeBottomBar)
+                bottom:
+                    (!AdaptiveCapabilities.liquidGlass || !useNativeBottomBar)
                     ? 96
                     : 16, // Add space for tab bar if not native
                 child: widget.floatingActionButton!,
@@ -886,7 +889,7 @@ class AdaptiveScaffoldState extends State<AdaptiveScaffold> {
         // disable resizeToAvoidBottomInset so the keyboard covers the tab bar
         // instead of pushing it above.
         final hasNativeTabBar =
-            PlatformInfo.isIOS26OrHigher() &&
+            AdaptiveCapabilities.liquidGlass &&
             useNativeBottomBar &&
             tabBar != null;
 
@@ -919,7 +922,7 @@ class AdaptiveScaffoldState extends State<AdaptiveScaffold> {
               (Navigator.maybeOf(context)?.canPop() ?? false))) {
         navigationBar = CupertinoNavigationBar(
           automaticallyImplyLeading:
-              PlatformInfo.isIOS26OrHigher() && useNativeToolbar
+              AdaptiveCapabilities.liquidGlass && useNativeToolbar
               ? false
               : true, // Let CupertinoNavigationBar handle back button naturally
           middle: _buildAppBarTitle(),

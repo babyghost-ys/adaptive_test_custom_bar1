@@ -1,6 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import '../../core/platform_info.dart';
+import '../../core/adaptive_style.dart';
 
 /// An adaptive badge that renders platform-specific badge styles
 ///
@@ -85,44 +85,31 @@ class AdaptiveBadge extends StatelessWidget {
         label ??
         (count != null ? (count! > 99 ? '99+' : count!.toString()) : '');
 
-    // iOS - Use custom iOS-style badge
-    if (PlatformInfo.isIOS) {
-      return _IOSBadge(
-        displayText: displayText,
-        backgroundColor: backgroundColor ?? CupertinoColors.systemRed,
-        textColor: textColor ?? CupertinoColors.white,
-        isLarge: isLarge,
-        alignment: alignment,
-        offset: offset,
-        child: child,
-      );
+    switch (AdaptiveStyle.of(context)) {
+      case AdaptiveStyle.native:
+        // iOS - Use custom iOS-style badge
+        return _IOSBadge(
+          displayText: displayText,
+          backgroundColor: backgroundColor ?? CupertinoColors.systemRed,
+          textColor: textColor ?? CupertinoColors.white,
+          isLarge: isLarge,
+          alignment: alignment,
+          offset: offset,
+          child: child,
+        );
+      case AdaptiveStyle.material:
+        // Android - Use Material Design Badge
+        return Badge(
+          label: Text(displayText),
+          backgroundColor: backgroundColor,
+          textColor: textColor,
+          isLabelVisible: true,
+          alignment: alignment ?? AlignmentDirectional.topEnd,
+          offset: offset,
+          largeSize: isLarge ? 24 : null,
+          child: child,
+        );
     }
-
-    // Android - Use Material Design Badge
-    if (PlatformInfo.isAndroid) {
-      return Badge(
-        label: Text(displayText),
-        backgroundColor: backgroundColor,
-        textColor: textColor,
-        isLabelVisible: true,
-        alignment: alignment ?? AlignmentDirectional.topEnd,
-        offset: offset,
-        largeSize: isLarge ? 24 : null,
-        child: child,
-      );
-    }
-
-    // Fallback for other platforms (web, desktop, etc.)
-    return Badge(
-      label: Text(displayText),
-      backgroundColor: backgroundColor,
-      textColor: textColor,
-      isLabelVisible: true,
-      alignment: alignment ?? AlignmentDirectional.topEnd,
-      offset: offset,
-      largeSize: isLarge ? 24 : null,
-      child: child,
-    );
   }
 }
 

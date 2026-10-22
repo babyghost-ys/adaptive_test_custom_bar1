@@ -1,6 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import '../../core/platform_info.dart';
+import '../../core/adaptive_style.dart';
 
 /// An adaptive card that renders platform-specific card styles
 ///
@@ -99,53 +99,36 @@ class AdaptiveCard extends StatelessWidget {
         ? Padding(padding: padding!, child: child)
         : child;
 
-    // iOS - Use custom iOS-style card
-    if (PlatformInfo.isIOS) {
-      return _IOSCard(
-        color: color,
-        margin: margin,
-        clipBehavior: clipBehavior ?? Clip.none,
-        semanticContainer: semanticContainer,
-        borderRadius: borderRadius,
-        borderColor: borderColor,
-        borderWidth: borderWidth,
-        child: content,
-      );
+    switch (AdaptiveStyle.of(context)) {
+      case AdaptiveStyle.native:
+        // iOS - Use custom iOS-style card
+        return _IOSCard(
+          color: color,
+          margin: margin,
+          clipBehavior: clipBehavior ?? Clip.none,
+          semanticContainer: semanticContainer,
+          borderRadius: borderRadius,
+          borderColor: borderColor,
+          borderWidth: borderWidth,
+          child: content,
+        );
+      case AdaptiveStyle.material:
+        // Android - Use Material Design Card
+        return Card(
+          color: color,
+          elevation: elevation,
+          shape:
+              shape ??
+              (borderRadius != null
+                  ? RoundedRectangleBorder(borderRadius: borderRadius!)
+                  : null),
+          borderOnForeground: borderOnForeground,
+          margin: margin,
+          clipBehavior: clipBehavior,
+          semanticContainer: semanticContainer,
+          child: content,
+        );
     }
-
-    // Android - Use Material Design Card
-    if (PlatformInfo.isAndroid) {
-      return Card(
-        color: color,
-        elevation: elevation,
-        shape:
-            shape ??
-            (borderRadius != null
-                ? RoundedRectangleBorder(borderRadius: borderRadius!)
-                : null),
-        borderOnForeground: borderOnForeground,
-        margin: margin,
-        clipBehavior: clipBehavior,
-        semanticContainer: semanticContainer,
-        child: content,
-      );
-    }
-
-    // Fallback for other platforms (web, desktop, etc.)
-    return Card(
-      color: color,
-      elevation: elevation,
-      shape:
-          shape ??
-          (borderRadius != null
-              ? RoundedRectangleBorder(borderRadius: borderRadius!)
-              : null),
-      borderOnForeground: borderOnForeground,
-      margin: margin,
-      clipBehavior: clipBehavior,
-      semanticContainer: semanticContainer,
-      child: content,
-    );
   }
 }
 

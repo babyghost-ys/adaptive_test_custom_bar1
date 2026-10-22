@@ -1,6 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import '../../core/platform_info.dart';
+import '../../core/adaptive_style.dart';
 
 /// An adaptive tooltip that renders platform-specific tooltip styles
 ///
@@ -70,39 +70,40 @@ class AdaptiveTooltip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // iOS - Use custom iOS-style tooltip
-    if (PlatformInfo.isIOS) {
-      return _IOSTooltip(
-        message: message,
-        preferBelow: preferBelow,
-        verticalOffset: verticalOffset,
-        padding: padding,
-        margin: margin,
-        height: height,
-        decoration: decoration,
-        textStyle: textStyle,
-        waitDuration: waitDuration,
-        showDuration: showDuration,
-        child: child,
-      );
+    switch (AdaptiveStyle.of(context)) {
+      case AdaptiveStyle.native:
+        // iOS - Use custom iOS-style tooltip
+        return _IOSTooltip(
+          message: message,
+          preferBelow: preferBelow,
+          verticalOffset: verticalOffset,
+          padding: padding,
+          margin: margin,
+          height: height,
+          decoration: decoration,
+          textStyle: textStyle,
+          waitDuration: waitDuration,
+          showDuration: showDuration,
+          child: child,
+        );
+      case AdaptiveStyle.material:
+        // Android and fallback - Use Material Design Tooltip
+        return Tooltip(
+          message: message,
+          preferBelow: preferBelow,
+          verticalOffset: verticalOffset,
+          padding: padding,
+          margin: margin,
+          constraints: height != null
+              ? BoxConstraints(minHeight: height!, maxHeight: height!)
+              : null,
+          decoration: decoration,
+          textStyle: textStyle,
+          waitDuration: waitDuration,
+          showDuration: showDuration,
+          child: child,
+        );
     }
-
-    // Android and fallback - Use Material Design Tooltip
-    return Tooltip(
-      message: message,
-      preferBelow: preferBelow,
-      verticalOffset: verticalOffset,
-      padding: padding,
-      margin: margin,
-      constraints: height != null
-          ? BoxConstraints(minHeight: height!, maxHeight: height!)
-          : null,
-      decoration: decoration,
-      textStyle: textStyle,
-      waitDuration: waitDuration,
-      showDuration: showDuration,
-      child: child,
-    );
   }
 }
 

@@ -1,7 +1,7 @@
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
-import '../../core/platform_info.dart';
+import '../../core/adaptive_style.dart';
 
 /// Where a native-bar page's body sits relative to its bars.
 ///
@@ -32,7 +32,7 @@ class BodyPlacement {
     bool? extendBehindBottom,
   }) {
     final scrolls = appliesInsets(body);
-    final glass = PlatformInfo.isIOS26OrHigher();
+    final glass = AdaptiveCapabilities.liquidGlass;
     return BodyPlacement(
       underTop: extendBehindTop ?? (scrolls && (glass || largeTitle)),
       underBottom: extendBehindBottom ?? (scrolls && glass),

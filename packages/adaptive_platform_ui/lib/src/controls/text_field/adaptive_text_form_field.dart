@@ -1,7 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../core/platform_info.dart';
+import '../../core/adaptive_style.dart';
 import 'adaptive_text_field.dart';
 
 /// An adaptive text form field that renders platform-specific styles
@@ -150,11 +150,12 @@ class AdaptiveTextFormField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (PlatformInfo.isIOS) {
-      return _NativeTextFormField(configuration: this);
+    switch (AdaptiveStyle.of(context)) {
+      case AdaptiveStyle.native:
+        return _NativeTextFormField(configuration: this);
+      case AdaptiveStyle.material:
+        return _buildMaterialTextFormField(context);
     }
-
-    return _buildMaterialTextFormField(context);
   }
 
   Widget _buildMaterialTextFormField(BuildContext context) {

@@ -1,6 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import '../../core/platform_info.dart';
+import '../../core/adaptive_style.dart';
 import 'minute_interval.dart';
 
 /// An adaptive time picker that renders platform-specific styles
@@ -24,22 +24,23 @@ class AdaptiveTimePicker {
     bool use24HourFormat = false,
     int minuteInterval = 1,
   }) async {
-    if (PlatformInfo.isIOS) {
-      return _showCupertinoTimePicker(
-        context: context,
-        initialTime: initialTime,
-        use24HourFormat: use24HourFormat,
-        minuteInterval: minuteInterval,
-      );
+    switch (AdaptiveStyle.of(context)) {
+      case AdaptiveStyle.native:
+        return _showCupertinoTimePicker(
+          context: context,
+          initialTime: initialTime,
+          use24HourFormat: use24HourFormat,
+          minuteInterval: minuteInterval,
+        );
+      case AdaptiveStyle.material:
+        // Android - Use Material TimePicker
+        return _showMaterialTimePicker(
+          context: context,
+          initialTime: initialTime,
+          use24HourFormat: use24HourFormat,
+          minuteInterval: minuteInterval,
+        );
     }
-
-    // Android - Use Material TimePicker
-    return _showMaterialTimePicker(
-      context: context,
-      initialTime: initialTime,
-      use24HourFormat: use24HourFormat,
-      minuteInterval: minuteInterval,
-    );
   }
 
   static Future<TimeOfDay?> _showCupertinoTimePicker({
@@ -165,11 +166,14 @@ class _CupertinoTimePickerContentState
                 CupertinoButton(
                   padding: EdgeInsets.zero,
                   onPressed: () => Navigator.of(context).pop(),
-                  child: Text(
-                    PlatformInfo.isIOS
-                        ? CupertinoLocalizations.of(context).cancelButtonLabel
-                        : MaterialLocalizations.of(context).cancelButtonLabel,
-                  ),
+                  child: Text(switch (AdaptiveStyle.of(context)) {
+                    AdaptiveStyle.native => CupertinoLocalizations.of(
+                      context,
+                    ).cancelButtonLabel,
+                    AdaptiveStyle.material => MaterialLocalizations.of(
+                      context,
+                    ).cancelButtonLabel,
+                  }),
                 ),
                 CupertinoButton(
                   padding: EdgeInsets.zero,

@@ -1,6 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import '../../core/platform_info.dart';
+import '../../core/adaptive_style.dart';
 
 /// Snackbar type for different visual styles
 enum AdaptiveSnackBarType {
@@ -38,24 +38,25 @@ class AdaptiveSnackBar {
     String? action,
     VoidCallback? onActionPressed,
   }) {
-    if (PlatformInfo.isIOS) {
-      _showIOSSnackBar(
-        context,
-        message: message,
-        type: type,
-        duration: duration,
-        action: action,
-        onActionPressed: onActionPressed,
-      );
-    } else {
-      _showAndroidSnackBar(
-        context,
-        message: message,
-        type: type,
-        duration: duration,
-        action: action,
-        onActionPressed: onActionPressed,
-      );
+    switch (AdaptiveStyle.of(context)) {
+      case AdaptiveStyle.native:
+        _showIOSSnackBar(
+          context,
+          message: message,
+          type: type,
+          duration: duration,
+          action: action,
+          onActionPressed: onActionPressed,
+        );
+      case AdaptiveStyle.material:
+        _showAndroidSnackBar(
+          context,
+          message: message,
+          type: type,
+          duration: duration,
+          action: action,
+          onActionPressed: onActionPressed,
+        );
     }
   }
 

@@ -1,10 +1,10 @@
+import '../../core/adaptive_style.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
-import '../../core/platform_info.dart';
 import '../chrome/toolbar_registry.dart';
 import '../search/adaptive_navigation_search_bar.dart';
 
@@ -28,7 +28,7 @@ abstract final class AdaptiveNavigator {
     RouteSettings? settings,
   }) async {
     final navigator = Navigator.of(context);
-    if (!PlatformInfo.isIOS) {
+    if (AdaptiveStyle.of(context) != AdaptiveStyle.native) {
       return navigator.push<T>(
         MaterialPageRoute<T>(builder: builder, settings: settings),
       );
@@ -72,7 +72,9 @@ class AdaptivePage<T> extends Page<T> {
 
   @override
   Route<T> createRoute(BuildContext context) {
-    if (!PlatformInfo.isIOS) return _MaterialPageBasedRoute<T>(page: this);
+    if (AdaptiveStyle.of(context) != AdaptiveStyle.native) {
+      return _MaterialPageBasedRoute<T>(page: this);
+    }
     return _NativePageRoute<T>.page(
       page: this,
       navigation: _NativeNavigation.instance,

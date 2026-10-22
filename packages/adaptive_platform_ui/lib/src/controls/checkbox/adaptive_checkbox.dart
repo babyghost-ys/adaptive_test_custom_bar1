@@ -1,6 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import '../../core/platform_info.dart';
+import '../../core/adaptive_style.dart';
 
 /// An adaptive checkbox that renders platform-specific checkbox styles
 ///
@@ -72,40 +72,28 @@ class AdaptiveCheckbox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // iOS - Use custom iOS-style checkbox
-    if (PlatformInfo.isIOS) {
-      return _IOSCheckbox(
-        value: value,
-        tristate: tristate,
-        onChanged: onChanged,
-        activeColor: activeColor ?? CupertinoTheme.of(context).primaryColor,
-        checkColor: checkColor,
-      );
+    switch (AdaptiveStyle.of(context)) {
+      case AdaptiveStyle.native:
+        // iOS - Use custom iOS-style checkbox
+        return _IOSCheckbox(
+          value: value,
+          tristate: tristate,
+          onChanged: onChanged,
+          activeColor: activeColor ?? CupertinoTheme.of(context).primaryColor,
+          checkColor: checkColor,
+        );
+      case AdaptiveStyle.material:
+        // Android - Use Material Design Checkbox
+        return Checkbox(
+          value: value,
+          tristate: tristate,
+          onChanged: onChanged,
+          activeColor: activeColor,
+          checkColor: checkColor,
+          focusColor: focusColor,
+          hoverColor: hoverColor,
+        );
     }
-
-    // Android - Use Material Design Checkbox
-    if (PlatformInfo.isAndroid) {
-      return Checkbox(
-        value: value,
-        tristate: tristate,
-        onChanged: onChanged,
-        activeColor: activeColor,
-        checkColor: checkColor,
-        focusColor: focusColor,
-        hoverColor: hoverColor,
-      );
-    }
-
-    // Fallback for other platforms (web, desktop, etc.)
-    return Checkbox(
-      value: value,
-      tristate: tristate,
-      onChanged: onChanged,
-      activeColor: activeColor,
-      checkColor: checkColor,
-      focusColor: focusColor,
-      hoverColor: hoverColor,
-    );
   }
 }
 

@@ -1,6 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import '../../core/platform_info.dart';
+import '../../core/adaptive_style.dart';
 
 /// An adaptive radio button that renders platform-specific radio styles
 ///
@@ -68,46 +68,31 @@ class AdaptiveRadio<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // iOS - Use custom iOS-style radio
-    if (PlatformInfo.isIOS) {
-      return _IOSRadio<T>(
-        value: value,
-        groupValue: groupValue,
-        onChanged: onChanged,
-        activeColor: activeColor ?? CupertinoTheme.of(context).primaryColor,
-        toggleable: toggleable,
-      );
-    }
-
-    // Android - Use Material Design Radio
-    if (PlatformInfo.isAndroid) {
-      // ignore: deprecated_member_use
-      return Radio<T>(
-        value: value,
+    switch (AdaptiveStyle.of(context)) {
+      case AdaptiveStyle.native:
+        // iOS - Use custom iOS-style radio
+        return _IOSRadio<T>(
+          value: value,
+          groupValue: groupValue,
+          onChanged: onChanged,
+          activeColor: activeColor ?? CupertinoTheme.of(context).primaryColor,
+          toggleable: toggleable,
+        );
+      case AdaptiveStyle.material:
+        // Android - Use Material Design Radio
         // ignore: deprecated_member_use
-        groupValue: groupValue,
-        // ignore: deprecated_member_use
-        onChanged: onChanged,
-        activeColor: activeColor,
-        focusColor: focusColor,
-        hoverColor: hoverColor,
-        toggleable: toggleable,
-      );
+        return Radio<T>(
+          value: value,
+          // ignore: deprecated_member_use
+          groupValue: groupValue,
+          // ignore: deprecated_member_use
+          onChanged: onChanged,
+          activeColor: activeColor,
+          focusColor: focusColor,
+          hoverColor: hoverColor,
+          toggleable: toggleable,
+        );
     }
-
-    // Fallback for other platforms (web, desktop, etc.)
-    // ignore: deprecated_member_use
-    return Radio<T>(
-      value: value,
-      // ignore: deprecated_member_use
-      groupValue: groupValue,
-      // ignore: deprecated_member_use
-      onChanged: onChanged,
-      activeColor: activeColor,
-      focusColor: focusColor,
-      hoverColor: hoverColor,
-      toggleable: toggleable,
-    );
   }
 }
 

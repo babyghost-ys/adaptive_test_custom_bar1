@@ -1,6 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import '../../core/platform_info.dart';
+import '../../core/adaptive_style.dart';
 import '../../style/sf_symbol.dart';
 import 'ios26_button.dart';
 
@@ -155,21 +155,76 @@ class AdaptiveButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // UIKit chooses the appearance for the running iOS release.
-    if (PlatformInfo.isIOS) {
-      // Unset, UIKit would fall back to system blue whatever the app's accent.
-      final tint =
-          color ??
-          CupertinoDynamicColor.resolve(
-            CupertinoTheme.of(context).primaryColor,
-            context,
+    switch (AdaptiveStyle.of(context)) {
+      case AdaptiveStyle.native:
+        // UIKit chooses the appearance for the running iOS release.
+        // Unset, UIKit would fall back to system blue whatever the app's accent.
+        final tint =
+            color ??
+            CupertinoDynamicColor.resolve(
+              CupertinoTheme.of(context).primaryColor,
+              context,
+            );
+        // SF Symbol mode - use native SF Symbol rendering
+        if (sfSymbol != null) {
+          return _wrapIOSButton(
+            IOS26Button.sfSymbol(
+              onPressed: onPressed,
+              sfSymbol: sfSymbol!,
+              style: _mapToIOS26Style(style),
+              size: _mapToIOS26Size(size),
+              color: tint,
+              enabled: enabled,
+              padding: padding,
+              borderRadius: borderRadius,
+              minSize: minSize,
+              useSmoothRectangleBorder: useSmoothRectangleBorder,
+            ),
           );
-      // SF Symbol mode - use native SF Symbol rendering
-      if (sfSymbol != null) {
+        }
+
+        // Child mode - overlay widget on native button
+        if (child != null) {
+          return _wrapIOSButton(
+            IOS26Button.child(
+              onPressed: onPressed,
+              style: _mapToIOS26Style(style),
+              size: _mapToIOS26Size(size),
+              color: tint,
+              enabled: enabled,
+              padding: padding,
+              borderRadius: borderRadius,
+              minSize: minSize,
+              useSmoothRectangleBorder: useSmoothRectangleBorder,
+              child: child!,
+            ),
+          );
+        }
+
+        // Icon mode - use child mode with Icon widget
+        if (icon != null) {
+          return _wrapIOSButton(
+            IOS26Button.child(
+              onPressed: onPressed,
+              style: _mapToIOS26Style(style),
+              size: _mapToIOS26Size(size),
+              color: tint,
+              enabled: enabled,
+              padding: padding,
+              borderRadius: borderRadius,
+              minSize: minSize,
+              useSmoothRectangleBorder: useSmoothRectangleBorder,
+              child: Icon(icon, color: iconColor, size: 24),
+            ),
+          );
+        }
+
+        // Label mode
         return _wrapIOSButton(
-          IOS26Button.sfSymbol(
+          IOS26Button(
             onPressed: onPressed,
-            sfSymbol: sfSymbol!,
+            label: label!,
+            textColor: textColor,
             style: _mapToIOS26Style(style),
             size: _mapToIOS26Size(size),
             color: tint,
@@ -180,69 +235,10 @@ class AdaptiveButton extends StatelessWidget {
             useSmoothRectangleBorder: useSmoothRectangleBorder,
           ),
         );
-      }
-
-      // Child mode - overlay widget on native button
-      if (child != null) {
-        return _wrapIOSButton(
-          IOS26Button.child(
-            onPressed: onPressed,
-            style: _mapToIOS26Style(style),
-            size: _mapToIOS26Size(size),
-            color: tint,
-            enabled: enabled,
-            padding: padding,
-            borderRadius: borderRadius,
-            minSize: minSize,
-            useSmoothRectangleBorder: useSmoothRectangleBorder,
-            child: child!,
-          ),
-        );
-      }
-
-      // Icon mode - use child mode with Icon widget
-      if (icon != null) {
-        return _wrapIOSButton(
-          IOS26Button.child(
-            onPressed: onPressed,
-            style: _mapToIOS26Style(style),
-            size: _mapToIOS26Size(size),
-            color: tint,
-            enabled: enabled,
-            padding: padding,
-            borderRadius: borderRadius,
-            minSize: minSize,
-            useSmoothRectangleBorder: useSmoothRectangleBorder,
-            child: Icon(icon, color: iconColor, size: 24),
-          ),
-        );
-      }
-
-      // Label mode
-      return _wrapIOSButton(
-        IOS26Button(
-          onPressed: onPressed,
-          label: label!,
-          textColor: textColor,
-          style: _mapToIOS26Style(style),
-          size: _mapToIOS26Size(size),
-          color: tint,
-          enabled: enabled,
-          padding: padding,
-          borderRadius: borderRadius,
-          minSize: minSize,
-          useSmoothRectangleBorder: useSmoothRectangleBorder,
-        ),
-      );
+      case AdaptiveStyle.material:
+        // Android - Use Material Design button
+        return _buildMaterialButton(context);
     }
-
-    // Android - Use Material Design button
-    if (PlatformInfo.isAndroid) {
-      return _buildMaterialButton(context);
-    }
-
-    // Fallback for other platforms (web, desktop, etc.)
-    return _buildMaterialButton(context);
   }
 
   // Wrap iOS buttons to prevent infinite width in Row/Flex

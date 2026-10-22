@@ -1,6 +1,5 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import '../../core/platform_info.dart';
+import '../../core/adaptive_style.dart';
 import 'ios26_segmented_control.dart';
 
 /// An adaptive segmented control that renders platform-specific styles
@@ -63,9 +62,8 @@ class AdaptiveSegmentedControl extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // iOS 26+ - Use native iOS 26 segmented control
-    if (PlatformInfo.isIOS) {
-      return IOS26SegmentedControl(
+    return switch (AdaptiveStyle.of(context)) {
+      AdaptiveStyle.native => IOS26SegmentedControl(
         labels: labels,
         selectedIndex: selectedIndex,
         onValueChanged: onValueChanged,
@@ -78,96 +76,9 @@ class AdaptiveSegmentedControl extends StatelessWidget {
         iconColor: iconColor,
         textColor: textColor,
         selectedTextColor: selectedTextColor,
-      );
-    }
-
-    // Android - Use Material SegmentedButton
-    if (PlatformInfo.isAndroid) {
-      return _buildMaterialSegmentedButton(context);
-    }
-
-    // Fallback
-    return _buildCupertinoSegmentedControl(context);
-  }
-
-  Widget _buildCupertinoSegmentedControl(BuildContext context) {
-    final theme = CupertinoTheme.of(context);
-    final effectiveTextColor =
-        textColor ??
-        theme.textTheme.textStyle.color ??
-        (Theme.of(context).brightness == Brightness.dark
-            ? CupertinoColors.white
-            : CupertinoColors.black);
-    final effectiveSelectedTextColor =
-        selectedTextColor ??
-        (color != null ? CupertinoColors.white : effectiveTextColor);
-
-    // Build children map from labels or icons
-    final Map<int, Widget> children = {};
-
-    // Check if using icons
-    final useIcons = sfSymbols != null && sfSymbols!.isNotEmpty;
-    final itemCount = useIcons ? sfSymbols!.length : labels.length;
-
-    for (int i = 0; i < itemCount; i++) {
-      if (useIcons) {
-        // Icon mode
-        final dynamic icon = sfSymbols![i];
-        children[i] = Padding(
-          padding: const EdgeInsets.all(8),
-          child: icon is IconData
-              ? Icon(icon, size: iconSize ?? 20, color: iconColor)
-              : Text(icon.toString()),
-        );
-      } else {
-        // Text mode
-        children[i] = Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Text(
-            labels[i],
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              color: selectedIndex == i
-                  ? effectiveSelectedTextColor
-                  : effectiveTextColor,
-            ),
-          ),
-        );
-      }
-    }
-
-    Widget control = color != null
-        ? CupertinoSlidingSegmentedControl<int>(
-            children: children,
-            groupValue: selectedIndex,
-            thumbColor: color!,
-            onValueChanged: (int? value) {
-              if (enabled && value != null) {
-                onValueChanged(value);
-              }
-            },
-          )
-        : CupertinoSlidingSegmentedControl<int>(
-            children: children,
-            groupValue: selectedIndex,
-            onValueChanged: (int? value) {
-              if (enabled && value != null) {
-                onValueChanged(value);
-              }
-            },
-          );
-
-    control = ConstrainedBox(
-      constraints: BoxConstraints(minHeight: height),
-      child: control,
-    );
-
-    if (shrinkWrap) {
-      control = Center(child: IntrinsicWidth(child: control));
-    }
-
-    return control;
+      ),
+      AdaptiveStyle.material => _buildMaterialSegmentedButton(context),
+    };
   }
 
   Widget _buildMaterialSegmentedButton(BuildContext context) {

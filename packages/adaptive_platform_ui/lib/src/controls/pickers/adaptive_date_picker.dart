@@ -1,6 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import '../../core/platform_info.dart';
+import '../../core/adaptive_style.dart';
 import 'adaptive_time_picker.dart';
 import 'minute_interval.dart';
 
@@ -27,28 +27,29 @@ class AdaptiveDatePicker {
     final effectiveFirstDate = firstDate ?? DateTime(1900);
     final effectiveLastDate = lastDate ?? DateTime(2100);
 
-    if (PlatformInfo.isIOS) {
-      return _showCupertinoDatePicker(
-        context: context,
-        initialDate: initialDate,
-        firstDate: effectiveFirstDate,
-        lastDate: effectiveLastDate,
-        mode: mode,
-        use24HourFormat: use24HourFormat,
-        minuteInterval: minuteInterval,
-      );
+    switch (AdaptiveStyle.of(context)) {
+      case AdaptiveStyle.native:
+        return _showCupertinoDatePicker(
+          context: context,
+          initialDate: initialDate,
+          firstDate: effectiveFirstDate,
+          lastDate: effectiveLastDate,
+          mode: mode,
+          use24HourFormat: use24HourFormat,
+          minuteInterval: minuteInterval,
+        );
+      case AdaptiveStyle.material:
+        return _showMaterialDatePicker(
+          context: context,
+          initialDate: initialDate,
+          firstDate: effectiveFirstDate,
+          lastDate: effectiveLastDate,
+          mode: mode,
+          use24HourFormat: use24HourFormat,
+          initialDatePickerMode: initialDatePickerMode,
+          minuteInterval: minuteInterval,
+        );
     }
-
-    return _showMaterialDatePicker(
-      context: context,
-      initialDate: initialDate,
-      firstDate: effectiveFirstDate,
-      lastDate: effectiveLastDate,
-      mode: mode,
-      use24HourFormat: use24HourFormat,
-      initialDatePickerMode: initialDatePickerMode,
-      minuteInterval: minuteInterval,
-    );
   }
 
   static Future<DateTime?> _showCupertinoDatePicker({
@@ -186,11 +187,14 @@ class _CupertinoDatePickerContentState
                 CupertinoButton(
                   padding: EdgeInsets.zero,
                   onPressed: () => Navigator.of(context).pop(),
-                  child: Text(
-                    PlatformInfo.isIOS
-                        ? CupertinoLocalizations.of(context).cancelButtonLabel
-                        : MaterialLocalizations.of(context).cancelButtonLabel,
-                  ),
+                  child: Text(switch (AdaptiveStyle.of(context)) {
+                    AdaptiveStyle.native => CupertinoLocalizations.of(
+                      context,
+                    ).cancelButtonLabel,
+                    AdaptiveStyle.material => MaterialLocalizations.of(
+                      context,
+                    ).cancelButtonLabel,
+                  }),
                 ),
                 CupertinoButton(
                   padding: EdgeInsets.zero,

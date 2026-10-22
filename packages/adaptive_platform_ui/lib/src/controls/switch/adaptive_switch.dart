@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../core/platform_info.dart';
+import '../../core/adaptive_style.dart';
 import 'ios26_switch.dart';
 
 /// An adaptive switch that renders platform-specific switch styles
@@ -56,50 +56,32 @@ class AdaptiveSwitch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // iOS 26+ - Use native iOS 26 switch
-    if (PlatformInfo.isIOS) {
-      return IOS26Switch(
-        value: value,
-        onChanged: onChanged,
-        activeColor: activeColor,
-        thumbColor: thumbColor,
-      );
+    switch (AdaptiveStyle.of(context)) {
+      case AdaptiveStyle.native:
+        // iOS 26+ - Use native iOS 26 switch
+        return IOS26Switch(
+          value: value,
+          onChanged: onChanged,
+          activeColor: activeColor,
+          thumbColor: thumbColor,
+        );
+      case AdaptiveStyle.material:
+        // Android - Use Material Design Switch
+        return Switch(
+          value: value,
+          onChanged: onChanged,
+          thumbColor: thumbColor != null
+              ? WidgetStateProperty.all(thumbColor)
+              : null,
+          trackColor: activeColor != null
+              ? WidgetStateProperty.resolveWith((states) {
+                  if (states.contains(WidgetState.selected)) {
+                    return activeColor;
+                  }
+                  return null;
+                })
+              : null,
+        );
     }
-
-    // Android - Use Material Design Switch
-    if (PlatformInfo.isAndroid) {
-      return Switch(
-        value: value,
-        onChanged: onChanged,
-        thumbColor: thumbColor != null
-            ? WidgetStateProperty.all(thumbColor)
-            : null,
-        trackColor: activeColor != null
-            ? WidgetStateProperty.resolveWith((states) {
-                if (states.contains(WidgetState.selected)) {
-                  return activeColor;
-                }
-                return null;
-              })
-            : null,
-      );
-    }
-
-    // Fallback for other platforms (web, desktop, etc.)
-    return Switch(
-      value: value,
-      onChanged: onChanged,
-      thumbColor: thumbColor != null
-          ? WidgetStateProperty.all(thumbColor)
-          : null,
-      trackColor: activeColor != null
-          ? WidgetStateProperty.resolveWith((states) {
-              if (states.contains(WidgetState.selected)) {
-                return activeColor;
-              }
-              return null;
-            })
-          : null,
-    );
   }
 }

@@ -29,6 +29,7 @@ library;
 
 // Platform utilities
 export 'src/core/platform_info.dart';
+export 'src/core/adaptive_style.dart';
 
 // Animation utilities
 export 'src/core/animation.dart';
