@@ -23,24 +23,30 @@ void main() {
             sections: const [
               [
                 AdaptiveDrawerItem(
+                  icon: AdaptiveIcon(
+                    sfSymbol: 'square.grid.2x2',
+                    icon: Icons.grid_view,
+                  ),
                   id: 'all',
                   title: 'All accounts',
-                  sfSymbol: 'square.grid.2x2',
-                  icon: Icons.grid_view,
                 ),
                 AdaptiveDrawerItem(
+                  icon: AdaptiveIcon(
+                    sfSymbol: 'person',
+                    icon: Icons.person_outline,
+                  ),
                   id: 'personal',
                   title: 'Personal',
-                  sfSymbol: 'person',
-                  icon: Icons.person_outline,
                 ),
               ],
               [
                 AdaptiveDrawerItem(
+                  icon: AdaptiveIcon(
+                    sfSymbol: 'person.crop.circle',
+                    icon: Icons.account_circle_outlined,
+                  ),
                   id: 'profile',
                   title: 'Profile',
-                  sfSymbol: 'person.crop.circle',
-                  icon: Icons.account_circle_outlined,
                 ),
               ],
             ],

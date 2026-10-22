@@ -1,3 +1,4 @@
+import '../app_bar/adaptive_navigation_scroll_controller.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
@@ -21,6 +22,7 @@ class ToolbarEntry {
     this.tabBar,
     this.enclosingRoutes = const <ModalRoute<Object?>>[],
     this.titleOverlay,
+    this.scrollController,
   });
 
   /// Identifies the registering scaffold instance.
@@ -35,6 +37,9 @@ class ToolbarEntry {
   /// a title with a subtitle), already styled for the page's theme. Null
   /// when the native bar can show [AdaptiveAppBar.title] itself.
   final Widget? titleOverlay;
+
+  /// The page's scroll link to its native bar, created by its scaffold.
+  final AdaptiveNavigationScrollController? scrollController;
 
   /// The route the page lives in; null when it is not inside a Navigator.
   final ModalRoute<Object?>? route;

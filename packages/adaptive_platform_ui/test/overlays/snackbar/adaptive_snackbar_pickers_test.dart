@@ -490,7 +490,10 @@ void main() {
             appBar: AdaptiveAppBar(
               title: 'App',
               actions: [
-                AdaptiveAppBarAction(onPressed: () {}, icon: Icons.settings),
+                AdaptiveAppBarAction(
+                  icon: AdaptiveIcon(icon: Icons.settings),
+                  onPressed: () {},
+                ),
               ],
             ),
             body: const Text('Body'),
@@ -514,10 +517,10 @@ void main() {
               title: 'App',
               actions: [
                 AdaptiveAppBarAction(
+                  icon: AdaptiveIcon(icon: Icons.add),
                   onPressed: () {
                     actionPressed = true;
                   },
-                  icon: Icons.add,
                 ),
               ],
             ),

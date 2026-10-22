@@ -22,7 +22,7 @@ void main() {
                 actions: showAction
                     ? [
                         AdaptiveAppBarAction(
-                          icon: Icons.add,
+                          icon: AdaptiveIcon(icon: Icons.add),
                           label: 'Add',
                           onPressed: () {},
                         ),

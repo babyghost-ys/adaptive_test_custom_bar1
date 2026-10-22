@@ -152,137 +152,147 @@ class _InvestmentHomeState extends State<InvestmentHome> {
   bool menuOpen = false;
 
   @override
-  Widget build(BuildContext context) =>
-      BlocBuilder<InvestmentBloc, InvestmentState>(
-        builder: (context, state) => AdaptiveScaffold(
-          key: scaffoldKey,
-          extendBody: true,
-          appBar: AdaptiveAppBar(
-            actions: [
-              AdaptiveAppBarAction(
-                iosSymbol: menuOpen ? 'xmark' : 'line.3.horizontal',
-                icon: menuOpen ? Icons.close : Icons.menu_rounded,
-                label: menuOpen ? 'Close accounts' : 'Open accounts',
-                spacerAfter: ToolbarSpacerType.flexible,
-                onPressed: () => scaffoldKey.currentState?.openDrawer(),
-              ),
-              AdaptiveAppBarAction(
-                iosSymbol: 'magnifyingglass',
-                icon: Icons.search,
-                label: 'Search',
-                onPressed: () => context.push('/search'),
-              ),
-            ],
+  Widget build(
+    BuildContext context,
+  ) => BlocBuilder<InvestmentBloc, InvestmentState>(
+    builder: (context, state) => AdaptiveScaffold(
+      key: scaffoldKey,
+      extendBody: true,
+      appBar: AdaptiveAppBar(
+        actions: [
+          AdaptiveAppBarAction(
+            icon: AdaptiveIcon(
+              sfSymbol: menuOpen ? 'xmark' : 'line.3.horizontal',
+              icon: menuOpen ? Icons.close : Icons.menu_rounded,
+            ),
+            label: menuOpen ? 'Close accounts' : 'Open accounts',
+            spacerAfter: ToolbarSpacerType.flexible,
+            onPressed: () => scaffoldKey.currentState?.openDrawer(),
           ),
-          onDrawerChanged: (open) => setState(() => menuOpen = open),
-          drawer: AdaptiveDrawer(
-            title: 'MERIDIAN',
-            subtitle: 'Demo investing',
-            backgroundColor: const Color(0xFFEEEDE7),
-            selectedId: 'account:${state.account}',
-            sections: const [
-              [
-                AdaptiveDrawerItem(
-                  id: 'account:0',
-                  title: 'All accounts',
-                  sfSymbol: 'square.grid.2x2.fill',
-                  icon: Icons.grid_view_rounded,
-                ),
-                AdaptiveDrawerItem(
-                  id: 'account:1',
-                  title: 'Personal',
-                  sfSymbol: 'person',
-                  icon: Icons.person_outline,
-                ),
-                AdaptiveDrawerItem(
-                  id: 'account:2',
-                  title: 'Retirement',
-                  sfSymbol: 'leaf',
-                  icon: Icons.spa_outlined,
-                ),
-                AdaptiveDrawerItem(
-                  id: 'account:3',
-                  title: 'Tax-free',
-                  sfSymbol: 'shield',
-                  icon: Icons.shield_outlined,
-                ),
-              ],
-              [
-                AdaptiveDrawerItem(
-                  id: 'preferences',
-                  title: 'Preferences',
-                  sfSymbol: 'slider.horizontal.3',
-                  icon: Icons.tune,
-                ),
-                AdaptiveDrawerItem(
-                  id: 'statements',
-                  title: 'Statements',
-                  sfSymbol: 'doc.text',
-                  icon: Icons.description_outlined,
-                ),
-                AdaptiveDrawerItem(
-                  id: 'profile',
-                  title: 'Profile',
-                  sfSymbol: 'person.crop.circle',
-                  icon: Icons.account_circle_outlined,
-                ),
-              ],
-            ],
-            onSelected: (id) => id.startsWith('account:')
-                ? context.read<InvestmentBloc>().add(
-                    AccountSelected(int.parse(id.split(':').last)),
-                  )
-                : context.push('/$id'),
+          AdaptiveAppBarAction(
+            icon: AdaptiveIcon(sfSymbol: 'magnifyingglass', icon: Icons.search),
+            label: 'Search',
+            onPressed: () => context.push('/search'),
           ),
-          bottomNavigationBar: AdaptiveBottomNavigationBar(
-            selectedIndex: widget.shell.currentIndex,
-            selectedItemColor: red,
-            onTap: (i) {
-              scaffoldKey.currentState?.closeDrawer();
-              widget.shell.goBranch(
-                i,
-                initialLocation: i == widget.shell.currentIndex,
-              );
-            },
-            items: const [
-              AdaptiveNavigationDestination(
-                icon: AdaptiveIcon(
-                  sfSymbol: 'chart.pie',
-                  icon: Icons.pie_chart_outline,
-                ),
-                selectedIcon: AdaptiveIcon(
-                  sfSymbol: 'chart.pie.fill',
-                  icon: Icons.pie_chart,
-                ),
-                label: 'Portfolio',
+        ],
+      ),
+      onDrawerChanged: (open) => setState(() => menuOpen = open),
+      drawer: AdaptiveDrawer(
+        title: 'MERIDIAN',
+        subtitle: 'Demo investing',
+        backgroundColor: const Color(0xFFEEEDE7),
+        selectedId: 'account:${state.account}',
+        sections: const [
+          [
+            AdaptiveDrawerItem(
+              icon: AdaptiveIcon(
+                sfSymbol: 'square.grid.2x2.fill',
+                icon: Icons.grid_view_rounded,
               ),
-              AdaptiveNavigationDestination(
-                icon: AdaptiveIcon(
-                  sfSymbol: 'chart.xyaxis.line',
-                  icon: Icons.show_chart,
-                ),
-                label: 'Markets',
+              id: 'account:0',
+              title: 'All accounts',
+            ),
+            AdaptiveDrawerItem(
+              icon: AdaptiveIcon(
+                sfSymbol: 'person',
+                icon: Icons.person_outline,
               ),
-              AdaptiveNavigationDestination(
-                icon: AdaptiveIcon(sfSymbol: 'star', icon: Icons.star_outline),
-                selectedIcon: AdaptiveIcon(
-                  sfSymbol: 'star.fill',
-                  icon: Icons.star,
-                ),
-                label: 'Watchlist',
+              id: 'account:1',
+              title: 'Personal',
+            ),
+            AdaptiveDrawerItem(
+              icon: AdaptiveIcon(sfSymbol: 'leaf', icon: Icons.spa_outlined),
+              id: 'account:2',
+              title: 'Retirement',
+            ),
+            AdaptiveDrawerItem(
+              icon: AdaptiveIcon(
+                sfSymbol: 'shield',
+                icon: Icons.shield_outlined,
               ),
-              AdaptiveNavigationDestination(
-                icon: AdaptiveIcon(
-                  sfSymbol: 'clock.arrow.circlepath',
-                  icon: Icons.history,
-                ),
-                label: 'Activity',
+              id: 'account:3',
+              title: 'Tax-free',
+            ),
+          ],
+          [
+            AdaptiveDrawerItem(
+              icon: AdaptiveIcon(
+                sfSymbol: 'slider.horizontal.3',
+                icon: Icons.tune,
               ),
-            ],
+              id: 'preferences',
+              title: 'Preferences',
+            ),
+            AdaptiveDrawerItem(
+              icon: AdaptiveIcon(
+                sfSymbol: 'doc.text',
+                icon: Icons.description_outlined,
+              ),
+              id: 'statements',
+              title: 'Statements',
+            ),
+            AdaptiveDrawerItem(
+              icon: AdaptiveIcon(
+                sfSymbol: 'person.crop.circle',
+                icon: Icons.account_circle_outlined,
+              ),
+              id: 'profile',
+              title: 'Profile',
+            ),
+          ],
+        ],
+        onSelected: (id) => id.startsWith('account:')
+            ? context.read<InvestmentBloc>().add(
+                AccountSelected(int.parse(id.split(':').last)),
+              )
+            : context.push('/$id'),
+      ),
+      bottomNavigationBar: AdaptiveBottomNavigationBar(
+        selectedIndex: widget.shell.currentIndex,
+        selectedItemColor: red,
+        onTap: (i) {
+          scaffoldKey.currentState?.closeDrawer();
+          widget.shell.goBranch(
+            i,
+            initialLocation: i == widget.shell.currentIndex,
+          );
+        },
+        items: const [
+          AdaptiveNavigationDestination(
+            icon: AdaptiveIcon(
+              sfSymbol: 'chart.pie',
+              icon: Icons.pie_chart_outline,
+            ),
+            selectedIcon: AdaptiveIcon(
+              sfSymbol: 'chart.pie.fill',
+              icon: Icons.pie_chart,
+            ),
+            label: 'Portfolio',
           ),
-          body: widget.shell,
-        ),
-      );
+          AdaptiveNavigationDestination(
+            icon: AdaptiveIcon(
+              sfSymbol: 'chart.xyaxis.line',
+              icon: Icons.show_chart,
+            ),
+            label: 'Markets',
+          ),
+          AdaptiveNavigationDestination(
+            icon: AdaptiveIcon(sfSymbol: 'star', icon: Icons.star_outline),
+            selectedIcon: AdaptiveIcon(sfSymbol: 'star.fill', icon: Icons.star),
+            label: 'Watchlist',
+          ),
+          AdaptiveNavigationDestination(
+            icon: AdaptiveIcon(
+              sfSymbol: 'clock.arrow.circlepath',
+              icon: Icons.history,
+            ),
+            label: 'Activity',
+          ),
+        ],
+      ),
+      body: widget.shell,
+    ),
+  );
 }
 
 class PageScroll extends StatelessWidget {

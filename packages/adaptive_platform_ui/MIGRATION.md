@@ -18,6 +18,21 @@ AdaptiveNavigationDestination(
 
 `AdaptiveIcon(image: AssetImage('...'))` and `AdaptiveIcon(widget: ...)` replace passing an `ImageProvider` or a widget. The same type is used by `AdaptivePopupMenuButton.icon`, `AdaptivePopupMenuItem.icon`, `AdaptiveContextMenuAction.icon` and `AdaptiveAlertDialog.show(icon:)`. `AdaptiveSegmentedControl(sfSymbols:)` is now `icons:`, a `List<AdaptiveIcon>`.
 
+App bar actions and drawer items follow the same rule:
+
+```dart
+// 1.x
+AdaptiveAppBarAction(iosSymbol: 'magnifyingglass', icon: Icons.search, onPressed: search)
+
+// 2.0
+AdaptiveAppBarAction(
+  icon: AdaptiveIcon(sfSymbol: 'magnifyingglass', icon: Icons.search),
+  onPressed: search,
+)
+```
+
+`iconWidget:` becomes `icon: AdaptiveIcon(widget: ...)`.
+
 ## Pages need no inset workarounds
 
 Remove `SafeArea` around page bodies and `MediaQuery.paddingOf(context).bottom` padding added for bars. `AdaptiveScaffold` places the body itself:
@@ -26,6 +41,8 @@ Remove `SafeArea` around page bodies and `MediaQuery.paddingOf(context).bottom` 
 - any other body sits between the bars.
 
 To keep content running under the bars for a body the scaffold cannot see into (a router shell, a `BlocBuilder`), set `extendBody: true` or `extendBodyBehindAppBar: true`.
+
+The scaffold owns the page's scroll link. Remove `AdaptiveAppBar(scrollController:)` and replace `AdaptiveListView` with a plain `ListView`, also on pages that use `AdaptiveNavigationSearchBar`. Where the page needs the controller, read `PrimaryScrollController.of(context)` inside the body.
 
 Large titles no longer need a controller:
 
@@ -107,6 +124,9 @@ On iOS this opens the native panel; elsewhere a Material drawer. Any other widge
 | `AdaptiveAppBar(useNativeToolbar: false)` | pass your own `cupertinoNavigationBar`; without one iOS always shows the native bar |
 | `AdaptiveBottomNavigationBar(useNativeBottomBar: false)` | pass your own `cupertinoTabBar` |
 | `AdaptiveScaffold.minimizeBehavior`, `TabBarMinimizeBehavior` | remove; it never took effect |
+| `AdaptiveListView` | `ListView` |
+| `AdaptiveAppBar.scrollController`, `AdaptiveNavigationScrollController` | `PrimaryScrollController.of(context)` in the body |
+| `IOS26NativeSearchTabBar` | `AdaptiveBottomNavigationBar(search:)` |
 | `PlatformTarget.ios` | `PlatformTarget.ios26Plus` or `PlatformTarget.ios18OrLower` |
 
 ## Choosing the family of controls

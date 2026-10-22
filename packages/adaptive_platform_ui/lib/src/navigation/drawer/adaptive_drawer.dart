@@ -1,3 +1,4 @@
+import '../../style/adaptive_icon.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
@@ -10,7 +11,6 @@ class AdaptiveDrawerItem {
   const AdaptiveDrawerItem({
     required this.id,
     required this.title,
-    required this.sfSymbol,
     required this.icon,
   });
 
@@ -18,11 +18,9 @@ class AdaptiveDrawerItem {
   final String id;
   final String title;
 
-  /// SF Symbol name for the native iOS panel.
-  final String sfSymbol;
-
-  /// Icon for the Material drawer.
-  final IconData icon;
+  /// Its SF Symbol in the native iOS panel, its Material icon in the
+  /// Material drawer.
+  final AdaptiveIcon icon;
 }
 
 /// A side menu of destinations, given to `AdaptiveScaffold.drawer` and
@@ -83,7 +81,11 @@ class AdaptiveDrawer extends StatelessWidget {
         for (final section in sections)
           [
             for (final item in section)
-              {'id': item.id, 'title': item.title, 'symbol': item.sfSymbol},
+              {
+                'id': item.id,
+                'title': item.title,
+                'symbol': item.icon.sfSymbol,
+              },
           ],
       ],
     });
@@ -119,7 +121,7 @@ class AdaptiveDrawer extends StatelessWidget {
               if (index > 0) const Divider(height: 24),
               for (final item in section)
                 ListTile(
-                  leading: Icon(item.icon),
+                  leading: item.icon.build(),
                   title: Text(item.title),
                   selected: item.id == selectedId,
                   shape: const StadiumBorder(),

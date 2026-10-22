@@ -73,7 +73,7 @@ extension _MaterialScaffold on AdaptiveScaffoldState {
                   )
                 : IconButton(
                     icon: action.wrapWithBadge(
-                      action.iconWidget ?? Icon(action.icon ?? Icons.circle),
+                      action.icon?.build() ?? const Icon(Icons.circle),
                     ),
                     tooltip: action.effectiveLabel,
                     onPressed: () => action.press(context),

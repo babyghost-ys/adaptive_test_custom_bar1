@@ -40,7 +40,7 @@ class TopToolbarContent {
     return TopToolbarContent(
       title: appBar.title,
       scrollController: entry.titleOverlay == null
-          ? appBar.scrollController
+          ? entry.scrollController
           : null,
       largeTitle: appBar.largeTitle,
       titleOverlay: entry.titleOverlay,

@@ -31,10 +31,6 @@ public class AdaptivePlatformUiPlugin: NSObject, FlutterPlugin {
             actionSheets.handle(call, result: result)
         }
 
-        // Initialize iOS 26+ Native Tab Bar Manager
-        if #available(iOS 26.0, *) {
-            iOS26NativeTabBarManager.shared.setup(messenger: registrar.messenger())
-        }
 
         // Register iOS 26 Button platform view factory
         let ios26ButtonFactory = iOS26ButtonViewFactory(messenger: registrar.messenger())

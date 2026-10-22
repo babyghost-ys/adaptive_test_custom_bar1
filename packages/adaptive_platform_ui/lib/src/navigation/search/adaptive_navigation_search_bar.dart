@@ -9,8 +9,9 @@ import '../app_bar/adaptive_navigation_scroll_controller.dart';
 class AdaptiveNavigationSearchController extends ValueNotifier<bool> {
   AdaptiveNavigationSearchController() : super(false);
 
-  /// Share with the page's AdaptiveListView for native scroll-edge appearance.
-  /// Disposed automatically with this search controller.
+  /// The page's scroll link to the native search header. `AdaptiveScaffold`
+  /// offers it to the body, so a plain scroll view follows the header.
+  /// Disposed with this search controller.
   final scrollController = AdaptiveNavigationScrollController();
   // Bootstrap only, so the platform view can mount before UIKit reports layout.
   double _navigationHeight = kMinInteractiveDimensionCupertino;
@@ -48,9 +49,9 @@ class AdaptiveNavigationSearchController extends ValueNotifier<bool> {
 }
 
 /// Native navigation search on iOS, including UIKit's focused search transition.
-/// Supply as AdaptiveAppBar.cupertinoNavigationBar with useNativeToolbar: false.
-/// Use controller.scrollController with AdaptiveListView so content can scroll
-/// beneath the native glass and consume the header's measured safe-area inset.
+/// Supply as `AdaptiveAppBar.cupertinoNavigationBar`. A plain scroll view in
+/// the scaffold's body scrolls beneath the native glass and starts below the
+/// header's measured inset.
 /// On Android, supply the same widget as AdaptiveAppBar.appBar. It uses a
 /// Material AppBar, BackButton and SearchBar, with text retained across rebuilds.
 class AdaptiveNavigationSearchBar extends StatefulWidget

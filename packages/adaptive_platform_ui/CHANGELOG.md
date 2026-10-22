@@ -5,6 +5,9 @@
 Breaking release. See [MIGRATION.md](MIGRATION.md) for the before and after of each change.
 
 * **BREAKING**: `AdaptiveIcon(sfSymbol:, icon:, image:, widget:)` replaces `dynamic` icons in `AdaptiveNavigationDestination`, `AdaptivePopupMenuButton.icon`, `AdaptivePopupMenuItem`, `AdaptiveContextMenuAction`, `AdaptiveAlertDialog` and `AdaptiveSegmentedControl` (`sfSymbols` is now `icons`). A string SF Symbol no longer becomes a grey circle on Android.
+* **BREAKING**: `AdaptiveAppBarAction` takes one `icon: AdaptiveIcon` instead of `iosSymbol`, `icon` and `iconWidget`; `AdaptiveDrawerItem` takes one `icon: AdaptiveIcon` instead of `sfSymbol` and `icon`. Every icon in the package is now an `AdaptiveIcon`.
+* **BREAKING**: the scaffold owns each page's scroll link. Removed `AdaptiveAppBar.scrollController` and `AdaptiveListView`, and `AdaptiveNavigationScrollController` is no longer exported: a plain scroll view in the body links to the native bar, including under `AdaptiveNavigationSearchBar`. Read the link with `PrimaryScrollController.of(context)`.
+* **REMOVED**: the unused `IOS26NativeSearchTabBar` and its native tab bar manager, and the unused scaffold manager.
 * **BREAKING**: the `IOS26*` renderers are no longer exported; they are internal `Native*` widgets now. Use the `Adaptive*` widgets.
 * **BREAKING**: removed parameters that had no effect: `AdaptiveScaffold.enableBlur` and `enableToolbarGradient`, `AdaptiveButton.useNative`, `cupertinoDecoration` on the text fields, `AdaptiveNavigationScrollController.compactUnderlapTop`, `AdaptiveLargeTitleSpacer` and `IOS26ScaffoldLegacy`.
 * **BREAKING**: `AdaptiveScaffold.extendBody` and `extendBodyBehindAppBar` are nullable. Null places the body between the bars, or under the glass bars of iOS 26+ when the body is itself a scroll view; Android behaves as before.

@@ -297,6 +297,14 @@ class AdaptiveScaffoldState extends State<AdaptiveScaffold> {
   /// controller of its own: UIKit reports this page's bar metrics through
   /// it, and follows its offset to collapse a large title.
   AdaptiveNavigationScrollController? _pageScroll;
+
+  /// The page's scroll link on the native iOS bar path: UIKit reports the
+  /// bar's metrics through it and follows its offset to collapse a large
+  /// title. The body gets it as its [PrimaryScrollController].
+  AdaptiveNavigationScrollController? get _pageScrollLink =>
+      _native && (_appBar?.useNativeToolbar ?? false)
+      ? _pageScroll ??= AdaptiveNavigationScrollController()
+      : null;
   AdaptiveBarStyle _barStyle = const AdaptiveBarStyle.system();
   AdaptiveAppBar? _appBarSource;
   AdaptiveBarStyle? _appBarSourceStyle;
@@ -304,9 +312,8 @@ class AdaptiveScaffoldState extends State<AdaptiveScaffold> {
   AdaptiveAppBar? _resolvedAppBar;
 
   /// [AdaptiveScaffold.appBar] as drawn: unset colours and flags taken from
-  /// the app's [AdaptiveBarStyle], a tab root's missing title taken from its
-  /// selected tab, and on the native iOS path the page's own scroll
-  /// controller filled in.
+  /// the app's [AdaptiveBarStyle], and a tab root's missing title taken from
+  /// its selected tab.
   AdaptiveAppBar? get _appBar {
     final appBar = widget.appBar;
     if (appBar == null) return null;
@@ -328,8 +335,6 @@ class AdaptiveScaffoldState extends State<AdaptiveScaffold> {
               index < items.length
           ? items[index].label
           : null;
-      final linksScroll =
-          _native && appBar.useNativeToolbar && appBar.scrollController == null;
       _resolvedAppBar = appBar.copyWith(
         title: tabTitle,
         navigationBarColor: appBar.navigationBarColor ?? _barStyle.color,
@@ -337,9 +342,6 @@ class AdaptiveScaffoldState extends State<AdaptiveScaffold> {
         navigationBarShadow: appBar.navigationBarShadow ?? _barStyle.shadow,
         hidesNavigationButtonBackground:
             appBar.hidesNavigationButtonBackground ?? _barStyle.plainButtons,
-        scrollController: linksScroll
-            ? _pageScroll ??= AdaptiveNavigationScrollController()
-            : null,
       );
     }
     return _resolvedAppBar;
@@ -365,7 +367,7 @@ class AdaptiveScaffoldState extends State<AdaptiveScaffold> {
         widget.bottomNavigationBar?.selectedIndex) {
       // Another tab's scroll view takes over the shared controller once the
       // new tab is on stage.
-      final scroll = _appBar?.scrollController;
+      final scroll = _pageScrollLink;
       WidgetsBinding.instance.addPostFrameCallback(
         (_) => scroll?.activeChanged(),
       );
@@ -454,6 +456,7 @@ class AdaptiveScaffoldState extends State<AdaptiveScaffold> {
         visible: TickerMode.of(context) && Visibility.of(context),
         shownInPlace: Visibility.of(context),
         tabBar: _tabBarForChrome,
+        scrollController: _pageScrollLink,
       ),
     );
   }
@@ -561,7 +564,12 @@ class AdaptiveScaffoldState extends State<AdaptiveScaffold> {
             builder: (context) => _buildPage(context, omitBottomBar: true),
           )
         : _buildPage(context);
-    final bg = _appBar?.navigationBarColor ?? widget.backgroundColor;
+    // A custom iOS bar draws its own background, so the bar style's colour
+    // says nothing about what sits under the status bar there.
+    final customBar = _native && !(_appBar?.useNativeToolbar ?? true);
+    final bg =
+        (customBar ? null : _appBar?.navigationBarColor) ??
+        widget.backgroundColor;
     if (bg == null || bg.a < 0.5) return page;
     // A page that sets its own background keeps the status bar legible
     // over it, whatever the app theme says: light icons on a dark page and

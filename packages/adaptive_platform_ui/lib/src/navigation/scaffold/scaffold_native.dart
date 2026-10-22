@@ -25,7 +25,7 @@ extension _NativeScaffold on AdaptiveScaffoldState {
           const SizedBox.shrink(),
     );
     final chrome = ToolbarChromeScope.maybeOf(context);
-    final navigation = appBar?.scrollController;
+    final navigation = _pageScrollLink;
     if (navigation != null) {
       // A plain vertical scroll view in the body attaches to this, so the
       // native bar follows it without the app wiring a controller.

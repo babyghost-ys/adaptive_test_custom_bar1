@@ -1,3 +1,4 @@
+import '../../style/adaptive_icon.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -17,16 +18,12 @@ enum ToolbarSpacerType {
   flexible,
 }
 
-/// An app bar action that can be displayed in AdaptiveScaffold
-///
-/// - On iOS 26+: Uses iosSymbol (SF Symbol) in native UIToolbar
-/// - On iOS < 26: Uses icon (IconData) in CupertinoNavigationBar
-/// - On Android: Uses icon (IconData) in Material AppBar
+/// An app bar action that can be displayed in AdaptiveScaffold: a native
+/// bar button with [icon]'s SF Symbol on iOS, an icon button with its
+/// Material icon elsewhere, or [title] as text.
 class AdaptiveAppBarAction {
   const AdaptiveAppBarAction({
-    this.iosSymbol,
     this.icon,
-    this.iconWidget,
     this.title,
     this.label,
     this.onPressed = _noAction,
@@ -37,11 +34,8 @@ class AdaptiveAppBarAction {
     this.tintColor,
     this.badgeCount,
   }) : assert(
-         iosSymbol != null ||
-             icon != null ||
-             iconWidget != null ||
-             title != null,
-         'At least one of iosSymbol, icon, iconWidget, or title must be provided',
+         icon != null || title != null,
+         'An action needs an icon or a title',
        ),
        assert(
          menuItems != null || !identical(onPressed, _noAction),
@@ -54,24 +48,11 @@ class AdaptiveAppBarAction {
 
   static void _noAction() {}
 
-  /// SF Symbol name for iOS 26+ ONLY (e.g., 'info.circle', 'plus.circle')
-  /// - iOS 26+: Uses UIImage(systemName:) in native UIBarButtonItem
-  /// - iOS <26: NOT used, use icon parameter instead
-  /// - Android: NOT used, use icon parameter instead
-  final String? iosSymbol;
+  /// The action's icon: its SF Symbol on the native iOS bar, its Material
+  /// icon, image or widget on Flutter-drawn bars.
+  final AdaptiveIcon? icon;
 
-  /// Icon for iOS <26 and Android (e.g., Icons.info, CupertinoIcons.info)
-  /// - iOS 26+: NOT used (iosSymbol takes priority)
-  /// - iOS <26: Used for CupertinoButton
-  /// - Android: Used for IconButton
-  final IconData? icon;
-
-  /// Custom icon widget for iOS <26 and Android (e.g., SvgPicture.asset)
-  /// If provided, this widget is used instead of the icon parameter.
-  final Widget? iconWidget;
-
-  /// Text title for the action (optional)
-  /// If provided along with icons, title takes precedence
+  /// Text shown instead of an icon. Takes precedence over [icon].
   final String? title;
 
   /// A short name for the action, such as "Undo" or "Share". It never
@@ -132,10 +113,10 @@ class AdaptiveAppBarAction {
   /// Example: For Undo/Redo on left and Markup/More on right:
   /// ```dart
   /// actions: [
-  ///   AdaptiveAppBarAction(iosSymbol: 'arrow.uturn.backward', ...),
-  ///   AdaptiveAppBarAction(iosSymbol: 'arrow.uturn.forward', ..., spacerAfter: ToolbarSpacerType.flexible),
-  ///   AdaptiveAppBarAction(iosSymbol: 'pencil', ...),
-  ///   AdaptiveAppBarAction(iosSymbol: 'ellipsis', ...),
+  ///   AdaptiveAppBarAction(icon: AdaptiveIcon(sfSymbol: 'arrow.uturn.backward'), ...),
+  ///   AdaptiveAppBarAction(icon: AdaptiveIcon(sfSymbol: 'arrow.uturn.forward'), ..., spacerAfter: ToolbarSpacerType.flexible),
+  ///   AdaptiveAppBarAction(icon: AdaptiveIcon(sfSymbol: 'pencil'), ...),
+  ///   AdaptiveAppBarAction(icon: AdaptiveIcon(sfSymbol: 'ellipsis'), ...),
   /// ]
   /// ```
   final ToolbarSpacerType spacerAfter;
@@ -154,19 +135,16 @@ class AdaptiveAppBarAction {
   /// A count shown in a red badge on the action, like a tab's
   /// `AdaptiveNavigationDestination.badgeCount`.
   ///
-  /// **Platform behavior:**
-  /// - **iOS 26+ (iPhone Duo vertical bar)**: Drawn by the native glass
-  ///   capsule, the same badge the tabs use. Counts above 99 show as "99+".
-  /// - **iOS <26, Android**: An [AdaptiveBadge] drawn on the icon.
-  /// - **iOS 26+ horizontal toolbar**: Ignored; `UIBarButtonItem` has no
-  ///   badge.
+  /// Drawn as an [AdaptiveBadge] on Flutter-drawn bars (Material, custom
+  /// Cupertino bars). The native iOS bar ignores it: `UIBarButtonItem` has
+  /// no badge.
   ///
   /// Null or 0 shows no badge.
   ///
   /// Example:
   /// ```dart
   /// AdaptiveAppBarAction(
-  ///   iosSymbol: 'bell',
+  ///   icon: AdaptiveIcon(sfSymbol: 'bell', icon: Icons.notifications_none),
   ///   label: 'Notifications',
   ///   badgeCount: unreadCount,
   ///   onPressed: openNotifications,
@@ -186,9 +164,7 @@ class AdaptiveAppBarAction {
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
     return other is AdaptiveAppBarAction &&
-        other.iosSymbol == iosSymbol &&
         other.icon == icon &&
-        other.iconWidget == iconWidget &&
         other.title == title &&
         other.label == label &&
         other.prominent == prominent &&
@@ -199,9 +175,7 @@ class AdaptiveAppBarAction {
 
   @override
   int get hashCode => Object.hash(
-    iosSymbol,
     icon,
-    iconWidget,
     title,
     label,
     prominent,
@@ -231,7 +205,7 @@ class AdaptiveAppBarAction {
   /// Convert action to map for native platform channel (iOS 26+ only)
   Map<String, dynamic> toNativeMap() {
     return {
-      if (iosSymbol != null) 'icon': iosSymbol!,
+      if (icon?.sfSymbol != null) 'icon': icon!.sfSymbol,
       if (title != null) 'title': title!,
       if (effectiveLabel != null) 'label': effectiveLabel!,
       'spacerAfter': spacerAfter.index, // 0=none, 1=fixed, 2=flexible

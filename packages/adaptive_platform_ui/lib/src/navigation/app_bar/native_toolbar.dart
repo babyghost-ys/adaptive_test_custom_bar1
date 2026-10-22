@@ -510,9 +510,9 @@ class _NativeToolbarState extends State<NativeToolbar> {
                     padding: EdgeInsets.zero,
                     onPressed: () => action.press(context),
                     child: action.wrapWithBadge(
-                      action.icon != null
-                          ? Icon(action.icon)
-                          : Text(action.title ?? ''),
+                      action.title != null || action.icon == null
+                          ? Text(action.title ?? '')
+                          : action.icon!.build(),
                     ),
                   ),
                 );

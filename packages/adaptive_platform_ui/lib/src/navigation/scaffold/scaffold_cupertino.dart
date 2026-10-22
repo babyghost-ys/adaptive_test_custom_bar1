@@ -24,6 +24,30 @@ extension _CupertinoScaffold on AdaptiveScaffoldState {
     Widget body = _MaterialAncestor(
       child: widget.body ?? const SizedBox.shrink(),
     );
+    if (navigationBar is AdaptiveNavigationSearchBar) {
+      // The native search header reports how far it reaches. A plain scroll
+      // view in the body links to it and starts below it, as on the native
+      // bar path.
+      final link = navigationBar.controller.scrollController;
+      body = PrimaryScrollController(
+        controller: link,
+        child: ValueListenableBuilder<double?>(
+          valueListenable: link.contentTopInset,
+          child: body,
+          builder: (context, inset, child) {
+            final media = MediaQuery.of(context);
+            return MediaQuery(
+              data: media.copyWith(
+                padding: media.padding.copyWith(
+                  top: inset ?? media.padding.top,
+                ),
+              ),
+              child: child!,
+            );
+          },
+        ),
+      );
+    }
     if (hasTabs) {
       final tabBar = _cupertinoTabBar(context, bottomBar, native: nativeTabBar);
       body = nativeTabBar

@@ -1,7 +1,6 @@
 import 'package:flutter/widgets.dart';
 import '../../core/theme/adaptive_theme.dart';
 import 'adaptive_app_bar_action.dart';
-import 'adaptive_navigation_scroll_controller.dart';
 
 /// Configuration for an adaptive app bar in [AdaptiveScaffold].
 ///
@@ -15,7 +14,6 @@ class AdaptiveAppBar {
   const AdaptiveAppBar({
     this.title,
     this.largeTitle = false,
-    this.scrollController,
     this.subtitle,
     this.actions,
     this.leading,
@@ -35,12 +33,6 @@ class AdaptiveAppBar {
   /// The page's scroll view collapses it; no controller or spacer is needed.
   /// Other platform and explicit legacy paths keep their compact bars.
   final bool largeTitle;
-
-  /// Optional. On the native iOS path [AdaptiveScaffold] creates one for the
-  /// page and offers it to the body as its [PrimaryScrollController], so a
-  /// plain scroll view links to the native bar without one. Supply your own
-  /// only when the page needs the controller itself.
-  final AdaptiveNavigationScrollController? scrollController;
 
   /// Optional subtitle displayed below the title
   final String? subtitle;
@@ -109,7 +101,6 @@ class AdaptiveAppBar {
   AdaptiveAppBar copyWith({
     String? title,
     bool? largeTitle,
-    AdaptiveNavigationScrollController? scrollController,
     String? subtitle,
     List<AdaptiveAppBarAction>? actions,
     Widget? leading,
@@ -124,7 +115,6 @@ class AdaptiveAppBar {
     return AdaptiveAppBar(
       title: title ?? this.title,
       largeTitle: largeTitle ?? this.largeTitle,
-      scrollController: scrollController ?? this.scrollController,
       subtitle: subtitle ?? this.subtitle,
       actions: actions ?? this.actions,
       leading: leading ?? this.leading,

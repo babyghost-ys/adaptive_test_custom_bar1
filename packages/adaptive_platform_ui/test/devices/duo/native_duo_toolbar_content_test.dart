@@ -1,4 +1,5 @@
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
+import 'package:adaptive_platform_ui/src/navigation/app_bar/adaptive_navigation_scroll_controller.dart';
 import 'package:adaptive_platform_ui/src/navigation/chrome/hosted_top_toolbar.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,7 +12,7 @@ void main() {
     addTearDown(scroll.dispose);
     var pressed = false;
     final action = AdaptiveAppBarAction(
-      iosSymbol: 'person.crop.circle',
+      icon: AdaptiveIcon(sfSymbol: 'person.crop.circle'),
       label: 'Profile',
       onPressed: () => pressed = true,
     );
@@ -20,12 +21,12 @@ void main() {
       appBar: AdaptiveAppBar(
         title: 'Spending',
         largeTitle: true,
-        scrollController: scroll,
         actions: [action],
       ),
       route: null,
       navigator: null,
       visible: true,
+      scrollController: scroll,
     );
     final duo = TopToolbarContent.of(entry, titleOnly: true);
     final phone = TopToolbarContent.of(entry);

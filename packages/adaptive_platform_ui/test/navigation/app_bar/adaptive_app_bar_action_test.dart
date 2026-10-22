@@ -6,20 +6,23 @@ void main() {
   group('AdaptiveAppBarAction', () {
     test('creates action with iOS symbol', () {
       final action = AdaptiveAppBarAction(
-        iosSymbol: 'info.circle',
+        icon: AdaptiveIcon(sfSymbol: 'info.circle'),
         onPressed: () {},
       );
 
-      expect(action.iosSymbol, 'info.circle');
-      expect(action.icon, isNull);
+      expect(action.icon?.sfSymbol, 'info.circle');
+      expect(action.icon?.icon, isNull);
       expect(action.title, isNull);
     });
 
     test('creates action with icon', () {
-      final action = AdaptiveAppBarAction(icon: Icons.info, onPressed: () {});
+      final action = AdaptiveAppBarAction(
+        icon: AdaptiveIcon(icon: Icons.info),
+        onPressed: () {},
+      );
 
-      expect(action.icon, Icons.info);
-      expect(action.iosSymbol, isNull);
+      expect(action.icon?.icon, Icons.info);
+      expect(action.icon?.sfSymbol, isNull);
       expect(action.title, isNull);
     });
 
@@ -27,20 +30,19 @@ void main() {
       final action = AdaptiveAppBarAction(title: 'Info', onPressed: () {});
 
       expect(action.title, 'Info');
-      expect(action.iosSymbol, isNull);
+      expect(action.icon?.sfSymbol, isNull);
       expect(action.icon, isNull);
     });
 
     test('creates action with all parameters', () {
       final action = AdaptiveAppBarAction(
-        iosSymbol: 'info.circle',
-        icon: Icons.info,
+        icon: AdaptiveIcon(sfSymbol: 'info.circle', icon: Icons.info),
         title: 'Info',
         onPressed: () {},
       );
 
-      expect(action.iosSymbol, 'info.circle');
-      expect(action.icon, Icons.info);
+      expect(action.icon?.sfSymbol, 'info.circle');
+      expect(action.icon?.icon, Icons.info);
       expect(action.title, 'Info');
     });
 
@@ -66,22 +68,19 @@ void main() {
 
     test('equality works correctly', () {
       final action1 = AdaptiveAppBarAction(
-        iosSymbol: 'info.circle',
-        icon: Icons.info,
+        icon: AdaptiveIcon(sfSymbol: 'info.circle', icon: Icons.info),
         title: 'Info',
         onPressed: () {},
       );
 
       final action2 = AdaptiveAppBarAction(
-        iosSymbol: 'info.circle',
-        icon: Icons.info,
+        icon: AdaptiveIcon(sfSymbol: 'info.circle', icon: Icons.info),
         title: 'Info',
         onPressed: () {},
       );
 
       final action3 = AdaptiveAppBarAction(
-        iosSymbol: 'settings',
-        icon: Icons.settings,
+        icon: AdaptiveIcon(sfSymbol: 'settings', icon: Icons.settings),
         title: 'Settings',
         onPressed: () {},
       );
@@ -98,15 +97,13 @@ void main() {
 
     test('hashCode is consistent with equality', () {
       final action1 = AdaptiveAppBarAction(
-        iosSymbol: 'info.circle',
-        icon: Icons.info,
+        icon: AdaptiveIcon(sfSymbol: 'info.circle', icon: Icons.info),
         title: 'Info',
         onPressed: () {},
       );
 
       final action2 = AdaptiveAppBarAction(
-        iosSymbol: 'info.circle',
-        icon: Icons.info,
+        icon: AdaptiveIcon(sfSymbol: 'info.circle', icon: Icons.info),
         title: 'Info',
         onPressed: () {},
       );
@@ -116,12 +113,12 @@ void main() {
 
     test('different actions have different hash codes', () {
       final action1 = AdaptiveAppBarAction(
-        iosSymbol: 'info.circle',
+        icon: AdaptiveIcon(sfSymbol: 'info.circle'),
         onPressed: () {},
       );
 
       final action2 = AdaptiveAppBarAction(
-        iosSymbol: 'settings',
+        icon: AdaptiveIcon(sfSymbol: 'settings'),
         onPressed: () {},
       );
 
@@ -132,7 +129,7 @@ void main() {
 
     test('toNativeMap includes iosSymbol when present', () {
       final action = AdaptiveAppBarAction(
-        iosSymbol: 'info.circle',
+        icon: AdaptiveIcon(sfSymbol: 'info.circle'),
         onPressed: () {},
       );
 
@@ -153,7 +150,7 @@ void main() {
 
     test('toNativeMap includes both iosSymbol and title', () {
       final action = AdaptiveAppBarAction(
-        iosSymbol: 'info.circle',
+        icon: AdaptiveIcon(sfSymbol: 'info.circle'),
         title: 'Info',
         onPressed: () {},
       );
@@ -166,8 +163,7 @@ void main() {
 
     test('toNativeMap excludes icon parameter', () {
       final action = AdaptiveAppBarAction(
-        icon: Icons.info,
-        iosSymbol: 'info.circle',
+        icon: AdaptiveIcon(icon: Icons.info, sfSymbol: 'info.circle'),
         onPressed: () {},
       );
 
@@ -178,7 +174,10 @@ void main() {
     });
 
     test('toNativeMap returns only spacerAfter when only icon is provided', () {
-      final action = AdaptiveAppBarAction(icon: Icons.info, onPressed: () {});
+      final action = AdaptiveAppBarAction(
+        icon: AdaptiveIcon(icon: Icons.info),
+        onPressed: () {},
+      );
 
       final map = action.toNativeMap();
 
@@ -202,7 +201,7 @@ void main() {
 
     test('toNativeMap includes spacerAfter as none by default', () {
       final action = AdaptiveAppBarAction(
-        iosSymbol: 'info.circle',
+        icon: AdaptiveIcon(sfSymbol: 'info.circle'),
         onPressed: () {},
       );
 
@@ -213,7 +212,7 @@ void main() {
 
     test('toNativeMap includes spacerAfter as fixed', () {
       final action = AdaptiveAppBarAction(
-        iosSymbol: 'info.circle',
+        icon: AdaptiveIcon(sfSymbol: 'info.circle'),
         onPressed: () {},
         spacerAfter: ToolbarSpacerType.fixed,
       );
@@ -225,7 +224,7 @@ void main() {
 
     test('toNativeMap includes spacerAfter as flexible', () {
       final action = AdaptiveAppBarAction(
-        iosSymbol: 'info.circle',
+        icon: AdaptiveIcon(sfSymbol: 'info.circle'),
         onPressed: () {},
         spacerAfter: ToolbarSpacerType.flexible,
       );
@@ -240,7 +239,7 @@ void main() {
         String hideLabel = 'Hide',
         void Function(int, AdaptivePopupMenuItem<dynamic>)? onSelected,
       }) => AdaptiveAppBarAction(
-        iosSymbol: 'ellipsis',
+        icon: AdaptiveIcon(sfSymbol: 'ellipsis'),
         menuItems: [
           AdaptivePopupMenuItem(
             label: hideLabel,
@@ -255,7 +254,7 @@ void main() {
 
       test('needs either onPressed or menuItems', () {
         expect(
-          () => AdaptiveAppBarAction(iosSymbol: 'ellipsis'),
+          () => AdaptiveAppBarAction(icon: AdaptiveIcon(sfSymbol: 'ellipsis')),
           throwsAssertionError,
         );
       });
@@ -263,7 +262,7 @@ void main() {
       test('needs onMenuItemSelected with menuItems', () {
         expect(
           () => AdaptiveAppBarAction(
-            iosSymbol: 'ellipsis',
+            icon: AdaptiveIcon(sfSymbol: 'ellipsis'),
             menuItems: const [AdaptivePopupMenuItem(label: 'Hide')],
           ),
           throwsAssertionError,
@@ -283,7 +282,7 @@ void main() {
 
       test('toNativeMap has no menu for a plain action', () {
         final map = AdaptiveAppBarAction(
-          iosSymbol: 'info.circle',
+          icon: AdaptiveIcon(sfSymbol: 'info.circle'),
           onPressed: () {},
         ).toNativeMap();
 
@@ -313,14 +312,17 @@ void main() {
 
   group('AdaptiveAppBarAction.badgeCount', () {
     test('defaults to null', () {
-      final action = AdaptiveAppBarAction(iosSymbol: 'bell', onPressed: () {});
+      final action = AdaptiveAppBarAction(
+        icon: AdaptiveIcon(sfSymbol: 'bell'),
+        onPressed: () {},
+      );
 
       expect(action.badgeCount, isNull);
     });
 
     test('stores the given count', () {
       final action = AdaptiveAppBarAction(
-        iosSymbol: 'bell',
+        icon: AdaptiveIcon(sfSymbol: 'bell'),
         badgeCount: 5,
         onPressed: () {},
       );
@@ -330,7 +332,7 @@ void main() {
 
     test('is part of equality and hashCode', () {
       AdaptiveAppBarAction bell(int? count) => AdaptiveAppBarAction(
-        iosSymbol: 'bell',
+        icon: AdaptiveIcon(sfSymbol: 'bell'),
         badgeCount: count,
         onPressed: () {},
       );
@@ -345,7 +347,7 @@ void main() {
       // The native toolbar does not draw action badges; only the glass
       // capsule does, through GlassCapsuleItem.
       final map = AdaptiveAppBarAction(
-        iosSymbol: 'bell',
+        icon: AdaptiveIcon(sfSymbol: 'bell'),
         badgeCount: 5,
         onPressed: () {},
       ).toNativeMap();
@@ -358,12 +360,12 @@ void main() {
   group('AdaptiveAppBarAction.wrapWithBadge', () {
     testWidgets('draws an AdaptiveBadge on Flutter toolbars', (tester) async {
       final badged = AdaptiveAppBarAction(
-        icon: Icons.notifications,
+        icon: AdaptiveIcon(icon: Icons.notifications),
         badgeCount: 7,
         onPressed: () {},
       );
       final plain = AdaptiveAppBarAction(
-        icon: Icons.settings,
+        icon: AdaptiveIcon(icon: Icons.settings),
         badgeCount: 0,
         onPressed: () {},
       );
