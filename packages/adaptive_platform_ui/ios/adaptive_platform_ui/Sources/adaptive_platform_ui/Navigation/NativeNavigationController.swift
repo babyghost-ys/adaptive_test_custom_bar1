@@ -1,0 +1,159 @@
+import Flutter
+import UIKit
+
+final class NativeNavigationController: UINavigationController, UINavigationControllerDelegate, UIGestureRecognizerDelegate {
+    private let navigationSafeAreaBackground: UIView = {
+        let background = UIView()
+        background.isUserInteractionEnabled = false
+        background.accessibilityElementsHidden = true
+        return background
+    }()
+
+    var completedLayout: (() -> Void)?
+    /// Background of the appearance applied to the bar itself, shared by
+    /// every page in the stack rather than carried by each navigation item.
+    var sharedBarColor: UIColor? { didSet { view.setNeedsLayout() } }
+    private let transitionHeaderBackdrop = UIView()
+    private weak var backdropContent: NativeNavigationContent?
+    private weak var backdropContainer: UIView?
+    var requestedBack: (() -> Void)?
+    var willShowRoute: ((UIViewController) -> Void)?
+    var completedNavigation: ((UINavigationController, UIViewController) -> Void)?
+    private(set) var transitioningBetweenRoutes = false
+    var usesManagedRoutes = false {
+        didSet { updatePopGestures() }
+    }
+    var routePopEnabled = true { didSet { updatePopGestures() } }
+    private func updatePopGestures() {
+        let enabled = usesManagedRoutes && routePopEnabled
+        interactivePopGestureRecognizer?.isEnabled = enabled
+        if enabled { interactivePopGestureRecognizer?.delegate = self }
+        if #available(iOS 26.0, *) {
+            interactiveContentPopGestureRecognizer?.isEnabled = enabled
+            if enabled { interactiveContentPopGestureRecognizer?.delegate = self }
+        }
+    }
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard usesManagedRoutes, routePopEnabled, viewControllers.count > 1,
+              !transitioningBetweenRoutes, transitionCoordinator == nil else { return false }
+        return true
+    }
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        delegate = self
+        updatePopGestures()
+    }
+    override var childForStatusBarStyle: UIViewController? { topViewController }
+    override var childForStatusBarHidden: UIViewController? { topViewController }
+    override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
+        topViewController?.supportedInterfaceOrientations ?? super.supportedInterfaceOrientations
+    }
+    override var preferredInterfaceOrientationForPresentation: UIInterfaceOrientation {
+        topViewController?.preferredInterfaceOrientationForPresentation ?? super.preferredInterfaceOrientationForPresentation
+    }
+    override func popViewController(animated: Bool) -> UIViewController? {
+        if !usesManagedRoutes, viewControllers.count > 1, let requestedBack { requestedBack(); return nil }
+        return super.popViewController(animated: animated)
+    }
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        layoutTransitionBackdrop()
+        layoutNavigationSafeAreaBackground()
+        completedLayout?()
+    }
+    private func layoutNavigationSafeAreaBackground() {
+        // The vertical navigation layout can leave a safe-area strip above
+        // UIKit's opaque bar background. Continue only its colour to the edge;
+        // UIKit retains full ownership of bar height, title and side controls.
+        guard !isNavigationBarHidden,
+              let color = topViewController?.navigationItem.standardAppearance?.backgroundColor
+                ?? sharedBarColor,
+              navigationBar.frame.minY > view.bounds.minY else {
+            navigationSafeAreaBackground.removeFromSuperview()
+            return
+        }
+        navigationSafeAreaBackground.backgroundColor = color
+        navigationSafeAreaBackground.frame = CGRect(
+            x: view.bounds.minX, y: view.bounds.minY,
+            width: view.bounds.width,
+            height: navigationBar.frame.minY - view.bounds.minY)
+        view.insertSubview(navigationSafeAreaBackground, belowSubview: navigationBar)
+    }
+    private func layoutTransitionBackdrop() {
+        guard let content = backdropContent,
+              let color = content.transitionHeaderColor,
+              content.transitionHeaderHeight > 0 else {
+            transitionHeaderBackdrop.removeFromSuperview()
+            return
+        }
+        let container = backdropContainer ?? view!
+        container.backgroundColor = content.transitionPageColor ?? .systemBackground
+        transitionHeaderBackdrop.backgroundColor = color
+        transitionHeaderBackdrop.isUserInteractionEnabled = false
+        transitionHeaderBackdrop.accessibilityElementsHidden = true
+        let headerFrame = CGRect(x: 0, y: 0, width: view.bounds.width,
+                                 height: view.safeAreaInsets.top + content.transitionHeaderHeight)
+        transitionHeaderBackdrop.frame = view.convert(headerFrame, to: container)
+        if transitionHeaderBackdrop.superview !== container {
+            container.insertSubview(transitionHeaderBackdrop, at: 0)
+        }
+    }
+    func navigationController(_ navigationController: UINavigationController,
+                              willShow viewController: UIViewController, animated: Bool) {
+        guard usesManagedRoutes else { return }
+        transitioningBetweenRoutes = true
+        willShowRoute?(viewController)
+        let hidesBar = (viewController as? NativeNavigationContent)?.hidesNativeNavigationBar ?? false
+        // UIKit rounds its transition cards. The surface exposed behind a
+        // custom-header root must use that page's colors, not system white.
+        backdropContent = hidesBar ? viewController as? NativeNavigationContent : nil
+        backdropContainer = transitionCoordinator?.containerView
+        layoutTransitionBackdrop()
+        // The root owns a Flutter header. Finish the native bar handoff now:
+        // Duo's detached title otherwise outlives the interactive content slide.
+        // Keep Flutter rebuilds from restoring the outgoing bar mid-transition.
+        setNavigationBarHidden(hidesBar, animated: hidesBar ? false : animated)
+        if let coordinator = transitionCoordinator {
+            let source = coordinator.viewController(forKey: .from) as? NativeNavigationContent
+            let sourceHidesBar = source?.transitionHeaderHeight ?? 0 > 0
+            coordinator.animate(alongsideTransition: nil) { [weak self] context in
+                guard context.isCancelled else { return }
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    self.transitioningBetweenRoutes = false
+                    self.backdropContent = sourceHidesBar ? source : nil
+                    self.layoutTransitionBackdrop()
+                    self.setNavigationBarHidden(sourceHidesBar, animated: false)
+                }
+            }
+        }
+    }
+    func navigationController(_ navigationController: UINavigationController,
+                              didShow viewController: UIViewController, animated: Bool) {
+        if usesManagedRoutes {
+            backdropContent = (viewController as? NativeNavigationContent)?.hidesNativeNavigationBar == true
+                ? viewController as? NativeNavigationContent : nil
+            layoutTransitionBackdrop()
+            setNavigationBarHidden(
+                (viewController as? NativeNavigationContent)?.hidesNativeNavigationBar ?? false,
+                animated: false)
+        }
+        // didShow can precede UIKit's interactive-transition cleanup. Moving
+        // the shared Flutter surface here can carry its temporary rounded mask
+        // into the restored page. Keep the retained destination visible until
+        // the coordinator finishes, then transfer the live surface next turn.
+        let finish: () -> Void = { [weak self, weak viewController] in
+            DispatchQueue.main.async { [weak self, weak viewController] in
+                guard let self, let viewController,
+                      self.topViewController === viewController else { return }
+                self.transitioningBetweenRoutes = false
+                self.completedNavigation?(self, viewController)
+            }
+        }
+        if let coordinator = transitionCoordinator,
+           coordinator.animate(alongsideTransition: nil, completion: { _ in finish() }) {
+            return
+        }
+        finish()
+    }
+}

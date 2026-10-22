@@ -1,96 +1,74 @@
-/// A Flutter package that provides adaptive platform-specific widgets
+/// Adaptive widgets that render the running platform's own controls.
 ///
-/// This package automatically renders native-looking widgets based on the platform:
-/// - iOS 26+: Modern iOS 26 native designs with latest visual styles
-/// - iOS <26 (iOS 18 and below): Traditional Cupertino widgets
-/// - Android: Material Design widgets
-///
-/// ## Features
-///
-/// - Automatic platform detection
-/// - iOS version-specific widget rendering
-/// - Native iOS 26 designs following Apple's Human Interface Guidelines
-/// - Seamless fallback to appropriate widgets for older iOS versions
-/// - Material Design for Android
-///
-/// ## Usage
+/// - iOS: the running release's UIKit controls and bars, Liquid Glass on
+///   iOS 26 and later, including the iPhone Duo vertical bar.
+/// - Android and elsewhere: Material widgets.
 ///
 /// ```dart
-/// import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
-///
-/// AdaptiveButton(
-///   onPressed: () {
-///     print('Button pressed');
-///   },
-///   child: Text('Click Me'),
+/// AdaptiveApp(
+///   theme: AdaptiveThemeData(primaryColor: Colors.teal),
+///   home: AdaptiveScaffold(
+///     appBar: AdaptiveAppBar(title: 'Inbox', largeTitle: true),
+///     body: ListView(children: messages),
+///   ),
 /// )
 /// ```
 library;
 
 // Platform utilities
-export 'src/platform/platform_info.dart';
+export 'src/core/platform_info.dart';
+export 'src/core/adaptive_style.dart';
 
 // Animation utilities
-export 'src/utils/animation.dart';
+export 'src/core/animation.dart';
 
 // Styles
+export 'src/core/theme/adaptive_theme.dart';
 export 'src/style/sf_symbol.dart';
+export 'src/style/adaptive_icon.dart';
 
 // Widgets
-export 'src/widgets/adaptive_app.dart';
-export 'src/widgets/adaptive_navigator.dart' show AdaptiveNavigator;
+export 'src/app/adaptive_app.dart';
+export 'src/navigation/navigator/adaptive_navigator.dart'
+    show AdaptiveNavigator, AdaptivePage;
 
 // Fixed toolbar chrome (installed automatically by AdaptiveApp; exported so
 // apps with their own MaterialApp/CupertinoApp can wrap their builder)
-export 'src/toolbar/adaptive_toolbar_host.dart';
-export 'src/toolbar/toolbar_registry.dart';
-export 'src/widgets/adaptive_app_bar.dart';
-export 'src/widgets/adaptive_bottom_navigation_bar.dart';
-export 'src/widgets/adaptive_tab_search.dart';
-export 'src/widgets/adaptive_button.dart';
-export 'src/widgets/adaptive_switch.dart';
-export 'src/widgets/adaptive_checkbox.dart';
-export 'src/widgets/adaptive_radio.dart';
-export 'src/widgets/adaptive_card.dart';
-export 'src/widgets/adaptive_badge.dart';
-export 'src/widgets/adaptive_tooltip.dart';
-export 'src/widgets/adaptive_slider.dart';
-export 'src/widgets/adaptive_segmented_control.dart';
-export 'src/widgets/adaptive_alert_dialog.dart';
-export 'src/widgets/adaptive_popup_menu_button.dart';
-export 'src/widgets/adaptive_context_menu.dart';
-export 'src/widgets/adaptive_scaffold.dart';
-export 'src/widgets/adaptive_app_bar_action.dart';
-export 'src/widgets/adaptive_snackbar.dart';
-export 'src/widgets/adaptive_date_picker.dart';
-export 'src/widgets/adaptive_time_picker.dart';
-export 'src/widgets/adaptive_list_tile.dart';
-export 'src/widgets/adaptive_text_field.dart';
-export 'src/widgets/adaptive_text_form_field.dart';
-export 'src/widgets/adaptive_tab_view.dart';
-export 'src/widgets/adaptive_floating_action_button.dart';
-export 'src/widgets/adaptive_form_section.dart';
-export 'src/widgets/adaptive_expansion_tile.dart';
-export 'src/widgets/adaptive_blur_view.dart';
+export 'src/navigation/chrome/adaptive_toolbar_host.dart';
+export 'src/navigation/chrome/toolbar_registry.dart';
+export 'src/navigation/app_bar/adaptive_app_bar.dart';
+export 'src/navigation/tab_bar/adaptive_bottom_navigation_bar.dart';
+export 'src/navigation/search/adaptive_tab_search.dart';
+export 'src/controls/button/adaptive_button.dart';
+export 'src/controls/switch/adaptive_switch.dart';
+export 'src/controls/checkbox/adaptive_checkbox.dart';
+export 'src/controls/radio/adaptive_radio.dart';
+export 'src/content/card/adaptive_card.dart';
+export 'src/content/badge/adaptive_badge.dart';
+export 'src/overlays/tooltip/adaptive_tooltip.dart';
+export 'src/controls/slider/adaptive_slider.dart';
+export 'src/controls/segmented_control/adaptive_segmented_control.dart';
+export 'src/overlays/alert_dialog/adaptive_alert_dialog.dart';
+export 'src/overlays/popup_menu/adaptive_popup_menu_button.dart';
+export 'src/overlays/context_menu/adaptive_context_menu.dart';
+export 'src/navigation/scaffold/adaptive_scaffold.dart';
+export 'src/navigation/drawer/adaptive_drawer.dart';
+export 'src/navigation/app_bar/adaptive_app_bar_action.dart';
+export 'src/overlays/snackbar/adaptive_snackbar.dart';
+export 'src/controls/pickers/adaptive_date_picker.dart';
+export 'src/controls/pickers/adaptive_time_picker.dart';
+export 'src/content/list_tile/adaptive_list_tile.dart';
+export 'src/controls/text_field/adaptive_text_field.dart';
+export 'src/controls/text_field/adaptive_text_form_field.dart';
+export 'src/navigation/tab_bar/adaptive_tab_view.dart';
+export 'src/navigation/scaffold/adaptive_floating_action_button.dart';
+export 'src/content/form_section/adaptive_form_section.dart';
+export 'src/content/expansion_tile/adaptive_expansion_tile.dart';
+export 'src/content/blur_view/adaptive_blur_view.dart';
 
-// iOS 26 specific widgets (for advanced usage)
-export 'src/widgets/ios26/ios26_button.dart';
-export 'src/widgets/ios26/ios26_switch.dart';
-export 'src/widgets/ios26/ios26_slider.dart';
-export 'src/widgets/ios26/ios26_segmented_control.dart';
-export 'src/widgets/ios26/ios26_alert_dialog.dart';
-export 'src/widgets/ios26/ios26_context_menu.dart';
-export 'src/widgets/ios26/ios26_native_search_tab_bar.dart';
-export 'src/widgets/ios26/ios26_native_tab_bar.dart';
-export 'src/widgets/ios26/ios26_scaffold_legacy.dart';
-
-export 'src/widgets/adaptive_navigation_scroll_controller.dart';
-
-export 'src/widgets/adaptive_action_sheet.dart';
-export 'src/widgets/adaptive_bottom_sheet.dart';
-export 'src/widgets/adaptive_inline_date_picker.dart';
+export 'src/overlays/action_sheet/adaptive_action_sheet.dart';
+export 'src/overlays/bottom_sheet/adaptive_bottom_sheet.dart';
+export 'src/controls/pickers/adaptive_inline_date_picker.dart';
 export 'src/style/adaptive_native_fonts.dart';
 
-export 'src/widgets/adaptive_navigation_search_bar.dart';
-
-export 'src/widgets/adaptive_list_view.dart';
+export 'src/navigation/search/adaptive_navigation_search_bar.dart';

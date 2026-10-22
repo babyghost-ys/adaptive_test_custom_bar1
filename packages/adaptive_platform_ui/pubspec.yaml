@@ -1,10 +1,7 @@
 name: adaptive_platform_ui
 description: "Adaptive platform-specific widgets for Flutter. Auto renders native iOS 26+ liquid glass designs, traditional Cupertino widgets for older iOS versions, Material Design for Android."
-version: 1.0.2
+version: 2.0.0
 homepage: https://github.com/berkaycatak/adaptive_platform_ui
-screenshots:
-  - description: "iOS 26+ liquid glass designs"
-    path: img/liquid-glass-demo.png
 
 environment:
   sdk: ^3.9.2
@@ -13,6 +10,8 @@ environment:
 
 dependencies:
   flutter:
+    sdk: flutter
+  flutter_localizations:
     sdk: flutter
 
 dev_dependencies:

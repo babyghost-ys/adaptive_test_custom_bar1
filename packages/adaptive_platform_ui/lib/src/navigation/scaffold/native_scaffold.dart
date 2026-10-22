@@ -1,0 +1,434 @@
+import '../../core/adaptive_style.dart';
+import 'dart:math' as math;
+
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart' show ValueListenable;
+import '../../devices/duo/system_vertical_bar.dart';
+import '../../style/sf_symbol.dart';
+import '../../devices/duo/duo_layout.dart';
+import '../chrome/toolbar_chrome_scope.dart';
+import '../app_bar/adaptive_app_bar_action.dart';
+import '../app_bar/adaptive_navigation_scroll_controller.dart';
+import '../tab_bar/adaptive_bottom_navigation_bar.dart';
+import '../../controls/button/adaptive_button.dart';
+import '../navigator/adaptive_navigator.dart';
+import '../tab_bar/native_tab_bar.dart';
+import 'body_placement.dart';
+import 'native_bottom_bar_layout.dart';
+import '../app_bar/native_toolbar.dart';
+
+/// Height of the iOS 26 Liquid Glass toolbar's content area (excluding the
+/// status bar), matching [NativeToolbar]'s default height. The toolbar is
+/// an overlay, so this amount is added to the body's top padding.
+const double kToolbarContentHeight = 44.0;
+
+/// Native iOS 26 scaffold with UITabBar
+class NativeScaffold extends StatefulWidget {
+  const NativeScaffold({
+    super.key,
+    this.bottomNavigationBar,
+    this.title,
+    this.largeTitle = false,
+    this.scrollController,
+    this.actions,
+    this.leading,
+    this.tintColor,
+    this.navigationBarColor,
+    this.navigationBarShadow = false,
+    this.titleStyle,
+    this.hidesNavigationButtonBackground = false,
+    this.titleWidget,
+    this.useHeroBackButton = true,
+    this.useFixedToolbar = true,
+    this.tabBarHidden = false,
+    this.resizeToAvoidBottomInset,
+    this.backgroundColor,
+    this.bodyPlacement = const BodyPlacement(underTop: true, underBottom: true),
+    @visibleForTesting this.debugVerticalBarEdge,
+    required this.children,
+  });
+
+  final AdaptiveBottomNavigationBar? bottomNavigationBar;
+  final String? title;
+  final bool largeTitle;
+  final AdaptiveNavigationScrollController? scrollController;
+  final List<AdaptiveAppBarAction>? actions;
+  final Widget? leading;
+  final Color? tintColor;
+
+  /// Opaque native navigation background, including its scroll-edge appearance.
+  final Color? navigationBarColor;
+  final bool navigationBarShadow;
+  final TextStyle? titleStyle;
+
+  /// Removes the shared glass background from native navigation buttons.
+  final bool hidesNavigationButtonBackground;
+
+  /// Custom widget overlaid at the toolbar's title position.
+  /// When set, the native title is hidden and this widget is centered instead.
+  final Widget? titleWidget;
+  final bool useHeroBackButton;
+
+  /// Whether the fixed toolbar host, when there is one, draws this page's
+  /// toolbar. False makes the page draw its own, as it does without a host.
+  final bool useFixedToolbar;
+
+  /// Page background; null keeps the Cupertino theme's scaffold colour.
+  final Color? backgroundColor;
+  final bool tabBarHidden;
+  final bool? resizeToAvoidBottomInset;
+
+  /// Which bars the body runs under; see [BodyPlacement.resolve].
+  final BodyPlacement bodyPlacement;
+  final List<Widget> children;
+
+  /// Replaces the system's vertical bar edge in widget tests, where the
+  /// platform channel it comes from does not exist.
+  @visibleForTesting
+  final SystemVerticalBarEdge? debugVerticalBarEdge;
+
+  @override
+  State<NativeScaffold> createState() => _NativeScaffoldState();
+}
+
+class _NativeScaffoldState extends State<NativeScaffold> {
+  /// The system's vertical bar edge, for a page that draws its own bar and so
+  /// has no host to ask. Null off iOS 26, where no channel answers.
+  ValueListenable<SystemVerticalBarEdge>? _edge;
+
+  @override
+  void initState() {
+    super.initState();
+    if (AdaptiveCapabilities.systemVerticalBarEdge) {
+      _edge = SystemVerticalBar.edge..addListener(_onEdgeChanged);
+      SystemVerticalBar.titleBand.addListener(_onEdgeChanged);
+    }
+    // This page's own bar metrics, on every iOS version. A value shared by
+    // all pages would hand this page the inset of whichever bar reported last.
+    widget.scrollController?.contentTopInset.addListener(_onEdgeChanged);
+  }
+
+  @override
+  void didUpdateWidget(NativeScaffold oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.scrollController != widget.scrollController) {
+      oldWidget.scrollController?.contentTopInset.removeListener(
+        _onEdgeChanged,
+      );
+      widget.scrollController?.contentTopInset.addListener(_onEdgeChanged);
+    }
+  }
+
+  void _onEdgeChanged() {
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  @override
+  void dispose() {
+    if (_edge != null) {
+      _edge!.removeListener(_onEdgeChanged);
+      SystemVerticalBar.titleBand.removeListener(_onEdgeChanged);
+    }
+    widget.scrollController?.contentTopInset.removeListener(_onEdgeChanged);
+    super.dispose();
+  }
+
+  /// Determines if the current window is in a windowed mode.
+  ///
+  /// This method compares the display size of the device with the viewport size
+  /// calculated from the logical size and device pixel ratio.
+  /// It returns true if the sizes do not match, indicating that the application is not in full-screen mode.
+  bool _getIsWindowed() {
+    final displaySize = View.of(context).display.size;
+    final logicalSize = MediaQuery.sizeOf(context);
+    final devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
+    final viewportSize = Size(
+      logicalSize.width * devicePixelRatio,
+      logicalSize.height * devicePixelRatio,
+    );
+
+    return (displaySize.longestSide != viewportSize.longestSide) ||
+        (displaySize.shortestSide != viewportSize.shortestSide);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Auto back button logic
+    // Priority: custom leading widget > Hero back button
+    Widget? heroLeading;
+
+    final canPop = Navigator.of(context).canPop();
+
+    // Only show auto back button if no custom leading widget
+    if (widget.leading == null &&
+        (widget.bottomNavigationBar?.items == null ||
+            widget.bottomNavigationBar!.items!.isEmpty) &&
+        canPop) {
+      final isCurrent = ModalRoute.of(context)?.isCurrent ?? true;
+      if (isCurrent) {
+        final backButton = Container(
+          // 62px accounts for the iPadOS system window toolbar width in windowed mode
+          margin: EdgeInsets.only(left: _getIsWindowed() ? 62 : 0),
+          height: 38,
+          width: 38,
+          child: AdaptiveButton.sfSymbol(
+            onPressed: () => Navigator.of(context).pop(),
+            sfSymbol: SFSymbol("chevron.left", size: 20),
+            useSmoothRectangleBorder: false,
+          ),
+        );
+        heroLeading = widget.useHeroBackButton
+            ? Hero(
+                tag: 'adaptive_back_button',
+                flightShuttleBuilder: (_, __, ___, ____, toHeroContext) =>
+                    toHeroContext.widget,
+                child: backButton,
+              )
+            : backButton;
+      } else {
+        const placeholder = SizedBox(height: 38, width: 38);
+        heroLeading = widget.useHeroBackButton
+            ? const Hero(tag: 'adaptive_back_button', child: placeholder)
+            : placeholder;
+      }
+    }
+
+    // Determine if toolbar/tab bar's underlying UiKitView should be shown.
+    // Hide native platform views when another route is pushed on top to prevent bleed-through.
+    final isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? true;
+    final isPopping =
+        ModalRoute.of(context)?.animation?.status == AnimationStatus.reverse;
+
+    // The Flutter widgets (like Hero) should ALWAYS stay in the tree during transitions.
+    // Only the underlying UiKitView should be hidden.
+    final hasToolbarContent =
+        (widget.title != null ||
+        widget.titleWidget != null ||
+        widget.leading != null ||
+        heroLeading != null ||
+        (widget.actions != null && widget.actions!.isNotEmpty));
+
+    // A popup route (sheet, dialog) above leaves this page on screen. A page
+    // route above drives this route's secondary animation; a popup does not.
+    final route = ModalRoute.of(context);
+    final coveredByPopup =
+        !isCurrentRoute &&
+        !isPopping &&
+        !hasNativePageAbove(route) &&
+        (route?.isActive ?? false) &&
+        route?.secondaryAnimation?.status == AnimationStatus.dismissed;
+
+    // Show native view only if it's the current route OR it's popping. A
+    // sheet rises over the tab bar, so the tab bar follows this rule alone.
+    final showNativeView = isCurrentRoute || isPopping;
+
+    // The top bar also stays while a popup covers the page, dimmed and inert
+    // like UIKit's navigation bar behind a presented sheet.
+    final showNativeToolbar = showNativeView || coveredByPopup;
+
+    // Get brightness and determine text color
+    final brightness = MediaQuery.platformBrightnessOf(context);
+    final textColor = brightness == Brightness.dark
+        ? CupertinoColors.white
+        : CupertinoColors.black;
+
+    // Content - full screen - use KeepAlive to prevent rebuild
+    // Wrap content with DefaultTextStyle to ensure proper text color
+    Widget bodyContent = DefaultTextStyle.merge(
+      style: TextStyle(
+        color: textColor,
+        fontSize: 17, // iOS default
+      ),
+      // Innermost, so it sees every inset: the top bar's below, the tab
+      // bar's from NativeBottomBarLayout around it.
+      child: PlacedBody(
+        placement: widget.bodyPlacement,
+        child: widget.children.length == 1
+            ? widget.children.first
+            : IndexedStack(
+                index: widget.bottomNavigationBar?.selectedIndex ?? 0,
+                sizing: StackFit.expand,
+                children: widget.children,
+              ),
+      ),
+    );
+
+    // iPhone Duo (inner display, and the cover display while folded): the
+    // system reserves a trailing strip and UIKit lays the navigation bar out
+    // as a vertical bar in it, with the title kept at the top.
+    final chrome = widget.useFixedToolbar
+        ? ToolbarChromeScope.maybeOf(context)
+        : null;
+    var mq = MediaQuery.of(context);
+    // A scope above (the host, or an outer scaffold) has already decided the
+    // pose, and has put any strip the system did not reserve into the
+    // MediaQuery. Only without one resolve it here.
+    final scope = DuoPoseScope.maybeOf(context);
+    final pose = scope != null
+        ? scope.pose
+        : DuoLayout.resolvePose(
+            mq.viewPadding,
+            widget.debugVerticalBarEdge ??
+                _edge?.value ??
+                SystemVerticalBarEdge.unknown,
+          );
+    final duoVerticalPose = pose != null;
+    if (chrome == null &&
+        pose != null &&
+        !pose.reservedBySystem &&
+        (pose.onLeft ? mq.viewPadding.left : mq.viewPadding.right) == 0) {
+      // Nothing above reserved the strip (the leading Split View pane): add it
+      // the way UIKit does for a native app, so the body clears the bar. A
+      // scaffold nested in this one, or one under a host, finds the inset
+      // already in place and does not add it again.
+      mq = mq.copyWith(
+        padding: pose.addStrip(mq.padding),
+        viewPadding: pose.addStrip(mq.viewPadding),
+      );
+    }
+    final hasTitle = widget.title != null || widget.titleWidget != null;
+    final showTopToolbar = duoVerticalPose ? hasTitle : hasToolbarContent;
+
+    // The Liquid Glass toolbar is drawn as a Positioned overlay on top of the
+    // body (see below), so, unlike CupertinoPageScaffold with a translucent
+    // nav bar, it does NOT inset the body automatically. Mirror that framework
+    // behaviour here by adding the toolbar's height to the body's top padding,
+    // so any SafeArea/SliverSafeArea inside a page clears it without per-screen
+    // offset hacks. For scrolling content, use AdaptiveListView or put
+    // SliverSafeArea inside a CustomScrollView. A SafeArea outside a ListView
+    // shrinks its viewport and clips content at the toolbar's lower edge.
+    //
+    // On iPhone Duo the body is also kept out of the trailing strip, the way
+    // UIKit keeps content out of it: that strip holds the status cluster and
+    // the vertical bar, and a page that does not use SafeArea would otherwise
+    // run underneath both. The inset is taken from `padding` and consumed, so
+    // a scaffold nested in this one (a tab inside a shell) does not inset a
+    // second time, and a SafeArea further down has nothing left to add.
+    //
+    // The strip is on the right in most poses and on the left in the leading
+    // Split View pane; the pose says which.
+    final barOnLeft = pose?.onLeft ?? false;
+    final trailingInset = !duoVerticalPose
+        ? 0.0
+        : barOnLeft
+        ? mq.padding.left
+        : mq.padding.right;
+    // UIKit supplies the bar's size; the layout passes its occupied height
+    // into the body's safe area without changing the scrolling viewport.
+    bodyContent = NativeBottomBarLayout(
+      body: bodyContent,
+      barVisible: !widget.tabBarHidden && showNativeView,
+      bottomBar:
+          !duoVerticalPose &&
+              widget.bottomNavigationBar?.items != null &&
+              widget.bottomNavigationBar!.items!.isNotEmpty &&
+              widget.bottomNavigationBar!.selectedIndex != null &&
+              widget.bottomNavigationBar!.onTap != null
+          ? NativeTabBar(
+              destinations: widget.bottomNavigationBar!.items!,
+              selectedIndex: widget.bottomNavigationBar!.selectedIndex!,
+              onTap: widget.bottomNavigationBar!.onTap!,
+              tint: CupertinoTheme.of(context).primaryColor,
+              showNativeView: showNativeView,
+              hidden: widget.tabBarHidden,
+            )
+          : null,
+    );
+
+    if (showTopToolbar || trailingInset > 0) {
+      final pageInset = widget.scrollController?.contentTopInset.value;
+      final topInset = !showTopToolbar
+          ? 0.0
+          : duoVerticalPose
+          ? math.max(0.0, DuoTitleBand.of(context).contentTop - mq.padding.top)
+          // UIKit's content inset for this page at rest: below the bar, and
+          // below an expanded large title. It stays put while a large title
+          // collapses, so the body never moves as the user scrolls.
+          : pageInset != null
+          ? math.max(0.0, pageInset - mq.padding.top)
+          : kToolbarContentHeight;
+      bodyContent = Padding(
+        padding: EdgeInsets.only(
+          left: barOnLeft ? trailingInset : 0,
+          right: barOnLeft ? 0 : trailingInset,
+        ),
+        child: MediaQuery(
+          data: mq.copyWith(
+            padding: mq.padding.copyWith(
+              top: mq.padding.top + topInset,
+              left: mq.padding.left - (barOnLeft ? trailingInset : 0),
+              right: mq.padding.right - (barOnLeft ? 0 : trailingInset),
+            ),
+            viewPadding: mq.viewPadding.copyWith(
+              top: mq.viewPadding.top + topInset,
+            ),
+          ),
+          child: bodyContent,
+        ),
+      );
+    }
+
+    // Build the stack content
+    final stackContent = Stack(
+      children: [
+        bodyContent,
+        // The native bar. On iPhone Duo UIKit lays it out as the vertical bar.
+        if (showTopToolbar && !(chrome?.hostsToolbar ?? false))
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            height: duoVerticalPose ? mq.size.height : null,
+            child: NativeToolbar(
+              title: widget.title,
+              largeTitle: widget.largeTitle,
+              scrollController: widget.scrollController,
+              verticalNavigation: duoVerticalPose,
+              leadingText: duoVerticalPose && heroLeading != null ? '' : null,
+              onLeadingTap: () => Navigator.of(context).maybePop(),
+              leading: duoVerticalPose ? null : (widget.leading ?? heroLeading),
+              showNativeView: showNativeToolbar,
+              covered: coveredByPopup,
+              actions: widget.actions,
+              tintColor: widget.tintColor,
+              navigationBarColor: widget.navigationBarColor,
+              navigationBarShadow: widget.navigationBarShadow,
+              titleStyle: widget.titleStyle,
+              hidesNavigationButtonBackground:
+                  widget.hidesNavigationButtonBackground,
+              titleWidget: widget.titleWidget,
+              onActionTap: (index) {
+                // Call the appropriate action callback
+                if (widget.actions != null &&
+                    index >= 0 &&
+                    index < widget.actions!.length) {
+                  widget.actions![index].onPressed();
+                }
+              },
+            ),
+          ),
+      ],
+    );
+
+    // Keep the keyboard from resizing a page with a bottom tab bar.
+    final hasBottomNav =
+        widget.bottomNavigationBar?.items != null &&
+        widget.bottomNavigationBar!.items!.isNotEmpty;
+
+    // The title and the own bar read the pose from the scope, so they agree
+    // with the body inset above.
+    final scoped = DuoPoseScope(pose: pose, child: stackContent);
+
+    return CupertinoPageScaffold(
+      backgroundColor: widget.backgroundColor,
+      // The native tab bar is a bottom-aligned overlay. If the scaffold
+      // resizes for the keyboard the tab bar
+      // floats above it — non-standard on iOS. Disable the resize so the
+      // keyboard window (higher z-order) covers the tab bar naturally.
+      resizeToAvoidBottomInset:
+          widget.resizeToAvoidBottomInset ?? !hasBottomNav,
+      child: scoped,
+    );
+  }
+}
