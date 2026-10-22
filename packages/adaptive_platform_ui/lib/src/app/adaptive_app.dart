@@ -1,6 +1,8 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import '../core/theme/adaptive_theme.dart';
 import '../core/platform_info.dart';
 import '../navigation/chrome/adaptive_toolbar_host.dart';
 
@@ -92,6 +94,8 @@ class AdaptiveApp extends StatelessWidget {
     this.title = '',
     this.onGenerateTitle,
     this.themeMode,
+    this.theme,
+    this.darkTheme,
     this.materialLightTheme,
     this.materialDarkTheme,
     this.cupertinoLightTheme,
@@ -122,6 +126,8 @@ class AdaptiveApp extends StatelessWidget {
     this.title = '',
     this.onGenerateTitle,
     this.themeMode,
+    this.theme,
+    this.darkTheme,
     this.materialLightTheme,
     this.materialDarkTheme,
     this.cupertinoLightTheme,
@@ -189,6 +195,32 @@ class AdaptiveApp extends StatelessWidget {
 
   // Theme properties
   final ThemeMode? themeMode;
+
+  /// The app's colours and bar style on every platform. The Material and
+  /// Cupertino themes are derived from it unless they are passed explicitly.
+  final AdaptiveThemeData? theme;
+
+  /// [theme] for dark mode. Null derives one from [theme] that keeps its
+  /// accent and bar style but uses the system's dark page background.
+  final AdaptiveThemeData? darkTheme;
+
+  AdaptiveThemeData? get _darkData =>
+      darkTheme ??
+      (theme == null
+          ? null
+          : AdaptiveThemeData(
+              primaryColor: theme!.primaryColor,
+              barStyle: theme!.barStyle,
+            ));
+
+  /// The app's delegates plus the Material, Cupertino and widgets ones the
+  /// package's widgets need on every platform.
+  List<LocalizationsDelegate<dynamic>> get _localizationsDelegates => [
+    ...?localizationsDelegates,
+    GlobalMaterialLocalizations.delegate,
+    GlobalCupertinoLocalizations.delegate,
+    GlobalWidgetsLocalizations.delegate,
+  ];
   final ThemeData? materialLightTheme;
   final ThemeData? materialDarkTheme;
 
@@ -265,12 +297,14 @@ class AdaptiveApp extends StatelessWidget {
     // If Cupertino theme is not provided, try to derive primaryColor from Material theme
     final effectiveLightTheme =
         cupertinoLightTheme ??
+        theme?.cupertino(Brightness.light) ??
         CupertinoThemeData(
           brightness: Brightness.light,
           primaryColor: materialLightTheme?.colorScheme.primary,
         );
     final effectiveDarkTheme =
         cupertinoDarkTheme ??
+        _darkData?.cupertino(Brightness.dark) ??
         CupertinoThemeData(
           brightness: Brightness.dark,
           primaryColor: materialDarkTheme?.colorScheme.primary,
@@ -294,7 +328,16 @@ class AdaptiveApp extends StatelessWidget {
       final isDark = effectiveBrightness == Brightness.dark;
 
       // Apply the appropriate theme and ensure MediaQuery has correct brightness
-      final theme = isDark ? effectiveDarkTheme : effectiveLightTheme;
+      final cupertinoTheme = isDark ? effectiveDarkTheme : effectiveLightTheme;
+      // Material widgets used on iOS (ListTile, InkWell, Drawer...) follow
+      // the same colours instead of Flutter's default blue theme.
+      final materialTheme = isDark
+          ? materialDarkTheme ??
+                _darkData?.material(Brightness.dark) ??
+                ThemeData(brightness: Brightness.dark)
+          : materialLightTheme ??
+                theme?.material(Brightness.light) ??
+                ThemeData(brightness: Brightness.light);
 
       return MediaQuery(
         data: MediaQuery.of(
@@ -307,7 +350,13 @@ class AdaptiveApp extends StatelessWidget {
           value: isDark
               ? SystemUiOverlayStyle.light
               : SystemUiOverlayStyle.dark,
-          child: CupertinoTheme(data: theme, child: child!),
+          child: AdaptiveTheme(
+            data: (isDark ? _darkData : theme) ?? const AdaptiveThemeData(),
+            child: Theme(
+              data: materialTheme,
+              child: CupertinoTheme(data: cupertinoTheme, child: child!),
+            ),
+          ),
         ),
       );
     }
@@ -340,7 +389,7 @@ class AdaptiveApp extends StatelessWidget {
         theme:
             effectiveLightTheme, // Default theme (will be overridden by builder)
         locale: locale,
-        localizationsDelegates: localizationsDelegates,
+        localizationsDelegates: _localizationsDelegates,
         localeListResolutionCallback: localeListResolutionCallback,
         localeResolutionCallback: localeResolutionCallback,
         supportedLocales: supportedLocales,
@@ -373,7 +422,7 @@ class AdaptiveApp extends StatelessWidget {
       theme:
           effectiveLightTheme, // Default theme (will be overridden by builder)
       locale: locale,
-      localizationsDelegates: localizationsDelegates,
+      localizationsDelegates: _localizationsDelegates,
       localeListResolutionCallback: localeListResolutionCallback,
       localeResolutionCallback: localeResolutionCallback,
       supportedLocales: supportedLocales,
@@ -399,8 +448,10 @@ class AdaptiveApp extends StatelessWidget {
     // Install the fixed toolbar chrome above the navigator, then apply the
     // user's builder outermost.
     Widget materialBuilder(BuildContext context, Widget? child) {
-      final hosted = AdaptiveToolbarHost(
-        child: child ?? const SizedBox.shrink(),
+      final dark = Theme.of(context).brightness == Brightness.dark;
+      final hosted = AdaptiveTheme(
+        data: (dark ? _darkData : theme) ?? const AdaptiveThemeData(),
+        child: AdaptiveToolbarHost(child: child ?? const SizedBox.shrink()),
       );
       return builder != null ? builder!(context, hosted) : hosted;
     }
@@ -417,11 +468,11 @@ class AdaptiveApp extends StatelessWidget {
         title: title,
         onGenerateTitle: onGenerateTitle,
         color: config.color,
-        theme: materialLightTheme,
-        darkTheme: materialDarkTheme,
+        theme: materialLightTheme ?? theme?.material(Brightness.light),
+        darkTheme: materialDarkTheme ?? _darkData?.material(Brightness.dark),
         themeMode: themeMode ?? ThemeMode.system,
         locale: locale,
-        localizationsDelegates: localizationsDelegates,
+        localizationsDelegates: _localizationsDelegates,
         localeListResolutionCallback: localeListResolutionCallback,
         localeResolutionCallback: localeResolutionCallback,
         supportedLocales: supportedLocales,
@@ -455,11 +506,11 @@ class AdaptiveApp extends StatelessWidget {
       title: title,
       onGenerateTitle: onGenerateTitle,
       color: config.color,
-      theme: materialLightTheme,
-      darkTheme: materialDarkTheme,
+      theme: materialLightTheme ?? theme?.material(Brightness.light),
+      darkTheme: materialDarkTheme ?? _darkData?.material(Brightness.dark),
       themeMode: themeMode ?? ThemeMode.system,
       locale: locale,
-      localizationsDelegates: localizationsDelegates,
+      localizationsDelegates: _localizationsDelegates,
       localeListResolutionCallback: localeListResolutionCallback,
       localeResolutionCallback: localeResolutionCallback,
       supportedLocales: supportedLocales,

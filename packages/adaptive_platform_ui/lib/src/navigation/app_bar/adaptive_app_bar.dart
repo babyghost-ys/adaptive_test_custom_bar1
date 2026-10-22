@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+import '../../core/theme/adaptive_theme.dart';
 import 'adaptive_app_bar_action.dart';
 import 'adaptive_navigation_scroll_controller.dart';
 
@@ -26,8 +27,8 @@ class AdaptiveAppBar {
     this.useNativeToolbar = true,
     this.tintColor,
     this.navigationBarColor,
-    this.navigationBarShadow = false,
-    this.hidesNavigationButtonBackground = false,
+    this.navigationBarShadow,
+    this.hidesNavigationButtonBackground,
     this.titleWidget,
     this.cupertinoNavigationBar,
     this.appBar,
@@ -78,6 +79,7 @@ class AdaptiveAppBar {
   final Widget? titleWidget;
 
   /// Tint color for action and back buttons on the native iOS path.
+  /// Null takes the foreground of the app's [AdaptiveBarStyle].
   ///
   /// When set, this color is applied to the navigation bar's tintColor,
   /// which colors all bar button items (action buttons and back button).
@@ -85,14 +87,17 @@ class AdaptiveAppBar {
   final Color? tintColor;
 
   /// Opaque native navigation background, including its scroll-edge appearance.
+  /// Null takes the colour of the app's [AdaptiveBarStyle].
   final Color? navigationBarColor;
 
   /// Draws a subtle native shadow below a [navigationBarColor] bar on the
   /// native iOS path. Ignored without [navigationBarColor].
-  final bool navigationBarShadow;
+  /// Null takes the app's [AdaptiveBarStyle.shadow].
+  final bool? navigationBarShadow;
 
   /// Removes the shared glass background from native navigation buttons.
-  final bool hidesNavigationButtonBackground;
+  /// Null takes the app's [AdaptiveBarStyle.plainButtons].
+  final bool? hidesNavigationButtonBackground;
 
   /// Custom iOS navigation bar, including AdaptiveNavigationSearchBar.
   ///

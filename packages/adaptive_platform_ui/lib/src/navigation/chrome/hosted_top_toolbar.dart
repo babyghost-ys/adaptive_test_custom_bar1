@@ -61,8 +61,9 @@ class TopToolbarContent {
           : appBar.actions ?? const <AdaptiveAppBarAction>[],
       tint: appBar.tintColor,
       navigationBarColor: appBar.navigationBarColor,
-      navigationBarShadow: appBar.navigationBarShadow,
-      hidesNavigationButtonBackground: appBar.hidesNavigationButtonBackground,
+      navigationBarShadow: appBar.navigationBarShadow ?? false,
+      hidesNavigationButtonBackground:
+          appBar.hidesNavigationButtonBackground ?? false,
       navigator: entry.navigator,
     );
   }

@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:go_router/go_router.dart';
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 
@@ -93,15 +92,8 @@ Page<void> detailPage(GoRouterState state, String title, Widget content) =>
       key: state.pageKey,
       name: state.uri.path,
       child: AdaptiveScaffold(
-        backgroundColor: paper,
         extendBody: true,
-        appBar: AdaptiveAppBar(
-          title: title,
-          navigationBarColor: red,
-          navigationBarShadow: true,
-          hidesNavigationButtonBackground: true,
-          tintColor: Colors.white,
-        ),
+        appBar: AdaptiveAppBar(title: title),
         body: content,
       ),
     );
@@ -113,36 +105,15 @@ class MeridianApp extends StatelessWidget {
     routerConfig: router,
     title: 'Meridian',
     themeMode: ThemeMode.light,
-    cupertinoLightTheme: const CupertinoThemeData(
-      brightness: Brightness.light,
+    theme: const AdaptiveThemeData(
       primaryColor: red,
-      scaffoldBackgroundColor: paper,
-      textTheme: CupertinoTextThemeData(
-        textStyle: TextStyle(
-          fontFamily: '.SF Pro Text',
-          color: ink,
-          fontSize: 15,
-        ),
+      background: paper,
+      barStyle: AdaptiveBarStyle.solid(
+        red,
+        foreground: Colors.white,
+        shadow: true,
+        plainButtons: true,
       ),
-    ),
-    materialLightTheme: ThemeData(
-      useMaterial3: true,
-      colorScheme: ColorScheme.fromSeed(seedColor: red),
-      scaffoldBackgroundColor: paper,
-    ),
-    localizationsDelegates: const [
-      GlobalMaterialLocalizations.delegate,
-      GlobalCupertinoLocalizations.delegate,
-      GlobalWidgetsLocalizations.delegate,
-    ],
-    builder: (context, child) => Theme(
-      data: ThemeData(
-        useMaterial3: true,
-        fontFamily: '.SF Pro Text',
-        colorScheme: ColorScheme.fromSeed(seedColor: red),
-        scaffoldBackgroundColor: paper,
-      ),
-      child: child!,
     ),
   );
 }
@@ -181,13 +152,6 @@ class InvestmentHome extends StatefulWidget {
 class _InvestmentHomeState extends State<InvestmentHome> {
   final drawerKey = GlobalKey<ScaffoldState>();
   bool menuOpen = false;
-  final navigation = AdaptiveNavigationScrollController();
-
-  @override
-  void dispose() {
-    navigation.dispose();
-    super.dispose();
-  }
 
   Future<void> _openAccounts(
     BuildContext context,
@@ -244,7 +208,6 @@ class _InvestmentHomeState extends State<InvestmentHome> {
         builder: (context, state) => LayoutBuilder(
           builder: (context, constraints) {
             return AdaptiveScaffold(
-              backgroundColor: paper,
               extendBody: true,
               scaffoldKey: drawerKey,
               appBar: AdaptiveAppBar(
@@ -254,17 +217,11 @@ class _InvestmentHomeState extends State<InvestmentHome> {
                   'Watchlist',
                   'Activity',
                 ][widget.shell.currentIndex],
-                scrollController: navigation,
-                navigationBarColor: red,
-                navigationBarShadow: true,
-                hidesNavigationButtonBackground: true,
-                tintColor: Colors.white,
                 actions: [
                   AdaptiveAppBarAction(
                     iosSymbol: menuOpen ? 'xmark' : 'line.3.horizontal',
                     icon: menuOpen ? Icons.close : Icons.menu_rounded,
                     label: menuOpen ? 'Close accounts' : 'Open accounts',
-                    tintColor: Colors.white,
                     spacerAfter: ToolbarSpacerType.flexible,
                     onPressed: () =>
                         _openAccounts(context, state, constraints.maxWidth),
@@ -273,7 +230,6 @@ class _InvestmentHomeState extends State<InvestmentHome> {
                     iosSymbol: 'magnifyingglass',
                     icon: Icons.search,
                     label: 'Search',
-                    tintColor: Colors.white,
                     onPressed: () => context.push('/search'),
                   ),
                 ],

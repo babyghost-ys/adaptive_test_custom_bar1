@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import '../../core/platform_info.dart';
 import '../../style/sf_symbol.dart';
@@ -156,6 +157,13 @@ class AdaptiveButton extends StatelessWidget {
   Widget build(BuildContext context) {
     // UIKit chooses the appearance for the running iOS release.
     if (PlatformInfo.isIOS) {
+      // Unset, UIKit would fall back to system blue whatever the app's accent.
+      final tint =
+          color ??
+          CupertinoDynamicColor.resolve(
+            CupertinoTheme.of(context).primaryColor,
+            context,
+          );
       // SF Symbol mode - use native SF Symbol rendering
       if (sfSymbol != null) {
         return _wrapIOSButton(
@@ -164,7 +172,7 @@ class AdaptiveButton extends StatelessWidget {
             sfSymbol: sfSymbol!,
             style: _mapToIOS26Style(style),
             size: _mapToIOS26Size(size),
-            color: color,
+            color: tint,
             enabled: enabled,
             padding: padding,
             borderRadius: borderRadius,
@@ -181,7 +189,7 @@ class AdaptiveButton extends StatelessWidget {
             onPressed: onPressed,
             style: _mapToIOS26Style(style),
             size: _mapToIOS26Size(size),
-            color: color,
+            color: tint,
             enabled: enabled,
             padding: padding,
             borderRadius: borderRadius,
@@ -199,7 +207,7 @@ class AdaptiveButton extends StatelessWidget {
             onPressed: onPressed,
             style: _mapToIOS26Style(style),
             size: _mapToIOS26Size(size),
-            color: color,
+            color: tint,
             enabled: enabled,
             padding: padding,
             borderRadius: borderRadius,
@@ -218,7 +226,7 @@ class AdaptiveButton extends StatelessWidget {
           textColor: textColor,
           style: _mapToIOS26Style(style),
           size: _mapToIOS26Size(size),
-          color: color,
+          color: tint,
           enabled: enabled,
           padding: padding,
           borderRadius: borderRadius,

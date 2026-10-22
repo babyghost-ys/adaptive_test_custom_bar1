@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/platform_info.dart';
 import '../../style/sf_symbol.dart';
+import '../../core/theme/adaptive_theme.dart';
 import '../app_bar/adaptive_app_bar.dart';
 import '../app_bar/adaptive_navigation_scroll_controller.dart';
 import '../search/adaptive_navigation_search_bar.dart';
@@ -275,31 +276,42 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
   /// controller of its own: UIKit reports this page's bar metrics through
   /// it, and follows its offset to collapse a large title.
   AdaptiveNavigationScrollController? _pageScroll;
+  AdaptiveBarStyle _barStyle = const AdaptiveBarStyle.system();
   AdaptiveAppBar? _appBarSource;
-  AdaptiveAppBar? _appBarWithScroll;
+  AdaptiveBarStyle? _appBarSourceStyle;
+  AdaptiveAppBar? _resolvedAppBar;
 
-  /// [AdaptiveScaffold.appBar], with the page's own controller filled in on
-  /// the native iOS path.
+  /// [AdaptiveScaffold.appBar] as drawn: unset colours and flags taken from
+  /// the app's [AdaptiveBarStyle], and on the native iOS path the page's own
+  /// scroll controller filled in.
   AdaptiveAppBar? get _appBar {
     final appBar = widget.appBar;
-    if (appBar == null ||
-        !PlatformInfo.isIOS ||
-        !appBar.useNativeToolbar ||
-        appBar.scrollController != null) {
-      return appBar;
-    }
-    if (!identical(appBar, _appBarSource)) {
+    if (appBar == null) return null;
+    if (!identical(appBar, _appBarSource) || _barStyle != _appBarSourceStyle) {
       _appBarSource = appBar;
-      _appBarWithScroll = appBar.copyWith(
-        scrollController: _pageScroll ??= AdaptiveNavigationScrollController(),
+      _appBarSourceStyle = _barStyle;
+      final linksScroll =
+          PlatformInfo.isIOS &&
+          appBar.useNativeToolbar &&
+          appBar.scrollController == null;
+      _resolvedAppBar = appBar.copyWith(
+        navigationBarColor: appBar.navigationBarColor ?? _barStyle.color,
+        tintColor: appBar.tintColor ?? _barStyle.foreground,
+        navigationBarShadow: appBar.navigationBarShadow ?? _barStyle.shadow,
+        hidesNavigationButtonBackground:
+            appBar.hidesNavigationButtonBackground ?? _barStyle.plainButtons,
+        scrollController: linksScroll
+            ? _pageScroll ??= AdaptiveNavigationScrollController()
+            : null,
       );
     }
-    return _appBarWithScroll;
+    return _resolvedAppBar;
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _barStyle = AdaptiveTheme.of(context).barStyle;
     _syncToolbarEntry();
   }
 
@@ -422,10 +434,10 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
     Color? subtitleColor,
     bool nativeTitleFallback = false,
   }) {
-    if (widget.appBar?.titleWidget != null) return widget.appBar!.titleWidget;
-    final title = widget.appBar?.title;
+    if (_appBar?.titleWidget != null) return _appBar!.titleWidget;
+    final title = _appBar?.title;
     if (title == null) return null;
-    final subtitle = widget.appBar?.subtitle;
+    final subtitle = _appBar?.subtitle;
     if (subtitle == null || subtitle.isEmpty) {
       return nativeTitleFallback ? null : Text(title, style: titleStyle);
     }
@@ -511,7 +523,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
             builder: (context) => _buildPage(context, omitBottomBar: true),
           )
         : _buildPage(context);
-    final bg = widget.appBar?.navigationBarColor ?? widget.backgroundColor;
+    final bg = _appBar?.navigationBarColor ?? widget.backgroundColor;
     if (bg == null || bg.a < 0.5) return page;
     // A page that sets its own background keeps the status bar legible
     // over it, whatever the app theme says: light icons on a dark page and
@@ -526,7 +538,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
 
   Widget _buildPage(BuildContext context, {bool omitBottomBar = false}) {
     final bottomBar = omitBottomBar ? null : widget.bottomNavigationBar;
-    final useNativeToolbar = widget.appBar?.useNativeToolbar ?? false;
+    final useNativeToolbar = _appBar?.useNativeToolbar ?? false;
     final useNativeBottomBar = bottomBar?.useNativeBottomBar ?? true;
 
     // iOS 26+ with native toolbar enabled - Use IOS26Scaffold
@@ -537,7 +549,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
       // every page's `initState` once per destination (#76).
       final placement = BodyPlacement.resolve(
         body: widget.body,
-        largeTitle: widget.appBar?.largeTitle ?? false,
+        largeTitle: _appBar?.largeTitle ?? false,
         extendBehindTop: widget.extendBodyBehindAppBar,
         extendBehindBottom: widget.extendBody,
       );
@@ -556,7 +568,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
       if (_usesFixedToolbar(context) &&
           (chrome?.hostsToolbar ?? false) &&
           !(chrome?.hostsDuoControls ?? false) &&
-          widget.appBar?.title != null &&
+          _appBar?.title != null &&
           _buildIOS26TitleOverlay() == null &&
           navigation != null) {
         // A newly selected page has no UIKit inset yet. Keep its scroll view
@@ -599,17 +611,17 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
 
       return _wrapWithDrawerIfNeeded(
         IOS26Scaffold(
-          largeTitle: widget.appBar?.largeTitle ?? false,
+          largeTitle: _appBar?.largeTitle ?? false,
           scrollController: navigation,
           bottomNavigationBar: bottomBar,
-          title: widget.appBar?.title,
-          actions: widget.appBar?.actions,
-          leading: widget.appBar?.leading,
-          tintColor: widget.appBar?.tintColor,
-          navigationBarColor: widget.appBar?.navigationBarColor,
-          navigationBarShadow: widget.appBar?.navigationBarShadow ?? false,
+          title: _appBar?.title,
+          actions: _appBar?.actions,
+          leading: _appBar?.leading,
+          tintColor: _appBar?.tintColor,
+          navigationBarColor: _appBar?.navigationBarColor,
+          navigationBarShadow: _appBar?.navigationBarShadow ?? false,
           hidesNavigationButtonBackground:
-              widget.appBar?.hidesNavigationButtonBackground ?? false,
+              _appBar?.hidesNavigationButtonBackground ?? false,
           titleWidget: _buildIOS26TitleOverlay(),
           minimizeBehavior: widget.minimizeBehavior,
           enableBlur: widget.enableBlur,
@@ -627,7 +639,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
     // iOS <26 (iOS 18 and below) OR iOS 26+ with useNativeToolbar: false
     // Use CupertinoPageScaffold with CupertinoTabBar if destinations provided
     if (PlatformInfo.isIOS) {
-      Widget? effectiveLeading = widget.appBar?.leading;
+      Widget? effectiveLeading = _appBar?.leading;
 
       if (bottomBar?.items != null &&
           bottomBar!.items!.isNotEmpty &&
@@ -639,16 +651,14 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
         ObstructingPreferredSizeWidget? navigationBar;
 
         // Priority 1: Custom CupertinoNavigationBar (if provided and useNativeToolbar is false)
-        if (widget.appBar?.cupertinoNavigationBar != null) {
+        if (_appBar?.cupertinoNavigationBar != null) {
           navigationBar =
-              widget.appBar!.cupertinoNavigationBar
-                  as ObstructingPreferredSizeWidget;
+              _appBar!.cupertinoNavigationBar as ObstructingPreferredSizeWidget;
         }
         // Priority 2: Build from title, actions, leading (if appBar has content)
-        else if (widget.appBar != null &&
-            (widget.appBar!.title != null ||
-                (widget.appBar!.actions != null &&
-                    widget.appBar!.actions!.isNotEmpty) ||
+        else if (_appBar != null &&
+            (_appBar!.title != null ||
+                (_appBar!.actions != null && _appBar!.actions!.isNotEmpty) ||
                 effectiveLeading != null ||
                 (Navigator.maybeOf(context)?.canPop() ?? false))) {
           navigationBar = CupertinoNavigationBar(
@@ -657,12 +667,10 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
                 ? false
                 : true, // Let CupertinoNavigationBar handle back button naturally
             middle: _buildAppBarTitle(),
-            trailing:
-                widget.appBar!.actions != null &&
-                    widget.appBar!.actions!.isNotEmpty
+            trailing: _appBar!.actions != null && _appBar!.actions!.isNotEmpty
                 ? Row(
                     mainAxisSize: MainAxisSize.min,
-                    children: widget.appBar!.actions!.map((action) {
+                    children: _appBar!.actions!.map((action) {
                       Widget actionChild;
                       if (action.title != null) {
                         actionChild = Text(action.title!);
@@ -821,17 +829,15 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
       ObstructingPreferredSizeWidget? navigationBar;
 
       // Priority 1: Custom CupertinoNavigationBar (if provided and useNativeToolbar is false)
-      if (widget.appBar?.cupertinoNavigationBar != null) {
+      if (_appBar?.cupertinoNavigationBar != null) {
         navigationBar =
-            widget.appBar!.cupertinoNavigationBar
-                as ObstructingPreferredSizeWidget;
+            _appBar!.cupertinoNavigationBar as ObstructingPreferredSizeWidget;
       }
       // Priority 2: Build from title, actions, leading (if appBar has content)
-      else if (widget.appBar != null &&
-          (widget.appBar!.title != null ||
-              widget.appBar!.titleWidget != null ||
-              (widget.appBar!.actions != null &&
-                  widget.appBar!.actions!.isNotEmpty) ||
+      else if (_appBar != null &&
+          (_appBar!.title != null ||
+              _appBar!.titleWidget != null ||
+              (_appBar!.actions != null && _appBar!.actions!.isNotEmpty) ||
               effectiveLeading != null ||
               (Navigator.maybeOf(context)?.canPop() ?? false))) {
         navigationBar = CupertinoNavigationBar(
@@ -840,12 +846,10 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
               ? false
               : true, // Let CupertinoNavigationBar handle back button naturally
           middle: _buildAppBarTitle(),
-          trailing:
-              widget.appBar!.actions != null &&
-                  widget.appBar!.actions!.isNotEmpty
+          trailing: _appBar!.actions != null && _appBar!.actions!.isNotEmpty
               ? Row(
                   mainAxisSize: MainAxisSize.min,
-                  children: widget.appBar!.actions!.map((action) {
+                  children: _appBar!.actions!.map((action) {
                     Widget actionChild;
                     if (action.title != null) {
                       actionChild = Text(action.title!);
@@ -938,17 +942,18 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
       PreferredSizeWidget? appBar;
 
       // Priority 1: Custom AppBar (if provided)
-      if (widget.appBar?.appBar != null) {
-        appBar = widget.appBar!.appBar;
+      if (_appBar?.appBar != null) {
+        appBar = _appBar!.appBar;
       }
       // Priority 2: Build from title, actions, leading (if appBar has content)
-      else if (widget.appBar != null &&
-          (widget.appBar!.title != null ||
-              widget.appBar!.titleWidget != null ||
-              (widget.appBar!.actions != null &&
-                  widget.appBar!.actions!.isNotEmpty) ||
-              widget.appBar!.leading != null)) {
+      else if (_appBar != null &&
+          (_appBar!.title != null ||
+              _appBar!.titleWidget != null ||
+              (_appBar!.actions != null && _appBar!.actions!.isNotEmpty) ||
+              _appBar!.leading != null)) {
         appBar = AppBar(
+          backgroundColor: _appBar!.navigationBarColor,
+          foregroundColor: _appBar!.tintColor,
           title: _buildAppBarTitle(
             crossAxisAlignment: CrossAxisAlignment.start,
             subtitleFontSize: 13,
@@ -956,8 +961,8 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
               context,
             ).textTheme.bodySmall?.color?.withValues(alpha: 0.7),
           ),
-          centerTitle: widget.appBar!.titleWidget != null,
-          actions: widget.appBar!.actions?.map((action) {
+          centerTitle: _appBar!.titleWidget != null,
+          actions: _appBar!.actions?.map((action) {
             if (action.title != null) {
               return Builder(
                 builder: (context) => TextButton(
@@ -979,7 +984,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
               ),
             );
           }).toList(),
-          leading: widget.appBar!.leading,
+          leading: _appBar!.leading,
         );
       }
 
@@ -1069,12 +1074,14 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
     PreferredSizeWidget? appBar;
 
     // Priority 1: Custom AppBar (if provided)
-    if (widget.appBar?.appBar != null) {
-      appBar = widget.appBar!.appBar;
+    if (_appBar?.appBar != null) {
+      appBar = _appBar!.appBar;
     }
-    // Priority 2: Build AppBar if widget.appBar is provided (even if empty - for automatic back button)
-    else if (widget.appBar != null) {
+    // Priority 2: Build AppBar if _appBar is provided (even if empty - for automatic back button)
+    else if (_appBar != null) {
       appBar = AppBar(
+        backgroundColor: _appBar!.navigationBarColor,
+        foregroundColor: _appBar!.tintColor,
         title: _buildAppBarTitle(
           crossAxisAlignment: CrossAxisAlignment.start,
           subtitleFontSize: 13,
@@ -1082,8 +1089,8 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
             context,
           ).textTheme.bodySmall?.color?.withValues(alpha: 0.7),
         ),
-        centerTitle: widget.appBar!.titleWidget != null,
-        actions: widget.appBar!.actions?.map((action) {
+        centerTitle: _appBar!.titleWidget != null,
+        actions: _appBar!.actions?.map((action) {
           if (action.title != null) {
             return Builder(
               builder: (context) => TextButton(
@@ -1105,7 +1112,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
             ),
           );
         }).toList(),
-        leading: widget.appBar!.leading,
+        leading: _appBar!.leading,
         // automaticallyImplyLeading defaults to true, so back button will show automatically
       );
     }

@@ -34,6 +34,7 @@ export 'src/core/platform_info.dart';
 export 'src/core/animation.dart';
 
 // Styles
+export 'src/core/theme/adaptive_theme.dart';
 export 'src/style/sf_symbol.dart';
 
 // Widgets
