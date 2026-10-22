@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 
 import 'package:native_widgets_on_duo/app/theme/palette.dart';
+import 'package:native_widgets_on_duo/core/widgets/bar_title.dart';
 import 'package:native_widgets_on_duo/features/investment/bloc/investment_bloc.dart';
 
 class InvestmentHome extends StatefulWidget {
@@ -14,6 +15,7 @@ class InvestmentHome extends StatefulWidget {
 }
 
 class _InvestmentHomeState extends State<InvestmentHome> {
+  static const _titles = ['Portfolio', 'Markets', 'Watchlist', 'Activity'];
   final scaffoldKey = GlobalKey<AdaptiveScaffoldState>();
   bool menuOpen = false;
 
@@ -25,6 +27,7 @@ class _InvestmentHomeState extends State<InvestmentHome> {
       key: scaffoldKey,
       extendBody: true,
       appBar: AdaptiveAppBar(
+        titleWidget: barTitle(_titles[widget.shell.currentIndex]),
         actions: [
           AdaptiveAppBarAction(
             icon: AdaptiveIcon(

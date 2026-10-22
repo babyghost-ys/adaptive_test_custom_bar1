@@ -151,11 +151,36 @@ class iOS26ToolbarPlatformView: NSObject, FlutterPlatformView, NativeNavigationP
         }
     }
 
+    /// A Flutter `Text` title, drawn by UIKit as the bar's title view.
+    private func applyTitleText(_ text: [String: Any]) {
+        guard let string = text["text"] as? String else { return }
+        let size = CGFloat((text["fontSize"] as? NSNumber)?.doubleValue ?? 17)
+        let weight = (text["fontWeight"] as? NSNumber)?.intValue ?? 600
+        let uiWeight: UIFont.Weight = weight >= 800 ? .heavy : weight >= 700 ? .bold
+            : weight >= 600 ? .semibold : weight >= 500 ? .medium : .regular
+        var font = UIFont.systemFont(ofSize: size, weight: uiWeight)
+        if let family = text["fontFamily"] as? String {
+            if let named = UIFont(name: family, size: size) {
+                font = named
+            } else if let first = UIFont.fontNames(forFamilyName: family).first,
+                      let styled = UIFont(name: first, size: size) {
+                font = styled
+            }
+        }
+        let label = (navigationItem.titleView as? UILabel) ?? UILabel()
+        label.text = string
+        label.font = font
+        label.textColor = (text["color"] as? NSNumber).map { UIColor(argb: $0.intValue) } ?? configuredTint ?? .label
+        label.sizeToFit()
+        navigationItem.titleView = label
+    }
+
     private func configureItems(_ params: [String: Any]) {
         // Title
         if let title = params["title"] as? String {
             navigationItem.title = title
         }
+        if let text = params["titleText"] as? [String: Any] { applyTitleText(text) }
 
         configuredActions = params["actions"] as? NSArray
         if params.keys.contains("leading") { leadingText = params["leading"] as? String }
@@ -378,6 +403,25 @@ class iOS26ToolbarPlatformView: NSObject, FlutterPlatformView, NativeNavigationP
                 scrollOffset = CGFloat(offset)
                 applyScrollOffset()
             }
+            result(nil)
+        case "setTitleText":
+            if let args = call.arguments as? [String: Any] {
+                applyTitleText(args)
+                NativeNavigationHost.update(self)
+                NativeNavigationHost.setTitleView(self, navigationItem.titleView)
+            }
+            result(nil)
+        case "setTitleImage":
+            let args = call.arguments as? [String: Any]
+            if let data = (args?["bytes"] as? FlutterStandardTypedData)?.data,
+               let scale = (args?["scale"] as? NSNumber)?.doubleValue,
+               let image = UIImage(data: data, scale: CGFloat(scale)) {
+                navigationItem.titleView = UIImageView(image: image)
+            } else {
+                navigationItem.titleView = nil
+            }
+            NativeNavigationHost.update(self)
+            NativeNavigationHost.setTitleView(self, navigationItem.titleView)
             result(nil)
         case "updateTitle":
             if let args = call.arguments as? [String: Any], let title = args["title"] as? String {

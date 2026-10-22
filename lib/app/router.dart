@@ -12,6 +12,7 @@ import 'package:native_widgets_on_duo/features/preferences/view/preferences_page
 import 'package:native_widgets_on_duo/features/profile/view/profile_page.dart';
 import 'package:native_widgets_on_duo/features/search/view/search_page.dart';
 import 'package:native_widgets_on_duo/features/statements/view/statement_page.dart';
+import 'package:native_widgets_on_duo/core/widgets/bar_title.dart';
 import 'package:native_widgets_on_duo/features/statements/view/statements_page.dart';
 import 'package:native_widgets_on_duo/features/watchlist/view/watchlist_page.dart';
 
@@ -86,7 +87,7 @@ Page<void> detailPage(GoRouterState state, String title, Widget content) =>
       name: state.uri.path,
       child: AdaptiveScaffold(
         extendBody: true,
-        appBar: AdaptiveAppBar(title: title),
+        appBar: AdaptiveAppBar(title: title, titleWidget: barTitle(title)),
         body: content,
       ),
     );

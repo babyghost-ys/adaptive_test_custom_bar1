@@ -195,6 +195,8 @@ extension NativeNavigationHost {
                 originContext = nil
                 restingInset = nil
                 if let page { pageStates[ObjectIdentifier(page)]?.origins.removeAll() }
+                // A title view arrives from Dart after the push began.
+                if let page { configure(page) }
                 restoreAppearance()
                 layout()
                 completion(true)

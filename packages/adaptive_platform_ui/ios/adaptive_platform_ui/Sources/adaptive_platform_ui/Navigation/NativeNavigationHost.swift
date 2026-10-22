@@ -204,6 +204,13 @@ final class NativeNavigationHost {
         host.configure(page)
         host.layout()
     }
+    /// Puts a page's title view on the bar showing it right away, including
+    /// mid-push, when `configure` is held back until the transition ends.
+    static func setTitleView(_ page: NativeNavigationPage, _ view: UIView?) {
+        guard let host = installed, host.page === page else { return }
+        let destination = host.content
+        destination.navigationItem.titleView = view
+    }
     static func scroll(_ page: NativeNavigationPage) {
         guard let host = installed, host.page === page else { return }
         host.layout()
@@ -390,6 +397,7 @@ final class NativeNavigationHost {
         assign(destination, \.compactAppearance, nil)
         assign(destination, \.compactScrollEdgeAppearance, nil)
         assign(destination, \.title, source.title)
+        assign(destination, \.titleView, source.titleView)
         assign(destination, \.leftBarButtonItems, source.leftBarButtonItems)
         assign(destination, \.rightBarButtonItems, source.rightBarButtonItems)
         assign(destination, \.hidesBackButton, managedRoutes.last?.content === destinationController

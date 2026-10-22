@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
@@ -157,6 +159,12 @@ class _NativeToolbarState extends State<NativeToolbar> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     _syncPropsToNativeIfNeeded();
+    // Render the title now, not after the page's first frame, so a heavy
+    // page does not hold it back.
+    if (!_titleStarted && widget.titleWidget != null && _titleText == null) {
+      _titleStarted = true;
+      _renderTitleImage();
+    }
   }
 
   @override
@@ -174,6 +182,12 @@ class _NativeToolbarState extends State<NativeToolbar> {
     }
     _syncPropsToNativeIfNeeded();
 
+    final text = _titleText;
+    if (text != null && !mapEquals(text, _sentTitleText)) {
+      _sentTitleText = text;
+      _channel?.invokeMethod<void>('setTitleText', text);
+    }
+
     if (widget.title != oldWidget.title) {
       final ch = _channel;
       // Skip when a titleWidget overlay is shown — the native title stays hidden
@@ -181,6 +195,132 @@ class _NativeToolbarState extends State<NativeToolbar> {
         ch.invokeMethod('updateTitle', {'title': widget.title!});
       }
     }
+  }
+
+  /// A plain [Text] title is drawn by UIKit itself from its text and style,
+  /// available the moment the bar is created. Any other widget is rendered to
+  /// an image instead (see [_renderTitleImage]).
+  Map<String, Object?>? get _titleText {
+    final title = widget.titleWidget;
+    if (title is! Text || title.data == null) return null;
+    final style = title.style;
+    return {
+      'text': title.data,
+      'fontFamily': style?.fontFamily,
+      'fontSize': style?.fontSize,
+      'fontWeight': style?.fontWeight?.value,
+      'color': style?.color?.toARGB32(),
+    };
+  }
+
+  Map<String, Object?>? _sentTitleText;
+  Uint8List? _titleBytes;
+  (Uint8List, double)? _renderedTitle;
+  bool _titleImageScheduled = false;
+  bool _titleStarted = false;
+
+  /// Renders [NativeToolbar.titleWidget] and sets it as the native bar's
+  /// title view, so it is drawn inside the bar, centred by UIKit, over the
+  /// bar's own background. Re-sent only when the rendered pixels change.
+  void _scheduleTitleImage() {
+    if (_titleImageScheduled) return;
+    _titleImageScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _titleImageScheduled = false;
+      _renderTitleImage();
+    });
+  }
+
+  Future<void> _renderTitleImage() async {
+    {
+      if (!mounted) return;
+      final title = widget.titleWidget;
+      if (title == null || _titleText != null) {
+        _renderedTitle = null;
+        if (_titleBytes == null) return;
+        _titleBytes = null;
+        _channel?.invokeMethod<void>('setTitleImage', {'bytes': null});
+        return;
+      }
+      final view = View.of(context);
+      final ratio = view.devicePixelRatio;
+      final image = await _renderOffscreen(
+        InheritedTheme.captureAll(
+          context,
+          Directionality(
+            textDirection: Directionality.of(context),
+            child: MediaQuery(
+              data: MediaQuery.of(context),
+              // Room for descenders a font draws below its line box.
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
+                child: title,
+              ),
+            ),
+          ),
+        ),
+        view,
+      );
+      final data = await image.toByteData(format: ui.ImageByteFormat.png);
+      image.dispose();
+      if (!mounted || data == null) return;
+      _renderedTitle = (data.buffer.asUint8List(), ratio);
+      _sendTitleImage();
+    }
+  }
+
+  /// Sends the rendered title once the native bar exists; rendering starts
+  /// with the widget so the image is usually ready when the bar is.
+  void _sendTitleImage() {
+    final channel = _channel;
+    final rendered = _renderedTitle;
+    if (channel == null || rendered == null) return;
+    final (bytes, ratio) = rendered;
+    if (listEquals(bytes, _titleBytes)) return;
+    _titleBytes = bytes;
+    channel.invokeMethod<void>('setTitleImage', {
+      'bytes': bytes,
+      'scale': ratio,
+    });
+  }
+
+  /// Paints [widget] in a render tree of its own. The page's tree cannot be
+  /// captured instead: a route fading in does not paint until it is visible.
+  static Future<ui.Image> _renderOffscreen(Widget widget, ui.FlutterView view) {
+    final boundary = RenderRepaintBoundary();
+    final renderView = RenderView(
+      view: view,
+      configuration: ViewConfiguration(
+        logicalConstraints: const BoxConstraints(
+          maxWidth: 1000,
+          maxHeight: 200,
+        ),
+        devicePixelRatio: view.devicePixelRatio,
+      ),
+      child: RenderPositionedBox(child: boundary),
+    );
+    final pipeline = PipelineOwner()..rootNode = renderView;
+    renderView.prepareInitialFrame();
+    final owner = BuildOwner(focusManager: FocusManager());
+    final root = RenderObjectToWidgetAdapter<RenderBox>(
+      container: boundary,
+      child: widget,
+    ).attachToRenderTree(owner);
+    owner.buildScope(root);
+    owner.finalizeTree();
+    pipeline
+      ..flushLayout()
+      ..flushCompositingBits()
+      ..flushPaint();
+    return boundary.toImage(pixelRatio: view.devicePixelRatio).whenComplete(() {
+      RenderObjectToWidgetAdapter<RenderBox>(
+        container: boundary,
+      ).attachToRenderTree(owner, root);
+      owner.buildScope(root);
+      owner.finalizeTree();
+      pipeline.rootNode = null;
+      renderView.dispose();
+    });
   }
 
   void _syncNavigationPage() {
@@ -351,11 +491,16 @@ class _NativeToolbarState extends State<NativeToolbar> {
     }
 
     final safePadding = MediaQuery.of(context).padding.top;
+    if ((widget.titleWidget != null && _titleText == null) ||
+        _titleBytes != null) {
+      _scheduleTitleImage();
+    }
 
     final creationParams = <String, dynamic>{
       // Hide native title when a titleWidget overlay is provided
       if (widget.title != null && widget.titleWidget == null)
         'title': widget.title!,
+      if (_titleText case final text?) 'titleText': text,
       if (widget.leading == null && widget.leadingText != null)
         'leading': widget.leadingText!,
       if (widget.actions != null && widget.actions!.isNotEmpty)
@@ -414,14 +559,6 @@ class _NativeToolbarState extends State<NativeToolbar> {
                 child: widget.leading!,
               ),
             ),
-          if (widget.titleWidget != null)
-            Positioned(
-              left: 0,
-              right: 0,
-              top: safePadding,
-              bottom: 0,
-              child: Center(child: widget.titleWidget!),
-            ),
         ],
       ),
     );
@@ -442,6 +579,10 @@ class _NativeToolbarState extends State<NativeToolbar> {
     });
     if (widget.scrollController != null) {
       _syncNavigationPage();
+    }
+    _titleBytes = null;
+    if (widget.titleWidget != null && _titleText == null) {
+      _renderedTitle == null ? _scheduleTitleImage() : _sendTitleImage();
     }
     _syncScroll();
     // Creation parameters may precede a route/focus update. Reconcile the
