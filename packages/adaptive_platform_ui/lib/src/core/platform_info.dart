@@ -47,8 +47,8 @@ class PlatformInfo {
       if (fallbackMatch != null) {
         return int.parse(fallbackMatch.group(1)!);
       }
-    } catch (e) {
-      debugPrint('Error parsing iOS version: $e');
+    } catch (_) {
+      // Fall through to 0 when the version string cannot be parsed.
     }
 
     return 0;

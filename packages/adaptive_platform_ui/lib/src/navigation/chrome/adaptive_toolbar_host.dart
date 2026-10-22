@@ -48,10 +48,6 @@ class _AdaptiveToolbarHostState extends State<AdaptiveToolbarHost>
   /// and in tests, where no platform channel answers.
   ValueListenable<SystemVerticalBarEdge>? _edge;
 
-  /// What the debug log last reported, to print only the changes.
-  SystemVerticalBarEdge _loggedEdge = SystemVerticalBarEdge.unknown;
-  DuoPose? _loggedPose;
-
   @override
   void initState() {
     super.initState();
@@ -90,18 +86,6 @@ class _AdaptiveToolbarHostState extends State<AdaptiveToolbarHost>
     final pose = hostsToolbar
         ? DuoLayout.resolvePose(MediaQuery.viewPaddingOf(context), edge)
         : null;
-    assert(() {
-      // Pose bugs only reproduce on a Duo; this makes a report actionable.
-      if (edge != _loggedEdge || pose != _loggedPose) {
-        _loggedEdge = edge;
-        _loggedPose = pose;
-        debugPrint(
-          'AdaptiveToolbarHost: Duo pose ${pose ?? 'none'} '
-          '(edge: ${edge.name})',
-        );
-      }
-      return true;
-    }());
 
     return ToolbarRegistryScope(
       registry: _registry,

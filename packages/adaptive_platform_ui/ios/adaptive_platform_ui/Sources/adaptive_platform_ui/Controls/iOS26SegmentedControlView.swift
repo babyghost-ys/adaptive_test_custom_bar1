@@ -87,9 +87,6 @@ class iOS26SegmentedControlView: NSObject, FlutterPlatformView {
                 for (index, symbolName) in sfSymbols.enumerated() {
                     if let image = UIImage(systemName: symbolName) {
                         segmentedControl.insertSegment(with: image, at: index, animated: false)
-                    } else {
-                        // Fallback if symbol not found
-                        print("⚠️ SF Symbol not found: \(symbolName)")
                     }
                 }
 

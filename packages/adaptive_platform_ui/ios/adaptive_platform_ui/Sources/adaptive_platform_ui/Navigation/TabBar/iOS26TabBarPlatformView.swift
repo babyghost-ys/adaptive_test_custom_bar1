@@ -118,7 +118,6 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
         var unselectedTint: UIColor? = nil
 
         if let dict = args as? [String: Any] {
-            NSLog("📦 TabBar init dict keys: \(dict.keys)")
             labels = (dict["labels"] as? [String]) ?? []
             symbols = (dict["sfSymbols"] as? [String]) ?? []
             selectedSymbols = (dict["selectedSfSymbols"] as? [String]) ?? []
@@ -147,7 +146,6 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
             if let n = dict["tint"] as? NSNumber { tint = Self.colorFromARGB(n.intValue) }
             if let n = dict["unselectedItemTint"] as? NSNumber {
                 unselectedTint = Self.colorFromARGB(n.intValue)
-                NSLog("🎨 Parsed unselectedItemTint from dict: \(unselectedTint!)")
             }
             if let n = dict["backgroundColor"] as? NSNumber { bg = Self.colorFromARGB(n.intValue) }
         }
@@ -184,11 +182,9 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
         if #available(iOS 10.0, *) {
             if let unselTint = unselectedTint {
                 bar.unselectedItemTintColor = unselTint
-                NSLog("✅ Direct unselectedItemTintColor: \(unselTint)")
             }
             if let tint = tint {
                 bar.tintColor = tint
-                NSLog("✅ Direct tintColor: \(tint)")
             }
         }
 
@@ -572,7 +568,6 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
                 let c = Self.colorFromARGB(n.intValue)
                 if #available(iOS 10.0, *) {
                     self.tabBar?.unselectedItemTintColor = c
-                    NSLog("✅ setStyle: unselectedItemTintColor set to \(c)")
 
                     // iOS 26+: Rebuild items with current state so untinted
                     // and tinted icon variants are regenerated consistently.
