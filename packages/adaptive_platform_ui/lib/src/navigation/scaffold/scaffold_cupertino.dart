@@ -1,8 +1,8 @@
 part of 'adaptive_scaffold.dart';
 
-/// The iOS path for an app bar that opts out of the native toolbar
-/// (`useNativeToolbar: false`): a Flutter `CupertinoNavigationBar`, the app's
-/// own bar, or an `AdaptiveNavigationSearchBar`.
+/// The iOS path for a page without a native toolbar: one whose app bar brings
+/// its own `cupertinoNavigationBar` (such as an `AdaptiveNavigationSearchBar`),
+/// or one with no app bar.
 extension _CupertinoScaffold on AdaptiveScaffoldState {
   Widget _buildCupertino(
     BuildContext context,
@@ -85,50 +85,11 @@ extension _CupertinoScaffold on AdaptiveScaffoldState {
     return page();
   }
 
-  /// The app's own bar, or one built from the app bar when it has anything
-  /// to show (a back button counts).
+  /// The app's own bar. This path only runs when the app bar brings one, or
+  /// when there is no app bar at all.
   ObstructingPreferredSizeWidget? _cupertinoNavigationBar(
     BuildContext context,
-  ) {
-    final appBar = _appBar;
-    if (appBar == null) return null;
-    if (appBar.cupertinoNavigationBar != null) {
-      return appBar.cupertinoNavigationBar as ObstructingPreferredSizeWidget;
-    }
-    final actions = appBar.actions ?? const <AdaptiveAppBarAction>[];
-    final hasContent =
-        appBar.title != null ||
-        appBar.titleWidget != null ||
-        actions.isNotEmpty ||
-        appBar.leading != null ||
-        (Navigator.maybeOf(context)?.canPop() ?? false);
-    if (!hasContent) return null;
-    return CupertinoNavigationBar(
-      backgroundColor: appBar.navigationBarColor,
-      middle: _buildAppBarTitle(),
-      leading: appBar.leading,
-      trailing: actions.isEmpty
-          ? null
-          : Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (final action in actions)
-                  Builder(
-                    builder: (context) => CupertinoButton(
-                      padding: EdgeInsets.zero,
-                      onPressed: () => action.press(context),
-                      child: action.wrapWithBadge(
-                        action.title != null
-                            ? Text(action.title!)
-                            : action.iconWidget ??
-                                  Icon(action.icon ?? CupertinoIcons.circle),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-    );
-  }
+  ) => _appBar?.cupertinoNavigationBar as ObstructingPreferredSizeWidget?;
 
   /// The native tab bar when [native], otherwise the app's own
   /// `CupertinoTabBar` or one built from the destinations.
@@ -144,7 +105,6 @@ extension _CupertinoScaffold on AdaptiveScaffoldState {
         onTap: bar.onTap!,
         tint: bar.selectedItemColor ?? CupertinoTheme.of(context).primaryColor,
         unselectedItemTint: bar.unselectedItemColor,
-        minimizeBehavior: TabBarMinimizeBehavior.never,
         hidden: widget.tabBarHidden,
       );
     }

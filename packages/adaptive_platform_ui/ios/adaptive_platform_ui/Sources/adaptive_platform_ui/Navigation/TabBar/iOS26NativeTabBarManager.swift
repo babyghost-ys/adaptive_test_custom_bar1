@@ -49,7 +49,10 @@ class iOS26NativeTabBarManager: NSObject {
         }
 
         // Try to find it from windows
-        if let window = UIApplication.shared.windows.first(where: { $0.isKeyWindow }) {
+        let windows = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+        if let window = windows.first(where: { $0.isKeyWindow }) {
             if let flutterVC = window.rootViewController as? FlutterViewController {
                 self.flutterViewController = flutterVC
                 return flutterVC

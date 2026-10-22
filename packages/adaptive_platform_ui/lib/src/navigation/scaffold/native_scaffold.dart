@@ -12,7 +12,6 @@ import '../app_bar/adaptive_navigation_scroll_controller.dart';
 import '../tab_bar/adaptive_bottom_navigation_bar.dart';
 import '../../controls/button/adaptive_button.dart';
 import '../navigator/adaptive_navigator.dart';
-import 'adaptive_scaffold.dart';
 import '../tab_bar/native_tab_bar.dart';
 import 'body_placement.dart';
 import 'native_bottom_bar_layout.dart';
@@ -38,7 +37,6 @@ class NativeScaffold extends StatefulWidget {
     this.navigationBarShadow = false,
     this.hidesNavigationButtonBackground = false,
     this.titleWidget,
-    this.minimizeBehavior = TabBarMinimizeBehavior.automatic,
     this.useHeroBackButton = true,
     this.useFixedToolbar = true,
     this.tabBarHidden = false,
@@ -67,7 +65,6 @@ class NativeScaffold extends StatefulWidget {
   /// Custom widget overlaid at the toolbar's title position.
   /// When set, the native title is hidden and this widget is centered instead.
   final Widget? titleWidget;
-  final TabBarMinimizeBehavior minimizeBehavior;
   final bool useHeroBackButton;
 
   /// Whether the fixed toolbar host, when there is one, draws this page's
@@ -331,7 +328,6 @@ class _NativeScaffoldState extends State<NativeScaffold> {
               selectedIndex: widget.bottomNavigationBar!.selectedIndex!,
               onTap: widget.bottomNavigationBar!.onTap!,
               tint: CupertinoTheme.of(context).primaryColor,
-              minimizeBehavior: TabBarMinimizeBehavior.never,
               showNativeView: showNativeView,
               hidden: widget.tabBarHidden,
             )

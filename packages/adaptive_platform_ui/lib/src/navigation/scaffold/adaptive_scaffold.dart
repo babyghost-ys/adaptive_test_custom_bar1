@@ -104,21 +104,6 @@ class AdaptiveNavigationDestination {
   final bool addSpacerAfter;
 }
 
-/// Tab bar minimize behavior for iOS 26+
-enum TabBarMinimizeBehavior {
-  /// Never minimize the tab bar
-  never,
-
-  /// Minimize when scrolling down
-  onScrollDown,
-
-  /// Minimize when scrolling up
-  onScrollUp,
-
-  /// Let the system decide
-  automatic,
-}
-
 /// An adaptive scaffold that renders platform-specific navigation
 class AdaptiveScaffold extends StatefulWidget {
   const AdaptiveScaffold({
@@ -128,7 +113,6 @@ class AdaptiveScaffold extends StatefulWidget {
     this.body,
     this.resizeToAvoidBottomInset,
     this.floatingActionButton,
-    this.minimizeBehavior = TabBarMinimizeBehavior.automatic,
     this.extendBodyBehindAppBar,
     this.extendBody,
     this.backgroundColor,
@@ -167,10 +151,6 @@ class AdaptiveScaffold extends StatefulWidget {
 
   /// Floating action button (Material only)
   final Widget? floatingActionButton;
-
-  /// Tab bar minimize behavior (iOS 26+ only)
-  /// Controls how the tab bar minimizes when scrolling
-  final TabBarMinimizeBehavior minimizeBehavior;
 
   /// Whether the body runs under the top bar, like
   /// [Scaffold.extendBodyBehindAppBar]. The bar's height then stays in

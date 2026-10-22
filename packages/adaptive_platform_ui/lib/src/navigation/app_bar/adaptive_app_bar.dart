@@ -5,16 +5,11 @@ import 'adaptive_navigation_scroll_controller.dart';
 
 /// Configuration for an adaptive app bar in [AdaptiveScaffold].
 ///
-/// On supported iOS versions (iOS 15+, including iOS 18), the default
-/// [useNativeToolbar] path uses a real UINavigationBar. UIKit supplies the
-/// running system's appearance, title collapse and bar-button behavior.
-/// Android uses a Material AppBar.
-///
-/// Setting [useNativeToolbar] to false selects the legacy/custom iOS scaffold
-/// path. It uses [cupertinoNavigationBar] when supplied, or builds a Flutter
-/// CupertinoNavigationBar otherwise. A supplied AdaptiveNavigationSearchBar
-/// owns native UIKit search despite using that custom-bar slot.
-/// [appBar] supplies a custom Android app bar.
+/// On iOS the bar is the running system's own UINavigationBar: UIKit supplies
+/// its appearance, title collapse and bar buttons. [cupertinoNavigationBar]
+/// replaces it with the app's own bar, such as an
+/// `AdaptiveNavigationSearchBar`. Android uses a Material AppBar, or [appBar]
+/// when supplied.
 class AdaptiveAppBar {
   /// Creates an adaptive app bar configuration
   const AdaptiveAppBar({
@@ -24,7 +19,6 @@ class AdaptiveAppBar {
     this.subtitle,
     this.actions,
     this.leading,
-    this.useNativeToolbar = true,
     this.tintColor,
     this.navigationBarColor,
     this.navigationBarShadow,
@@ -61,13 +55,9 @@ class AdaptiveAppBar {
   /// If null and navigation is possible, an automatic back button will be shown
   final Widget? leading;
 
-  /// Use the native UIKit navigation bar on iOS 15+; defaults to true.
-  /// UIKit selects the appearance for the running OS, including iOS 18 and 26.
-  /// The native path ignores [cupertinoNavigationBar].
-  ///
-  /// Setting false selects the legacy/custom-bar path. Use it when supplying
-  /// AdaptiveNavigationSearchBar or an explicitly requested custom iOS bar.
-  final bool useNativeToolbar;
+  /// Whether iOS shows the native UIKit bar: true unless the app supplies
+  /// its own [cupertinoNavigationBar].
+  bool get useNativeToolbar => cupertinoNavigationBar == null;
 
   /// Custom widget to display in the title area
   ///
@@ -123,7 +113,6 @@ class AdaptiveAppBar {
     String? subtitle,
     List<AdaptiveAppBarAction>? actions,
     Widget? leading,
-    bool? useNativeToolbar,
     Color? tintColor,
     Color? navigationBarColor,
     bool? navigationBarShadow,
@@ -139,7 +128,6 @@ class AdaptiveAppBar {
       subtitle: subtitle ?? this.subtitle,
       actions: actions ?? this.actions,
       leading: leading ?? this.leading,
-      useNativeToolbar: useNativeToolbar ?? this.useNativeToolbar,
       tintColor: tintColor ?? this.tintColor,
       navigationBarColor: navigationBarColor ?? this.navigationBarColor,
       navigationBarShadow: navigationBarShadow ?? this.navigationBarShadow,

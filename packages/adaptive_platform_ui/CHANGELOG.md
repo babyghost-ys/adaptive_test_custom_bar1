@@ -8,6 +8,9 @@ Breaking release. See [MIGRATION.md](MIGRATION.md) for the before and after of e
 * **BREAKING**: the `IOS26*` renderers are no longer exported; they are internal `Native*` widgets now. Use the `Adaptive*` widgets.
 * **BREAKING**: removed parameters that had no effect: `AdaptiveScaffold.enableBlur` and `enableToolbarGradient`, `AdaptiveButton.useNative`, `cupertinoDecoration` on the text fields, `AdaptiveNavigationScrollController.compactUnderlapTop`, `AdaptiveLargeTitleSpacer` and `IOS26ScaffoldLegacy`.
 * **BREAKING**: `AdaptiveScaffold.extendBody` and `extendBodyBehindAppBar` are nullable. Null places the body between the bars, or under the glass bars of iOS 26+ when the body is itself a scroll view; Android behaves as before.
+* **BREAKING**: `AdaptiveAppBar.useNativeToolbar` and `AdaptiveBottomNavigationBar.useNativeBottomBar` are no longer parameters: supplying `cupertinoNavigationBar` or `cupertinoTabBar` selects the app's own bar, otherwise iOS uses the native one. The Flutter-built Cupertino bar made from a title is gone.
+* **BREAKING**: removed `AdaptiveScaffold.minimizeBehavior` and `TabBarMinimizeBehavior`. UIKit only minimises the tab bar while the user drags its scroll view, and Flutter owns that gesture, so the setting could never take effect.
+* **BREAKING**: removed `PlatformTarget.ios`, which could no longer be reported.
 * **NEW**: `AdaptiveThemeData` and `AdaptiveBarStyle` on `AdaptiveApp(theme:, darkTheme:)` set colours and bar style once; the Material and Cupertino themes are derived from them.
 * **NEW**: `AdaptiveStyle` (`native` or `material`), `AdaptiveStyleScope` and `AdaptiveApp(style:)` choose the family of controls; `AdaptiveCapabilities` replaces iOS version checks.
 * **NEW**: `AdaptiveDrawer` and a public `AdaptiveScaffoldState` with `openDrawer()` and `closeDrawer()`: a native panel on iOS, a Material drawer elsewhere.

@@ -104,6 +104,10 @@ On iOS this opens the native panel; elsewhere a Material drawer. Any other widge
 | `AdaptiveTextField.cupertinoDecoration`, `AdaptiveTextFormField.cupertinoDecoration` | remove; UIKit draws the field |
 | `AdaptiveNavigationScrollController.compactUnderlapTop`, `AdaptiveLargeTitleSpacer` | remove |
 | `PlatformInfo.isIOS26OrHigher()` for layout decisions | `AdaptiveCapabilities.liquidGlass` |
+| `AdaptiveAppBar(useNativeToolbar: false)` | pass your own `cupertinoNavigationBar`; without one iOS always shows the native bar |
+| `AdaptiveBottomNavigationBar(useNativeBottomBar: false)` | pass your own `cupertinoTabBar` |
+| `AdaptiveScaffold.minimizeBehavior`, `TabBarMinimizeBehavior` | remove; it never took effect |
+| `PlatformTarget.ios` | `PlatformTarget.ios26Plus` or `PlatformTarget.ios18OrLower` |
 
 ## Choosing the family of controls
 

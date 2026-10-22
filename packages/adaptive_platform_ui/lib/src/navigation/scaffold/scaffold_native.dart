@@ -84,7 +84,6 @@ extension _NativeScaffold on AdaptiveScaffoldState {
         hidesNavigationButtonBackground:
             appBar?.hidesNavigationButtonBackground ?? false,
         titleWidget: titleOverlay,
-        minimizeBehavior: widget.minimizeBehavior,
         backgroundColor: widget.backgroundColor,
         useHeroBackButton: widget.useHeroBackButton,
         useFixedToolbar: _usesFixedToolbar(context),

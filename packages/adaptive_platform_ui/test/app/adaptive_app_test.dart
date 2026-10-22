@@ -365,7 +365,6 @@ void main() {
   group('PlatformTarget', () {
     test('has all expected enum values', () {
       expect(PlatformTarget.values, contains(PlatformTarget.android));
-      expect(PlatformTarget.values, contains(PlatformTarget.ios));
       expect(PlatformTarget.values, contains(PlatformTarget.ios26Plus));
       expect(PlatformTarget.values, contains(PlatformTarget.ios18OrLower));
       expect(PlatformTarget.values, contains(PlatformTarget.web));

@@ -19,7 +19,6 @@ class AdaptiveBottomNavigationBar {
     this.items,
     this.selectedIndex,
     this.onTap,
-    this.useNativeBottomBar = true,
     this.cupertinoTabBar,
     this.bottomNavigationBar,
     this.selectedItemColor,
@@ -43,27 +42,18 @@ class AdaptiveBottomNavigationBar {
   /// Enables a native UIKit search destination on supported iOS versions.
   /// iOS 26+ uses UISearchTab and its system search presentation; iOS 18 uses
   /// a native navigation search field at the top. UIKit adapts side-bar layouts.
-  /// Requires [useNativeBottomBar] and exactly one isSearch destination.
+  /// Requires the native tab bar and exactly one isSearch destination.
   /// Render its content when [onTap] selects that index and omit its app bar;
   /// UIKit owns the search title. Use SF Symbol string tab icons.
   final AdaptiveTabSearch? search;
 
-  /// Requests native UIKit tab rendering; defaults to true.
-  /// On iOS 15+, nonempty [items], [selectedIndex] and [onTap] select the native
-  /// tab host. [search] is optional. UIKit owns the running OS's tab appearance.
-  ///
-  /// In the explicit legacy scaffold path, false uses [cupertinoTabBar] when
-  /// supplied and otherwise creates a CupertinoTabBar. Custom Cupertino bars
-  /// belong to that legacy path, selected by an app bar with
-  /// useNativeToolbar: false. The native app-bar scaffold owns its UIKit tab
-  /// rendering and does not consume a custom [cupertinoTabBar].
-  final bool useNativeBottomBar;
+  /// Whether iOS shows the native UIKit tab bar: true unless the app
+  /// supplies its own [cupertinoTabBar]. Nonempty [items], [selectedIndex]
+  /// and [onTap] are still needed for the native tab host.
+  bool get useNativeBottomBar => cupertinoTabBar == null;
 
-  /// Custom CupertinoTabBar for the explicit legacy iOS scaffold path.
-  /// Used when that path has native bottom rendering disabled.
-  /// The native app-bar and default native tab/search hosts ignore it.
-  /// When omitted, the legacy path creates its tab bar from [items].
-  /// Ignored on Android.
+  /// The app's own iOS tab bar, drawn in place of the native one. Ignored on
+  /// Android.
   final CupertinoTabBar? cupertinoTabBar;
 
   /// Custom NavigationBar or BottomNavigationBar for Android
@@ -101,7 +91,6 @@ class AdaptiveBottomNavigationBar {
     List<AdaptiveNavigationDestination>? items,
     int? selectedIndex,
     ValueChanged<int>? onTap,
-    bool? useNativeBottomBar,
     CupertinoTabBar? cupertinoTabBar,
     Widget? bottomNavigationBar,
     Color? selectedItemColor,
@@ -112,7 +101,6 @@ class AdaptiveBottomNavigationBar {
       items: items ?? this.items,
       selectedIndex: selectedIndex ?? this.selectedIndex,
       onTap: onTap ?? this.onTap,
-      useNativeBottomBar: useNativeBottomBar ?? this.useNativeBottomBar,
       cupertinoTabBar: cupertinoTabBar ?? this.cupertinoTabBar,
       bottomNavigationBar: bottomNavigationBar ?? this.bottomNavigationBar,
       selectedItemColor: selectedItemColor ?? this.selectedItemColor,

@@ -41,7 +41,6 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
     private let container: LayoutAwareTabBarContainerView
     private var tabBar: UITabBar?
     private var lastReportedSize: CGSize?
-    private var minimizeBehavior: Int = 3 // automatic
     private var currentLabels: [String] = []
     private var currentSymbols: [String] = []
     private var currentSelectedSymbols: [String] = []
@@ -110,13 +109,11 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
         var badgeTexts: [String?] = []
         var badgeColors: [Int?] = []
         var badgeTextColors: [Int?] = []
-        var spacerFlags: [Bool] = []
         var selectedIndex: Int = 0
         var isDark: Bool = false
         var isRtl: Bool = false
         var tint: UIColor? = nil
         var bg: UIColor? = nil
-        var minimize: Int = 3 // automatic
 
         var unselectedTint: UIColor? = nil
 
@@ -132,7 +129,6 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
             networkIcons = (dict["networkIcons"] as? [String]) ?? []
             selectedNetworkIcons = (dict["selectedNetworkIcons"] as? [String]) ?? []
             searchFlags = (dict["searchFlags"] as? [Bool]) ?? []
-            spacerFlags = (dict["spacerFlags"] as? [Bool]) ?? []
             if let badgeData = dict["badgeCounts"] as? [NSNumber?] {
                 badgeCounts = badgeData.map { $0?.intValue }
             }
@@ -154,7 +150,6 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
                 NSLog("🎨 Parsed unselectedItemTint from dict: \(unselectedTint!)")
             }
             if let n = dict["backgroundColor"] as? NSNumber { bg = Self.colorFromARGB(n.intValue) }
-            if let m = dict["minimizeBehavior"] as? NSNumber { minimize = m.intValue }
         }
 
         super.init()
@@ -325,7 +320,6 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
             bar.bottomAnchor.constraint(equalTo: container.bottomAnchor),
         ])
 
-        self.minimizeBehavior = minimize
         self.currentLabels = labels
         self.currentSymbols = symbols
         self.currentSelectedSymbols = selectedSymbols
@@ -340,8 +334,6 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
         self.currentBadgeTexts = badgeTexts
         self.currentBadgeColors = badgeColors
         self.currentBadgeTextColors = badgeTextColors
-        // Apply minimize behavior if available
-        self.applyMinimizeBehavior()
 
         container.onWidthChanged = { [weak self] _ in
             self?.handleContainerWidthChange()
@@ -355,18 +347,6 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
             guard let self = self else { result(nil); return }
             self.handleMethodCall(call, result: result)
         }
-    }
-
-    private func applyMinimizeBehavior() {
-        // Note: UITabBarController.tabBarMinimizeBehavior is the official iOS 26+ API
-        // However, since we're using a standalone UITabBar in a platform view,
-        // we need to implement custom minimize behavior
-        //
-        // The minimize behavior should be controlled at the Flutter level
-        // by adjusting the tab bar's height/visibility based on scroll events
-        //
-        // This method stores the behavior preference for future use
-        // The actual minimization animation should be handled by Flutter
     }
 
     private func handleContainerWidthChange() {
@@ -584,13 +564,9 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
                 return
             }
 
-            var tintColor: UIColor? = nil
-            var unselectedColor: UIColor? = nil
-
             if let n = args["tint"] as? NSNumber {
                 let c = Self.colorFromARGB(n.intValue)
                 self.tabBar?.tintColor = c
-                tintColor = c
             }
             if let n = args["unselectedItemTint"] as? NSNumber {
                 let c = Self.colorFromARGB(n.intValue)
@@ -604,7 +580,6 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
                         self.rebuildItemsWithCurrentState()
                     }
                 }
-                unselectedColor = c
             }
             if let n = args["backgroundColor"] as? NSNumber {
                 let c = Self.colorFromARGB(n.intValue)
@@ -642,17 +617,6 @@ class iOS26TabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
                     : .leftToRight
             }
             self.container.semanticContentAttribute = attribute
-            result(nil)
-
-        case "setMinimizeBehavior":
-            guard let args = call.arguments as? [String: Any],
-                  let behavior = (args["behavior"] as? NSNumber)?.intValue else {
-                result(FlutterError(code: "bad_args", message: "Missing behavior", details: nil))
-                return
-            }
-
-            self.minimizeBehavior = behavior
-            self.applyMinimizeBehavior()
             result(nil)
 
         case "setHidden":

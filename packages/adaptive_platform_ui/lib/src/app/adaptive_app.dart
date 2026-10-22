@@ -68,15 +68,7 @@ class CupertinoAppData {
 }
 
 /// Platform detection for configuration callbacks
-enum PlatformTarget {
-  android,
-  ios,
-  ios26Plus,
-  ios18OrLower,
-  web,
-  desktop,
-  other,
-}
+enum PlatformTarget { android, ios26Plus, ios18OrLower, web, desktop, other }
 
 /// An adaptive app that uses MaterialApp for Android and CupertinoApp for iOS
 class AdaptiveApp extends StatelessWidget {

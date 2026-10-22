@@ -103,7 +103,7 @@ class iOS26ToolbarPlatformView: NSObject, FlutterPlatformView, NativeNavigationP
             lastBarBottom = barBottom
             channel.invokeMethod("onNavigationMetrics", arguments: [
                 "contentInset": Double(contentInset), "barBottom": Double(barBottom),
-                "generation": scrollGeneration, "chromeRegions": []
+                "generation": scrollGeneration
             ])
         }
     }

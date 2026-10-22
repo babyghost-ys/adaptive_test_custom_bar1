@@ -17,7 +17,6 @@ class NativeTabBar extends StatefulWidget {
     this.unselectedItemTint,
     this.backgroundColor,
     this.height,
-    this.minimizeBehavior = TabBarMinimizeBehavior.automatic,
     this.showNativeView = true,
     this.hidden = false,
   });
@@ -35,10 +34,6 @@ class NativeTabBar extends StatefulWidget {
   /// Use this to hide the tab bar when showing modal bottom sheets
   /// to prevent native platform views from bleeding through.
   final bool hidden;
-
-  /// Tab bar minimize behavior (iOS 26+)
-  /// Controls how the tab bar minimizes when scrolling
-  final TabBarMinimizeBehavior minimizeBehavior;
 
   @override
   State<NativeTabBar> createState() => _NativeTabBarState();
@@ -66,7 +61,6 @@ class _NativeTabBarState extends State<NativeTabBar> {
   List<String?>? _lastBadgeTexts;
   List<int?>? _lastBadgeColors;
   List<int?>? _lastBadgeTextColors;
-  TabBarMinimizeBehavior? _lastMinimizeBehavior;
   bool? _lastHidden;
 
   bool get _isDark =>
@@ -219,7 +213,6 @@ class _NativeTabBarState extends State<NativeTabBar> {
         'selectedIndex': widget.selectedIndex,
         'isDark': _isDark,
         'isRtl': _isRtl,
-        'minimizeBehavior': widget.minimizeBehavior.index,
         if (_effectiveTint != null) 'tint': _colorToARGB(_effectiveTint!),
         if (widget.unselectedItemTint != null)
           'unselectedItemTint': _colorToARGB(widget.unselectedItemTint!),
@@ -299,7 +292,6 @@ class _NativeTabBarState extends State<NativeTabBar> {
         : null;
     _lastIsDark = _isDark;
     _lastIsRtl = _isRtl;
-    _lastMinimizeBehavior = widget.minimizeBehavior;
     _requestIntrinsicSize();
     _cacheItems();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -431,14 +423,6 @@ class _NativeTabBarState extends State<NativeTabBar> {
       _lastBadgeTexts = currentBadgeTexts;
       _lastBadgeColors = currentBadgeColors;
       _lastBadgeTextColors = currentBadgeTextColors;
-    }
-
-    // Minimize behavior update
-    if (_lastMinimizeBehavior != widget.minimizeBehavior) {
-      await ch.invokeMethod('setMinimizeBehavior', {
-        'behavior': widget.minimizeBehavior.index,
-      });
-      _lastMinimizeBehavior = widget.minimizeBehavior;
     }
 
     // Hidden state update
