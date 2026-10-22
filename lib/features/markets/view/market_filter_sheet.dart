@@ -10,27 +10,72 @@ import 'package:native_widgets_on_duo/features/portfolio/models/holdings_filter.
 const _controls = <AdaptiveFilterControl>[
   AdaptiveFilterChoices(
     'movement',
-    sfSymbol: 'chart.line.uptrend.xyaxis',
+    icon: AdaptiveIcon(
+      sfSymbol: 'chart.line.uptrend.xyaxis',
+      icon: Icons.trending_up_rounded,
+    ),
     layout: AdaptiveFilterLayout.blocks,
     [
-      AdaptiveFilterOption('all', 'All', sfSymbol: 'infinity'),
+      AdaptiveFilterOption(
+        'all',
+        'All',
+        icon: AdaptiveIcon(
+          sfSymbol: 'infinity',
+          icon: Icons.all_inclusive_rounded,
+        ),
+      ),
       AdaptiveFilterOption(
         'gainers',
         'Gainers',
-        sfSymbol: 'arrow.up.right',
+        icon: AdaptiveIcon(
+          sfSymbol: 'arrow.up.right',
+          icon: Icons.north_east_rounded,
+        ),
         tint: green,
       ),
-      AdaptiveFilterOption('losers', 'Losers', sfSymbol: 'arrow.down.right'),
+      AdaptiveFilterOption(
+        'losers',
+        'Losers',
+        icon: AdaptiveIcon(
+          sfSymbol: 'arrow.down.right',
+          icon: Icons.south_east_rounded,
+        ),
+      ),
     ],
   ),
-  AdaptiveFilterChoices('sort', sfSymbol: 'arrow.up.arrow.down', [
-    AdaptiveFilterOption('symbol', 'A-Z', sfSymbol: 'textformat.abc'),
-    AdaptiveFilterOption('price', 'Price', sfSymbol: 'dollarsign'),
-    AdaptiveFilterOption('change', 'Change', sfSymbol: 'percent'),
-  ]),
+  AdaptiveFilterChoices(
+    'sort',
+    icon: AdaptiveIcon(
+      sfSymbol: 'arrow.up.arrow.down',
+      icon: Icons.swap_vert_rounded,
+    ),
+    [
+      AdaptiveFilterOption(
+        'symbol',
+        'A-Z',
+        icon: AdaptiveIcon(
+          sfSymbol: 'textformat.abc',
+          icon: Icons.sort_by_alpha_rounded,
+        ),
+      ),
+      AdaptiveFilterOption(
+        'price',
+        'Price',
+        icon: AdaptiveIcon(
+          sfSymbol: 'dollarsign',
+          icon: Icons.attach_money_rounded,
+        ),
+      ),
+      AdaptiveFilterOption(
+        'change',
+        'Change',
+        icon: AdaptiveIcon(sfSymbol: 'percent', icon: Icons.percent_rounded),
+      ),
+    ],
+  ),
   AdaptiveFilterSlider(
     'maxPrice',
-    sfSymbol: 'tag',
+    icon: AdaptiveIcon(sfSymbol: 'tag', icon: Icons.sell_outlined),
     min: 100,
     max: MarketFilter.ceiling,
     prefix: 'Up to \$',
@@ -39,18 +84,35 @@ const _controls = <AdaptiveFilterControl>[
   ),
   AdaptiveFilterChoices(
     'types',
-    sfSymbol: 'square.grid.2x2',
+    icon: AdaptiveIcon(
+      sfSymbol: 'square.grid.2x2',
+      icon: Icons.grid_view_rounded,
+    ),
     layout: AdaptiveFilterLayout.blocks,
     multiple: true,
     columns: 2,
     [
-      AdaptiveFilterOption('stock', 'Stocks', sfSymbol: 'building.2'),
-      AdaptiveFilterOption('etf', 'ETFs', sfSymbol: 'chart.pie'),
+      AdaptiveFilterOption(
+        'stock',
+        'Stocks',
+        icon: AdaptiveIcon(
+          sfSymbol: 'building.2',
+          icon: Icons.business_rounded,
+        ),
+      ),
+      AdaptiveFilterOption(
+        'etf',
+        'ETFs',
+        icon: AdaptiveIcon(
+          sfSymbol: 'chart.pie',
+          icon: Icons.pie_chart_outline_rounded,
+        ),
+      ),
     ],
   ),
   AdaptiveFilterSlider(
     'minChange',
-    sfSymbol: 'percent',
+    icon: AdaptiveIcon(sfSymbol: 'percent', icon: Icons.percent_rounded),
     min: MarketFilter.floor,
     max: 3,
     prefix: 'Above ',
@@ -91,7 +153,7 @@ Future<MarketFilter?> showMarketFilterSheet(
       ..._controls,
       AdaptiveFilterChoices(
         'symbols',
-        sfSymbol: 'tag.circle',
+        icon: AdaptiveIcon(sfSymbol: 'tag.circle', icon: Icons.sell_outlined),
         layout: AdaptiveFilterLayout.swatches,
         multiple: true,
         assetSwatches(assets),

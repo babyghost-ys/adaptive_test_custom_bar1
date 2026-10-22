@@ -31,35 +31,73 @@ Future<ActivityFilter?> showActivityFilterSheet(
     tint: red,
     controls: [
       const AdaptiveFilterChoices('kind', layout: AdaptiveFilterLayout.stack, [
-        AdaptiveFilterOption('all', 'All', sfSymbol: 'infinity'),
-        AdaptiveFilterOption('bought', 'Bought', sfSymbol: 'plus.circle'),
+        AdaptiveFilterOption(
+          'all',
+          'All',
+          icon: AdaptiveIcon(
+            sfSymbol: 'infinity',
+            icon: Icons.all_inclusive_rounded,
+          ),
+        ),
+        AdaptiveFilterOption(
+          'bought',
+          'Bought',
+          icon: AdaptiveIcon(
+            sfSymbol: 'plus.circle',
+            icon: Icons.add_circle_outline_rounded,
+          ),
+        ),
         AdaptiveFilterOption(
           'dividends',
           'Dividends',
-          sfSymbol: 'arrow.down.left',
+          icon: AdaptiveIcon(
+            sfSymbol: 'arrow.down.left',
+            icon: Icons.south_west_rounded,
+          ),
           tint: green,
         ),
       ]),
       AdaptiveFilterChoices(
         'symbols',
-        sfSymbol: 'tag.circle',
+        icon: AdaptiveIcon(sfSymbol: 'tag.circle', icon: Icons.sell_outlined),
         layout: AdaptiveFilterLayout.swatches,
         multiple: true,
         assetSwatches(assets),
       ),
       const AdaptiveFilterChoices(
         'period',
-        sfSymbol: 'calendar',
+        icon: AdaptiveIcon(
+          sfSymbol: 'calendar',
+          icon: Icons.calendar_month_outlined,
+        ),
         layout: AdaptiveFilterLayout.strip,
         [
-          AdaptiveFilterOption('all', 'Any time', sfSymbol: 'infinity'),
-          AdaptiveFilterOption('week', '7 days', sfSymbol: 'calendar'),
-          AdaptiveFilterOption('threeDays', '3 days', sfSymbol: 'clock'),
+          AdaptiveFilterOption(
+            'all',
+            'Any time',
+            icon: AdaptiveIcon(
+              sfSymbol: 'infinity',
+              icon: Icons.all_inclusive_rounded,
+            ),
+          ),
+          AdaptiveFilterOption(
+            'week',
+            '7 days',
+            icon: AdaptiveIcon(
+              sfSymbol: 'calendar',
+              icon: Icons.calendar_month_outlined,
+            ),
+          ),
+          AdaptiveFilterOption(
+            'threeDays',
+            '3 days',
+            icon: AdaptiveIcon(sfSymbol: 'clock', icon: Icons.schedule_rounded),
+          ),
         ],
       ),
       const AdaptiveFilterSlider(
         'minAmount',
-        sfSymbol: 'banknote',
+        icon: AdaptiveIcon(sfSymbol: 'banknote', icon: Icons.payments_outlined),
         min: 0,
         max: ActivityFilter.maxAmount,
         prefix: 'Over \$',

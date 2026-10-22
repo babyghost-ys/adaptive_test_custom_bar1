@@ -1,6 +1,8 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 import '../../core/adaptive_style.dart';
+import '../../style/adaptive_icon.dart';
+import 'material_filter_sheet.dart';
 
 /// How a group of options is laid out in an [AdaptiveFilterSheet].
 enum AdaptiveFilterLayout {
@@ -37,10 +39,12 @@ enum AdaptiveFilterDetents {
 
 /// One choice in an [AdaptiveFilterChoices].
 class AdaptiveFilterOption {
-  const AdaptiveFilterOption(this.id, this.title, {this.sfSymbol, this.tint});
+  const AdaptiveFilterOption(this.id, this.title, {this.icon, this.tint});
   final String id;
   final String title;
-  final String? sfSymbol;
+
+  /// Drawn as an SF Symbol on iOS and a Material icon elsewhere.
+  final AdaptiveIcon? icon;
 
   /// Colour of the chosen state. Defaults to the sheet's tint.
   final Color? tint;
@@ -50,11 +54,11 @@ class AdaptiveFilterOption {
 /// sheet's values: a `List<String>` of chosen option ids for
 /// [AdaptiveFilterChoices], a `double` for [AdaptiveFilterSlider].
 sealed class AdaptiveFilterControl {
-  const AdaptiveFilterControl(this.id, {this.sfSymbol});
+  const AdaptiveFilterControl(this.id, {this.icon});
   final String id;
 
-  /// SF Symbol that names the control.
-  final String? sfSymbol;
+  /// Icon that names the control.
+  final AdaptiveIcon? icon;
 
   Map<String, Object?> _encode();
 }
@@ -63,7 +67,7 @@ class AdaptiveFilterChoices extends AdaptiveFilterControl {
   const AdaptiveFilterChoices(
     super.id,
     this.options, {
-    super.sfSymbol,
+    super.icon,
     this.layout = AdaptiveFilterLayout.chips,
     this.multiple = false,
     this.columns = 3,
@@ -79,7 +83,7 @@ class AdaptiveFilterChoices extends AdaptiveFilterControl {
   Map<String, Object?> _encode() => {
     'type': 'choices',
     'id': id,
-    'symbol': sfSymbol,
+    'symbol': icon?.sfSymbol,
     'layout': layout.name,
     'multiple': multiple,
     'columns': columns,
@@ -88,7 +92,7 @@ class AdaptiveFilterChoices extends AdaptiveFilterControl {
         {
           'id': o.id,
           'title': o.title,
-          'symbol': o.sfSymbol,
+          'symbol': o.icon?.sfSymbol,
           'tint': o.tint?.toARGB32(),
         },
     ],
@@ -98,7 +102,7 @@ class AdaptiveFilterChoices extends AdaptiveFilterControl {
 class AdaptiveFilterSlider extends AdaptiveFilterControl {
   const AdaptiveFilterSlider(
     super.id, {
-    super.sfSymbol,
+    super.icon,
     required this.min,
     required this.max,
     this.prefix = '',
@@ -122,7 +126,7 @@ class AdaptiveFilterSlider extends AdaptiveFilterControl {
   Map<String, Object?> _encode() => {
     'type': 'slider',
     'id': id,
-    'symbol': sfSymbol,
+    'symbol': icon?.sfSymbol,
     'min': min,
     'max': max,
     'prefix': prefix,
@@ -140,13 +144,15 @@ class AdaptiveFilterSlider extends AdaptiveFilterControl {
 /// asks [count] after every change so its apply button shows how many
 /// results the current choices give.
 ///
-/// Only available where [AdaptiveStyle] is native.
+/// Where [AdaptiveStyle] is material the same controls draw in a Material
+/// bottom sheet that rests at the same heights.
 class AdaptiveFilterSheet {
   AdaptiveFilterSheet._();
   static const _channel = MethodChannel('adaptive_platform_ui/filter_sheet');
 
-  /// Whether a native filter sheet can be shown for [context].
-  static bool isSupported(BuildContext context) =>
+  /// Whether the sheet is a native UIKit sheet for [context]. Elsewhere it is
+  /// a Material bottom sheet with the same controls.
+  static bool isNative(BuildContext context) =>
       AdaptiveStyle.of(context) == AdaptiveStyle.native;
 
   /// Shows the sheet and returns the chosen values, or null when it is
@@ -164,7 +170,18 @@ class AdaptiveFilterSheet {
     Color? tint,
     AdaptiveFilterDetents detents = AdaptiveFilterDetents.halfAndFull,
   }) async {
-    if (!isSupported(context)) return null;
+    if (!isNative(context)) {
+      return showMaterialFilterSheet(
+        context: context,
+        title: title,
+        tint: tint,
+        detents: detents,
+        controls: controls,
+        values: values,
+        cleared: cleared,
+        count: count,
+      );
+    }
     _channel.setMethodCallHandler((call) async {
       if (call.method != 'changed') return null;
       return count(_decode(call.arguments));

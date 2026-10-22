@@ -27,20 +27,36 @@ Future<WatchlistFilter?> showWatchlistFilterSheet(
     controls: const [
       AdaptiveFilterChoices(
         'movement',
-        sfSymbol: 'chart.line.uptrend.xyaxis',
+        icon: AdaptiveIcon(
+          sfSymbol: 'chart.line.uptrend.xyaxis',
+          icon: Icons.trending_up_rounded,
+        ),
         layout: AdaptiveFilterLayout.blocks,
         [
-          AdaptiveFilterOption('all', 'All', sfSymbol: 'infinity'),
+          AdaptiveFilterOption(
+            'all',
+            'All',
+            icon: AdaptiveIcon(
+              sfSymbol: 'infinity',
+              icon: Icons.all_inclusive_rounded,
+            ),
+          ),
           AdaptiveFilterOption(
             'gainers',
             'Gainers',
-            sfSymbol: 'arrow.up.right',
+            icon: AdaptiveIcon(
+              sfSymbol: 'arrow.up.right',
+              icon: Icons.north_east_rounded,
+            ),
             tint: green,
           ),
           AdaptiveFilterOption(
             'losers',
             'Losers',
-            sfSymbol: 'arrow.down.right',
+            icon: AdaptiveIcon(
+              sfSymbol: 'arrow.down.right',
+              icon: Icons.south_east_rounded,
+            ),
           ),
         ],
       ),

@@ -40,46 +40,100 @@ Future<HoldingsFilter?> showHoldingsFilterSheet(
     controls: [
       const AdaptiveFilterChoices(
         'sort',
-        sfSymbol: 'arrow.up.arrow.down',
+        icon: AdaptiveIcon(
+          sfSymbol: 'arrow.up.arrow.down',
+          icon: Icons.swap_vert_rounded,
+        ),
         layout: AdaptiveFilterLayout.strip,
         [
-          AdaptiveFilterOption('value', 'Value', sfSymbol: 'wallet.bifold'),
-          AdaptiveFilterOption('change', 'Change', sfSymbol: 'percent'),
-          AdaptiveFilterOption('symbol', 'A-Z', sfSymbol: 'textformat.abc'),
+          AdaptiveFilterOption(
+            'value',
+            'Value',
+            icon: AdaptiveIcon(
+              sfSymbol: 'wallet.bifold',
+              icon: Icons.account_balance_wallet_outlined,
+            ),
+          ),
+          AdaptiveFilterOption(
+            'change',
+            'Change',
+            icon: AdaptiveIcon(
+              sfSymbol: 'percent',
+              icon: Icons.percent_rounded,
+            ),
+          ),
+          AdaptiveFilterOption(
+            'symbol',
+            'A-Z',
+            icon: AdaptiveIcon(
+              sfSymbol: 'textformat.abc',
+              icon: Icons.sort_by_alpha_rounded,
+            ),
+          ),
         ],
       ),
       const AdaptiveFilterChoices(
         'movement',
         layout: AdaptiveFilterLayout.stack,
         [
-          AdaptiveFilterOption('all', 'All', sfSymbol: 'infinity'),
+          AdaptiveFilterOption(
+            'all',
+            'All',
+            icon: AdaptiveIcon(
+              sfSymbol: 'infinity',
+              icon: Icons.all_inclusive_rounded,
+            ),
+          ),
           AdaptiveFilterOption(
             'gainers',
             'Gainers',
-            sfSymbol: 'arrow.up.right',
+            icon: AdaptiveIcon(
+              sfSymbol: 'arrow.up.right',
+              icon: Icons.north_east_rounded,
+            ),
             tint: green,
           ),
           AdaptiveFilterOption(
             'losers',
             'Losers',
-            sfSymbol: 'arrow.down.right',
+            icon: AdaptiveIcon(
+              sfSymbol: 'arrow.down.right',
+              icon: Icons.south_east_rounded,
+            ),
           ),
         ],
       ),
       const AdaptiveFilterChoices(
         'types',
-        sfSymbol: 'square.grid.2x2',
+        icon: AdaptiveIcon(
+          sfSymbol: 'square.grid.2x2',
+          icon: Icons.grid_view_rounded,
+        ),
         layout: AdaptiveFilterLayout.blocks,
         multiple: true,
         columns: 2,
         [
-          AdaptiveFilterOption('stock', 'Stocks', sfSymbol: 'building.2'),
-          AdaptiveFilterOption('etf', 'ETFs', sfSymbol: 'chart.pie'),
+          AdaptiveFilterOption(
+            'stock',
+            'Stocks',
+            icon: AdaptiveIcon(
+              sfSymbol: 'building.2',
+              icon: Icons.business_rounded,
+            ),
+          ),
+          AdaptiveFilterOption(
+            'etf',
+            'ETFs',
+            icon: AdaptiveIcon(
+              sfSymbol: 'chart.pie',
+              icon: Icons.pie_chart_outline_rounded,
+            ),
+          ),
         ],
       ),
       const AdaptiveFilterSlider(
         'minValue',
-        sfSymbol: 'banknote',
+        icon: AdaptiveIcon(sfSymbol: 'banknote', icon: Icons.payments_outlined),
         min: 0,
         max: HoldingsFilter.maxValue,
         prefix: 'Over \$',
@@ -87,7 +141,7 @@ Future<HoldingsFilter?> showHoldingsFilterSheet(
       ),
       const AdaptiveFilterSlider(
         'minChange',
-        sfSymbol: 'percent',
+        icon: AdaptiveIcon(sfSymbol: 'percent', icon: Icons.percent_rounded),
         min: HoldingsFilter.floor,
         max: 3,
         prefix: 'Above ',
@@ -97,7 +151,7 @@ Future<HoldingsFilter?> showHoldingsFilterSheet(
       ),
       AdaptiveFilterChoices(
         'symbols',
-        sfSymbol: 'tag.circle',
+        icon: AdaptiveIcon(sfSymbol: 'tag.circle', icon: Icons.sell_outlined),
         layout: AdaptiveFilterLayout.swatches,
         multiple: true,
         assetSwatches(assets),
