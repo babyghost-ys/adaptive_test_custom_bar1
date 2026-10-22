@@ -7,6 +7,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
   flutter_bloc: ^9.1.1
   adaptive_platform_ui:
     path: packages/adaptive_platform_ui

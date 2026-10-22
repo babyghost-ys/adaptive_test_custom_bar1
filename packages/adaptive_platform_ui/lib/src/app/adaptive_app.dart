@@ -1,7 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import '../core/adaptive_style.dart';
 import '../core/theme/adaptive_theme.dart';
 import '../core/platform_info.dart';
@@ -220,14 +219,6 @@ class AdaptiveApp extends StatelessWidget {
               barStyle: theme!.barStyle,
             ));
 
-  /// The app's delegates plus the Material, Cupertino and widgets ones the
-  /// package's widgets need on every platform.
-  List<LocalizationsDelegate<dynamic>> get _localizationsDelegates => [
-    ...?localizationsDelegates,
-    GlobalMaterialLocalizations.delegate,
-    GlobalCupertinoLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-  ];
   final ThemeData? materialLightTheme;
   final ThemeData? materialDarkTheme;
 
@@ -249,6 +240,9 @@ class AdaptiveApp extends StatelessWidget {
 
   // Localization properties
   final Locale? locale;
+
+  /// Pass `GlobalMaterialLocalizations.delegate` and friends from
+  /// `flutter_localizations`; the package does not depend on it.
   final Iterable<LocalizationsDelegate<dynamic>>? localizationsDelegates;
   final LocaleListResolutionCallback? localeListResolutionCallback;
   final LocaleResolutionCallback? localeResolutionCallback;
@@ -396,7 +390,7 @@ class AdaptiveApp extends StatelessWidget {
         theme:
             effectiveLightTheme, // Default theme (will be overridden by builder)
         locale: locale,
-        localizationsDelegates: _localizationsDelegates,
+        localizationsDelegates: localizationsDelegates,
         localeListResolutionCallback: localeListResolutionCallback,
         localeResolutionCallback: localeResolutionCallback,
         supportedLocales: supportedLocales,
@@ -429,7 +423,7 @@ class AdaptiveApp extends StatelessWidget {
       theme:
           effectiveLightTheme, // Default theme (will be overridden by builder)
       locale: locale,
-      localizationsDelegates: _localizationsDelegates,
+      localizationsDelegates: localizationsDelegates,
       localeListResolutionCallback: localeListResolutionCallback,
       localeResolutionCallback: localeResolutionCallback,
       supportedLocales: supportedLocales,
@@ -479,7 +473,7 @@ class AdaptiveApp extends StatelessWidget {
         darkTheme: materialDarkTheme ?? _darkData?.material(Brightness.dark),
         themeMode: themeMode ?? ThemeMode.system,
         locale: locale,
-        localizationsDelegates: _localizationsDelegates,
+        localizationsDelegates: localizationsDelegates,
         localeListResolutionCallback: localeListResolutionCallback,
         localeResolutionCallback: localeResolutionCallback,
         supportedLocales: supportedLocales,
@@ -517,7 +511,7 @@ class AdaptiveApp extends StatelessWidget {
       darkTheme: materialDarkTheme ?? _darkData?.material(Brightness.dark),
       themeMode: themeMode ?? ThemeMode.system,
       locale: locale,
-      localizationsDelegates: _localizationsDelegates,
+      localizationsDelegates: localizationsDelegates,
       localeListResolutionCallback: localeListResolutionCallback,
       localeResolutionCallback: localeResolutionCallback,
       supportedLocales: supportedLocales,
