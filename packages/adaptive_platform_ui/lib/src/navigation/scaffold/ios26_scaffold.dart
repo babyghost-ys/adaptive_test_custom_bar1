@@ -312,7 +312,10 @@ class _IOS26ScaffoldState extends State<IOS26Scaffold> {
     final tabs = widget.tabBarHidden ? null : widget.bottomNavigationBar;
     final hasTabs = tabs?.items?.isNotEmpty ?? false;
     final showDuoSideBar =
-        duoVerticalPose && (hasControls || hasTabs) && chrome == null;
+        duoVerticalPose &&
+        !nativeVertical &&
+        (hasControls || hasTabs) &&
+        chrome == null;
 
     // The Liquid Glass toolbar is drawn as a Positioned overlay on top of the
     // body (see below), so, unlike CupertinoPageScaffold with a translucent

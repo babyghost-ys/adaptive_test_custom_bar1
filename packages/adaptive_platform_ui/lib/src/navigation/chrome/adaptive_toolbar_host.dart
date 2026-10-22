@@ -136,7 +136,7 @@ class _AdaptiveToolbarHostState extends State<AdaptiveToolbarHost>
               _BarInset(pose: pose, child: widget.child),
               if (hostsToolbar)
                 HostedTopToolbar(blend: _blend, titleOnly: pose != null),
-              if (pose != null)
+              if (pose != null && defaultTargetPlatform != TargetPlatform.iOS)
                 // The bar sits on whichever edge the pose names: the right in
                 // most poses, the left in the leading Split View pane.
                 Positioned(
