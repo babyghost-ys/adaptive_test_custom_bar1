@@ -10,16 +10,23 @@ class AdaptiveBarStyle {
     : color = null,
       foreground = null,
       shadow = false,
-      plainButtons = false;
+      plainButtons = false,
+      fillsDuoStrip = false;
 
   /// A solid [color] bar with [foreground] title, back button and actions.
   /// [shadow] draws a subtle shadow below it; [plainButtons] removes the
   /// glass background behind its buttons on iOS 26+.
+  ///
+  /// On iPhone Duo the system reserves a strip at one edge of the window for
+  /// the vertical bar. [fillsDuoStrip] paints that strip with [color], so the
+  /// bar reads as one band from the top of the window down the strip. Pass
+  /// false to leave the strip in the page background.
   const AdaptiveBarStyle.solid(
     Color this.color, {
     this.foreground,
     this.shadow = false,
     this.plainButtons = false,
+    this.fillsDuoStrip = true,
   });
 
   final Color? color;
@@ -27,16 +34,21 @@ class AdaptiveBarStyle {
   final bool shadow;
   final bool plainButtons;
 
+  /// Whether the iPhone Duo vertical bar strip is painted with [color].
+  final bool fillsDuoStrip;
+
   @override
   bool operator ==(Object other) =>
       other is AdaptiveBarStyle &&
       color == other.color &&
       foreground == other.foreground &&
       shadow == other.shadow &&
-      plainButtons == other.plainButtons;
+      plainButtons == other.plainButtons &&
+      fillsDuoStrip == other.fillsDuoStrip;
 
   @override
-  int get hashCode => Object.hash(color, foreground, shadow, plainButtons);
+  int get hashCode =>
+      Object.hash(color, foreground, shadow, plainButtons, fillsDuoStrip);
 }
 
 /// The app's look, set once on `AdaptiveApp` and shared by every platform.

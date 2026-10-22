@@ -1,3 +1,4 @@
+import '../../core/theme/adaptive_theme.dart';
 import '../../core/adaptive_style.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
@@ -73,6 +74,12 @@ class _AdaptiveToolbarHostState extends State<AdaptiveToolbarHost>
     super.dispose();
   }
 
+  /// The app's bar colour where it asks for the Duo strip to be filled.
+  Color? _stripColor(BuildContext context) {
+    final bar = AdaptiveTheme.of(context).barStyle;
+    return bar.fillsDuoStrip ? bar.color : null;
+  }
+
   @override
   Widget build(BuildContext context) {
     // The fixed chrome only exists where pages use the native iOS 26
@@ -105,6 +112,11 @@ class _AdaptiveToolbarHostState extends State<AdaptiveToolbarHost>
               // element tree whenever the pose changes (moving between Split
               // View panes), and rebuild every route.
               _BarInset(pose: pose, child: widget.child),
+              // Always present, so the toolbar after it keeps its position in
+              // the element tree as the pose changes.
+              Positioned.fill(
+                child: _BarStrip(pose: pose, color: _stripColor(context)),
+              ),
               if (hostsToolbar)
                 HostedTopToolbar(blend: _blend, titleOnly: pose != null),
             ],
@@ -142,6 +154,33 @@ class _BarInset extends StatelessWidget {
               viewPadding: pose.addStrip(mq.viewPadding),
             ),
       child: child,
+    );
+  }
+}
+
+/// Fills the strip the system reserves for the iPhone Duo vertical bar with
+/// the app's bar colour, so the bar reads as one band down that edge. Draws
+/// nothing without a pose or a colour, and never takes a touch.
+class _BarStrip extends StatelessWidget {
+  const _BarStrip({required this.pose, required this.color});
+
+  final DuoPose? pose;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final pose = this.pose;
+    final color = this.color;
+    if (pose == null || color == null) return const SizedBox.shrink();
+    return IgnorePointer(
+      child: Align(
+        alignment: pose.onLeft ? Alignment.centerLeft : Alignment.centerRight,
+        child: SizedBox(
+          width: pose.stripWidth,
+          height: double.infinity,
+          child: ColoredBox(color: color),
+        ),
+      ),
     );
   }
 }
