@@ -494,8 +494,7 @@ class _NativeToolbarState extends State<NativeToolbar> {
     }
 
     final safePadding = MediaQuery.of(context).padding.top;
-    if ((widget.titleWidget != null) ||
-        _titleBytes != null) {
+    if ((widget.titleWidget != null) || _titleBytes != null) {
       _scheduleTitleImage();
     }
 

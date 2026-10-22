@@ -138,9 +138,9 @@ class AdaptiveDrawer extends StatelessWidget {
       });
     }
     return _channel.invokeMethod<void>('setDrawerCover', {
-    'x': x,
-    'width': width,
-    'background': color.toARGB32(),
+      'x': x,
+      'width': width,
+      'background': color.toARGB32(),
     });
   }
 

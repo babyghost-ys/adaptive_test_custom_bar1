@@ -32,7 +32,10 @@ class MeridianDrawer extends StatelessWidget {
           children: [
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Text('MERIDIAN', style: barTitleStyle.copyWith(color: red)),
+              child: Text(
+                'MERIDIAN',
+                style: barTitleStyle.copyWith(color: red),
+              ),
             ),
             const SizedBox(height: 16),
             for (final (index, (icon, name)) in _accounts.indexed)
