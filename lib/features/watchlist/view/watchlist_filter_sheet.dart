@@ -1,69 +1,99 @@
 import 'package:flutter/material.dart';
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 
-import 'package:native_widgets_on_duo/app/theme/palette.dart';
-import 'package:native_widgets_on_duo/core/filtering/filter_values.dart';
+import 'package:native_widgets_on_duo/core/formatting/money.dart';
+import 'package:native_widgets_on_duo/core/widgets/label.dart';
+import 'package:native_widgets_on_duo/core/widgets/sheet_frame.dart';
 import 'package:native_widgets_on_duo/features/investment/data/demo_assets.dart';
 import 'package:native_widgets_on_duo/features/markets/models/market_filter.dart';
+import 'package:native_widgets_on_duo/features/portfolio/models/holdings_filter.dart';
 import 'package:native_widgets_on_duo/features/watchlist/models/watchlist_filter.dart';
 
-Map<String, Object> _values(WatchlistFilter f) => {
-  'movement': [f.movement.name],
-};
-
-WatchlistFilter _filter(Map<String, Object> v) =>
-    WatchlistFilter(movement: chosenEnum(v, 'movement', MarketMovement.values));
-
-/// A short sheet with a single control.
+/// A native sheet that follows the height of the widget it is given. The
+/// widget is plain Flutter, stateless, and owned by the app: the draft and the
+/// open state live in notifiers made here.
 Future<WatchlistFilter?> showWatchlistFilterSheet(
   BuildContext context,
   WatchlistFilter current,
-) async {
-  final result = await AdaptiveFilterSheet.show(
-    context: context,
-    title: 'Filters',
-    tint: red,
-    detents: AdaptiveFilterDetents.short,
-    controls: const [
-      AdaptiveFilterChoices(
-        'movement',
-        icon: AdaptiveIcon(
-          sfSymbol: 'chart.line.uptrend.xyaxis',
-          icon: Icons.trending_up_rounded,
-        ),
-        layout: AdaptiveFilterLayout.blocks,
-        [
-          AdaptiveFilterOption(
-            'all',
-            'All',
-            icon: AdaptiveIcon(
-              sfSymbol: 'infinity',
-              icon: Icons.all_inclusive_rounded,
-            ),
-          ),
-          AdaptiveFilterOption(
-            'gainers',
-            'Gainers',
-            icon: AdaptiveIcon(
-              sfSymbol: 'arrow.up.right',
-              icon: Icons.north_east_rounded,
-            ),
-            tint: green,
-          ),
-          AdaptiveFilterOption(
-            'losers',
-            'Losers',
-            icon: AdaptiveIcon(
-              sfSymbol: 'arrow.down.right',
-              icon: Icons.south_east_rounded,
-            ),
-          ),
-        ],
-      ),
-    ],
-    values: _values(current),
-    cleared: _values(const WatchlistFilter()),
-    count: (v) => assets.where(_filter(v).allows).length,
+) {
+  final draft = ValueNotifier(current);
+  final more = ValueNotifier(
+    current.maxPrice < WatchlistFilter.ceiling || current.types.isNotEmpty,
   );
-  return result == null ? null : _filter(result);
+  return AdaptiveNativeSheet.show<WatchlistFilter>(
+    context: context,
+    builder: (_) => WatchlistFilterContent(draft: draft, more: more),
+  ).whenComplete(() {
+    draft.dispose();
+    more.dispose();
+  });
+}
+
+class WatchlistFilterContent extends StatelessWidget {
+  const WatchlistFilterContent({
+    super.key,
+    required this.draft,
+    required this.more,
+  });
+
+  final ValueNotifier<WatchlistFilter> draft;
+  final ValueNotifier<bool> more;
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<WatchlistFilter>(
+    valueListenable: draft,
+    builder: (context, filter, _) => SheetFrame(
+      count: assets.where(filter.allows).length,
+      onReset: filter == const WatchlistFilter()
+          ? null
+          : () => draft.value = const WatchlistFilter(),
+      onApply: () => AdaptiveNativeSheet.pop(context, draft.value),
+      children: [
+        ChipGroup<MarketMovement>(
+          options: const [
+            (MarketMovement.all, Icons.all_inclusive_rounded, 'All'),
+            (MarketMovement.gainers, Icons.north_east_rounded, 'Gainers'),
+            (MarketMovement.losers, Icons.south_east_rounded, 'Losers'),
+          ],
+          isSelected: (m) => filter.movement == m,
+          onTap: (m) => draft.value = filter.copyWith(movement: m),
+        ),
+        OpenSection(
+          open: more,
+          icon: Icons.tune_rounded,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ChipGroup<HoldingType>(
+                options: const [
+                  (HoldingType.stock, Icons.business_rounded, 'Stocks'),
+                  (HoldingType.etf, Icons.pie_chart_outline_rounded, 'ETFs'),
+                ],
+                isSelected: filter.types.contains,
+                onTap: (t) => draft.value = filter.copyWith(
+                  types: filter.types.contains(t)
+                      ? ({...filter.types}..remove(t))
+                      : {...filter.types, t},
+                ),
+              ),
+              const SizedBox(height: 16),
+              label(
+                filter.maxPrice >= WatchlistFilter.ceiling
+                    ? 'Any price'
+                    : 'Up to ${money(filter.maxPrice)}',
+                size: 28,
+                weight: FontWeight.w600,
+              ),
+              Slider(
+                value: filter.maxPrice,
+                min: 100,
+                max: WatchlistFilter.ceiling,
+                onChanged: (v) => draft.value = filter.copyWith(maxPrice: v),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
 }

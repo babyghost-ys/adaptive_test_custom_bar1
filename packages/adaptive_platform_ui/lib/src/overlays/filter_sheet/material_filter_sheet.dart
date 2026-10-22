@@ -98,7 +98,8 @@ class _MaterialFilterSheetState extends State<_MaterialFilterSheet> {
 
   (double initial, double min, List<double> snaps) get _sizes =>
       switch (widget.detents) {
-        AdaptiveFilterDetents.halfAndFull => (0.5, 0.5, const [0.5, 0.95]),
+        AdaptiveFilterDetents.halfAndFull ||
+        AdaptiveFilterDetents.fit => (0.5, 0.5, const [0.5, 0.95]),
         AdaptiveFilterDetents.full => (0.95, 0.95, const [0.95]),
         AdaptiveFilterDetents.short => (0.34, 0.34, const [0.34]),
       };
