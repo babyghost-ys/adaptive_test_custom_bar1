@@ -154,10 +154,12 @@ class _DateLine extends StatelessWidget {
     'Dec',
   ];
 
+  // No ink: the sheet opening is the feedback, and a ripple would be
+  // caught mid-animation in the still frame this sheet shows underneath.
   @override
-  Widget build(BuildContext context) => InkWell(
+  Widget build(BuildContext context) => GestureDetector(
     onTap: onTap,
-    borderRadius: BorderRadius.circular(12),
+    behavior: HitTestBehavior.opaque,
     child: Padding(
       padding: const EdgeInsets.symmetric(vertical: 12),
       child: Row(
