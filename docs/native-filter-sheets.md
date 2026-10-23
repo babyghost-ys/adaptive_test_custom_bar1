@@ -1,9 +1,13 @@
-# Building the native sheet
+# Building the native filter sheet, nested sheets included
 
-Instructions for an AI agent that must add a native sheet to a Flutter app, the way
-this repository does. The parent app passes one plain Flutter `Widget`. The package
-decides how to present it and how tall to make it. Follow the steps in order. Every
-code listing is complete and can be copied as is.
+Instructions for an AI agent adding a native filter sheet to a Flutter app that uses
+`adaptive_platform_ui`, the way this repository does. Assume the package has no native
+sheet support yet: you add all of it here. The app passes one plain Flutter `Widget`; the
+package decides how to present it and how tall to make it. A sheet's widget can open a
+second sheet on top of itself (a nested sheet), and both stay real UIKit sheets.
+
+Follow the steps in order. Every code listing is complete and is the file as it is in this
+repository, so it can be copied as is.
 
 ## What you are building
 
@@ -20,95 +24,197 @@ final result = await AdaptiveNativeSheet.show<MyFilter>(
 * **Android and other platforms:** a Material bottom sheet showing the same widget.
 * **The widget** is ordinary Flutter. It can be a `StatelessWidget`, close over anything,
   read the app's state (a bloc, a provider, a notifier), and contain the package's native
-  controls (`AdaptiveSegmentedControl`, `AdaptiveSlider`, `AdaptiveSwitch`). Those
-  render as real UIKit views inside the sheet with no extra work.
+  controls (`AdaptiveSegmentedControl`, `AdaptiveSlider`, `AdaptiveSwitch`,
+  `AdaptiveInlineDatePicker`). Those render as real UIKit views inside the sheet.
 * **The height** follows the widget. The package measures it. When the content grows
-  (an expanding section, more rows) the sheet animates taller. Past the screen height
-  it rests at full height and the content scrolls. The parent passes no height.
-* Closing: call `AdaptiveNativeSheet.pop(context, value)` from inside the widget, or
-  the user drags the sheet down (the call returns `null`).
+  (an expanding section) the sheet animates taller. Past the screen height it is capped
+  and the content scrolls. Dragging up stretches the sheet and it springs back; it never
+  stays taller than its content. The app passes no height.
+* **Nested sheets:** from inside a sheet's widget, call `AdaptiveNativeSheet.show` again.
+  The new sheet opens on top; the one below keeps its full height and its controls, under
+  the new sheet's dimming. Each sheet has its own result.
+* **Closing:** call `AdaptiveNativeSheet.pop(context, value)` from inside the widget. It
+  closes the top sheet. Dragging a sheet away returns `null`.
+
+```dart
+// Inside a sheet's widget: open a second sheet, then use its result.
+Future<void> _pickAccounts(BuildContext context) async {
+  final picked = await showAccountsSheet(context, draft.value.accounts);
+  if (picked != null) draft.value = draft.value.copyWith(accounts: picked);
+}
+```
 
 ## How it works
 
-A native UIKit sheet cannot contain Flutter widgets by itself. So the sheet's content
-is a second `FlutterViewController` on the same `FlutterEngine`:
+A UIKit sheet cannot contain Flutter widgets by itself, and one `FlutterEngine` can render
+into only one `FlutterViewController` at a time. So:
 
-1. Dart asks the plugin to present. Swift creates a `FlutterViewController` for the
-   engine and presents it as a `.pageSheet`. Presenting it makes the engine render into
-   the sheet. The page behind it keeps its last frame.
-2. Dart then draws the caller's widget as a full-window layer. That layer is part of the
-   same widget tree and the same isolate as the rest of the app, so the widget keeps its
-   closures, state and blocs.
-3. Dart measures the widget's height and sends it to Swift (`setHeight`). Swift resizes
-   a custom detent to match, animated.
-4. When the sheet closes, Swift hands the engine back to the page's own view controller.
+1. **Present.** Dart asks the plugin to present. Swift takes a `FlutterViewController` for
+   the engine from a pool (one per depth, created once and never released), makes it the
+   engine's view controller, and presents it as a `.pageSheet`. The engine now renders
+   into the sheet.
+2. **Draw.** Dart adds the caller's widget to a stack and points
+   `AdaptiveNativeSheet.active` at it. `AdaptiveNativeSheetLayer`, mounted in the toolbar
+   host above everything, draws that widget over the whole window, which on iOS is the
+   sheet. It is the same widget tree and isolate as the app, so closures, state and blocs
+   work.
+3. **Fit.** Dart measures the widget and sends its height (`setHeight`). Swift swaps in a
+   custom detent of that height, animated.
+4. **Nest.** A second `show` repeats this one level up, with two differences. The sheet
+   below is first covered with a bitmap of itself, because the engine and its native
+   controls are about to leave it. The new sheet is presented from its own transparent
+   window, not by the sheet below, because UIKit shrinks a presenting sheet to the
+   height of the sheet it presents.
+5. **Close.** The top sheet is dismissed, the engine goes back to whatever is now on top
+   (the sheet below, or the page), and that one's bitmap is removed once it has drawn.
+6. **Resize.** If the window changes size while a sheet is up (rotating the iPhone Duo),
+   everything under the top sheet is a stale frame. Once the size settles, Swift lends the
+   engine to the page and to each covered sheet in turn, Dart draws each at the new size
+   (`drawLayer`), Swift snapshots each, and the top sheet gets the engine back.
 
 ```
 page
-  |  AdaptiveNativeSheet.show(builder: widget)
+  |  AdaptiveNativeSheet.show(builder: widget)          (again from a sheet: nested)
   v
-AdaptiveNativeSheet (Dart)
+AdaptiveNativeSheet (Dart)  -- stack of entries, active = top
   |-- iOS ----> MethodChannel "adaptive_platform_ui/widget_sheet"
-  |               present {detents, height} --> NativeWidgetSheet.swift
-  |                                              presents a FlutterViewController sheet
-  |               setHeight {height}          --> resizes the "fit" detent
-  |               dismiss                       --> dismisses, hands the engine back
-  |               <-- dismissedByUser           (dragged away)
+  |               present {detents, height}  --> NativeWidgetSheet.swift
+  |                                               freezes the sheet below (bitmap)
+  |                                               presents a pooled FlutterViewController,
+  |                                               from an overlay window when nested
+  |               setHeight {height, depth}  --> swaps that sheet's "fit" detent
+  |               dismiss                    --> dismisses the top sheet, hands the
+  |                                               engine back, unfreezes the one below
+  |               <-- dismissedByUser          (dragged away)
+  |               <-- drawLayer {index}        (after a resize: draw the page, -1,
+  |                                               or the sheet at index, then answer)
   |   active.value = entry  -->  AdaptiveNativeSheetLayer (in AdaptiveToolbarHost)
-  |                              draws the widget over the whole window
+  |                              draws that widget over the whole window
   '-- other ---> showModalBottomSheet(builder)  (Flutter, same widget)
 ```
 
 ## Build steps
 
-Do these in order.
-
 1. Add the Swift presenter to the package.
-2. Register its channel in the plugin.
-3. Add the Dart API and export it.
-4. Add the detent enum value.
-5. Mount the layer in the toolbar host.
-6. In the app, write the sheet's widget and open it from a page.
-7. Verify on iOS and Android.
+2. Register its channel in the plugin, and point the Duo title band at the page.
+3. Make the Duo vertical bar events carry the view size.
+4. Add the Dart API and export it.
+5. Add the `fit` detent value.
+6. Mount the layer in the toolbar host.
+7. In the app, write the sheet's widgets (one of them nested) and open them from a page.
+8. Verify on iOS (iPhone and iPhone Duo) and Android.
 
 ## Step 1: the Swift presenter
 
-Create `packages/adaptive_platform_ui/ios/adaptive_platform_ui/Sources/adaptive_platform_ui/Overlays/NativeWidgetSheet.swift`.
+Create this file. It presents and nests sheets, keeps covered sheets frozen, hands the
+engine back on close, reclaims native views after the app becomes active, and redraws
+covered layers after the window resizes.
 
 ```swift
 // packages/adaptive_platform_ui/ios/adaptive_platform_ui/Sources/adaptive_platform_ui/Overlays/NativeWidgetSheet.swift
 import Flutter
 import UIKit
 
-/// A real UIKit sheet (`UISheetPresentationController`) whose content is the
-/// app's own Flutter widget.
+/// Real UIKit sheets (`UISheetPresentationController`) whose content is the
+/// app's own Flutter widget. Sheets can be nested: a sheet may open another.
+/// The engine only draws into the topmost, and its native views (switches,
+/// sliders, segmented controls) follow it there, so a lower sheet is covered
+/// by a snapshot of itself until the engine comes back.
 ///
-/// The sheet's content is a second `FlutterViewController` on the same
-/// engine. Only one view controller can drive an engine at a time, so while
-/// the sheet is up the engine renders into the sheet, and the page behind it
-/// keeps its last frame. Dart pushes the caller's widget as a full-window
-/// route, which therefore fills the sheet, and runs in the same isolate as the
-/// rest of the app, so the widget keeps its closures, its state and its blocs.
-/// When the sheet goes, the engine is handed back to the original view
-/// controller.
+/// When the window changes size (a rotation) while a sheet is up, those
+/// snapshots, and the page's last frame, would be stretched. Once the size
+/// settles, the engine is lent to the page and to each covered sheet in turn,
+/// so Dart draws each again at the new size, and each is snapshotted afresh.
+///
+/// A nested sheet is not presented by the sheet below it. When one sheet
+/// presents another, UIKit tucks the lower one behind the top one and shrinks
+/// it to the top sheet's height, whatever its own detents say. So each nested
+/// sheet is presented from its own transparent window above the app, and the
+/// sheets below keep their size, under the new sheet's dimming.
+///
+/// Each sheet's content is a `FlutterViewController` on the same engine. Only
+/// one view controller can drive an engine at a time, so the engine renders
+/// into the topmost sheet, and everything below it shows a still frame. Dart
+/// draws the topmost sheet's widget as a full-window layer, in the same
+/// isolate as the rest of the app, so the widget keeps its closures, its state
+/// and its blocs. When a sheet goes, the engine is handed back to whatever is
+/// below it: the sheet beneath, or the page.
 final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegate {
+    /// One open sheet.
+    private final class Level {
+        let controller: FlutterViewController
+        /// How this sheet rests: `fit`, `full`, `short` or `halfAndFull`.
+        let detents: String
+        /// Position in the stack, bottom is 0.
+        let depth: Int
+        /// Height of the "fit" detent: what Dart measured for the content.
+        var fitHeight: CGFloat = 320
+        /// Counts height changes, to name each new detent.
+        var revision = 0
+        /// The window a nested sheet is presented from. Nil for the bottom
+        /// sheet, which the page presents.
+        var window: UIWindow?
+        init(controller: FlutterViewController, detents: String, depth: Int) {
+            self.controller = controller
+            self.detents = detents
+            self.depth = depth
+        }
+    }
+
     private let channel: FlutterMethodChannel
     private let hostProvider: () -> UIViewController?
     private weak var originalHost: FlutterViewController?
+
+    /// The page's view controller once a sheet has been shown. The engine's
+    /// own view controller is the top sheet's while one is up.
+    var pageController: FlutterViewController? { originalHost }
     private weak var engine: FlutterEngine?
-    private var sheet: UIViewController?
 
-    /// The one controller that ever hosts a sheet. When a FlutterViewController
-    /// is released, Flutter destroys an engine that may not run headless, so it
-    /// is created once and kept for the life of the app, and reused.
-    private var persistent: FlutterViewController?
+    /// Open sheets, bottom first.
+    private var levels: [Level] = []
 
-    /// Height of the "fit" detent: what Dart measured for the content.
-    private var fitHeight: CGFloat = 320
+    /// Snapshots laid over the page or a sheet while the engine is elsewhere,
+    /// by controller.
+    private var stills: [ObjectIdentifier: UIView] = [:]
+
+    /// Watches the page's size, to draw the covered layers again after it
+    /// changes.
+    private var resizeObserver: ResizeObserverView?
+    private var pendingRedraw: DispatchWorkItem?
+    private var redrawing = false
+    private var redrawAgain = false
+
+    /// Bumped when a sheet opens or closes, so a redraw in progress stops.
+    private var stackGeneration = 0
+
+    /// Controllers by depth. When a FlutterViewController is released, Flutter
+    /// destroys an engine that may not run headless, so each is created once
+    /// and kept for the life of the app, and reused.
+    private var pool: [FlutterViewController] = []
 
     init(channel: FlutterMethodChannel, hostProvider: @escaping () -> UIViewController?) {
         self.channel = channel
         self.hostProvider = hostProvider
+        super.init()
+        for name in [UIApplication.didBecomeActiveNotification, UIScene.didActivateNotification] {
+            NotificationCenter.default.addObserver(
+                self, selector: #selector(becameActive), name: name, object: nil
+            )
+        }
+    }
+
+    /// Every FlutterViewController on the engine claims the engine's native
+    /// views when the app becomes active, whether or not it is the one on
+    /// screen, and the last to hear of it wins. Once a nested sheet has been
+    /// opened, that is a pooled controller that is not showing, and the
+    /// native views of the sheet on screen vanish into it. After they have
+    /// all run, hand the native views back to the engine's own controller.
+    @objc private func becameActive() {
+        guard !pool.isEmpty else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let current = self?.engine?.viewController else { return }
+            Self.surfaceUpdated(current)
+        }
     }
 
     func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -133,37 +239,59 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
     }
 
     private func present(_ args: [String: Any], result: @escaping FlutterResult) {
-        guard sheet == nil else {
-            result(FlutterError(code: "busy", message: "A widget sheet is already open", details: nil))
-            return
-        }
-        guard let host = hostProvider() as? FlutterViewController,
-              let presenter = topPresenter(from: host), !presenter.isBeingDismissed else {
+        let host = originalHost ?? (hostProvider() as? FlutterViewController)
+        guard let host, let presenter = topPresenter(from: host), !presenter.isBeingDismissed else {
             result(FlutterError(code: "unavailable", message: "No Flutter view to present from", details: nil))
             return
         }
 
         let engine: FlutterEngine = host.engine
-        let controller = persistent
-            ?? FlutterViewController(engine: engine, nibName: nil, bundle: nil)
-        persistent = controller
-        // Becoming the engine's view controller again if it already hosted a
-        // sheet before.
-        engine.viewController = controller
+        let depth = levels.count
+        if pool.count <= depth {
+            pool.append(FlutterViewController(engine: engine, nibName: nil, bundle: nil))
+        }
+        let level = Level(controller: pool[depth], detents: args["detents"] as? String ?? "fit", depth: depth)
+        level.fitHeight = CGFloat((args["height"] as? NSNumber)?.doubleValue ?? 320)
+
+        originalHost = host
+        self.engine = engine
+        observeSize(of: host)
+        stackGeneration += 1
+        if let below = levels.last {
+            freeze(below.controller)
+            level.window = overlayWindow(over: below.controller.view.window ?? host.view.window)
+        }
+        levels.append(level)
+        // The new sheet's controller takes the engine.
+        engine.viewController = level.controller
+        presentLevel(level, over: host)
+        // Answer as soon as the engine has moved into the sheet, not when the
+        // slide-up finishes: Dart switches the sheet's content on at that
+        // point, so the sheet never shows what it is about to cover.
+        result(nil)
+    }
+
+    /// Configures and presents [level]'s sheet over whatever is on screen.
+    private func presentLevel(_ level: Level, over host: FlutterViewController) {
+        guard let presenter = level.window?.rootViewController ?? topPresenter(from: host) else { return }
+        let controller = level.controller
         controller.modalPresentationStyle = .pageSheet
         if let sheet = controller.sheetPresentationController {
-            switch args["detents"] as? String ?? "halfAndFull" {
+            switch level.detents {
             case "full":
                 sheet.detents = [.large()]
             case "fit":
-                fitHeight = CGFloat((args["height"] as? NSNumber)?.doubleValue ?? 320)
                 if #available(iOS 16.0, *) {
-                    let fit = UISheetPresentationController.Detent.Identifier("fit")
+                    // Each level needs its own name: UIKit resolves a lower sheet from the
+                    // sheet above it when both use the same detent identifier.
+                    // The only detent: the sheet cannot be dragged taller than
+                    // its content. Content taller than the screen is capped and
+                    // scrolls.
+                    let fit = UISheetPresentationController.Detent.Identifier("fit\(level.depth)")
                     sheet.detents = [
-                        .custom(identifier: fit) { [weak self] context in
-                            min(context.maximumDetentValue, self?.fitHeight ?? 320)
+                        .custom(identifier: fit) { [weak level] context in
+                            min(context.maximumDetentValue, level?.fitHeight ?? 320)
                         },
-                        .large(),
                     ]
                     sheet.selectedDetentIdentifier = fit
                 } else {
@@ -171,7 +299,7 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
                 }
             case "short":
                 if #available(iOS 16.0, *) {
-                    sheet.detents = [.custom(identifier: UISheetPresentationController.Detent.Identifier("short")) {
+                    sheet.detents = [.custom(identifier: UISheetPresentationController.Detent.Identifier("short\(level.depth)")) {
                         context in
                         min(context.maximumDetentValue, max(context.maximumDetentValue * 0.34, 300))
                     }]
@@ -185,71 +313,247 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
             sheet.prefersScrollingExpandsWhenScrolledToEdge = true
         }
         controller.presentationController?.delegate = self
-
-        originalHost = host
-        self.engine = engine
-        sheet = controller
         controller.view.backgroundColor = .systemBackground
         presenter.present(controller, animated: true)
-        // Answer as soon as the engine has moved into the sheet, not when the
-        // slide-up finishes: Dart switches the sheet's content on at that
-        // point, so the sheet never shows the page it is about to cover.
-        result(nil)
     }
 
-    /// The content's height changed: resize the "fit" detent to it, animated.
+    /// A transparent window just above [below], for a nested sheet to be
+    /// presented from, so UIKit does not stack it on the sheet beneath.
+    private func overlayWindow(over below: UIWindow?) -> UIWindow? {
+        guard let scene = below?.windowScene else { return nil }
+        let window = UIWindow(windowScene: scene)
+        window.windowLevel = UIWindow.Level((below?.windowLevel.rawValue ?? 0) + 1)
+        let root = UIViewController()
+        root.view.backgroundColor = .clear
+        window.rootViewController = root
+        window.backgroundColor = .clear
+        window.makeKeyAndVisible()
+        return window
+    }
+
+    /// The content's height changed: resize the sheet to it, animated. The
+    /// sheet is the one at `depth`, or the top one.
+    ///
+    /// Invalidating the top sheet's detent would also resize the sheets under
+    /// it, stretching their last frame. Swapping in a new detent of the new
+    /// height, with a new name, moves only the top sheet.
     private func setHeight(_ args: [String: Any], result: @escaping FlutterResult) {
         defer { result(nil) }
-        guard let height = (args["height"] as? NSNumber)?.doubleValue,
-              abs(CGFloat(height) - fitHeight) > 0.5 else { return }
-        fitHeight = CGFloat(height)
-        guard #available(iOS 16.0, *), let sheet = sheet?.sheetPresentationController else { return }
-        sheet.animateChanges { sheet.invalidateDetents() }
+        let depth = (args["depth"] as? NSNumber)?.intValue
+        guard let level = depth.flatMap({ d in levels.first { $0.depth == d } }) ?? levels.last,
+              let height = (args["height"] as? NSNumber)?.doubleValue,
+              abs(CGFloat(height) - level.fitHeight) > 0.5 else { return }
+        level.fitHeight = CGFloat(height)
+        guard #available(iOS 16.0, *), level.detents == "fit",
+              let sheet = level.controller.sheetPresentationController else { return }
+        level.revision += 1
+        let fit = UISheetPresentationController.Detent.Identifier("fit\(level.depth)_\(level.revision)")
+        let target = CGFloat(height)
+        sheet.animateChanges {
+            sheet.detents = [
+                .custom(identifier: fit) { context in min(context.maximumDetentValue, target) },
+            ]
+            sheet.selectedDetentIdentifier = fit
+        }
     }
 
+    /// Dismisses the top sheet.
     private func dismiss(result: @escaping FlutterResult) {
-        guard let sheet else {
+        guard let level = levels.last else {
             result(nil)
             return
         }
-        sheet.dismiss(animated: true) { [weak self] in
-            self?.restoreEngine()
+        level.controller.dismiss(animated: true) { [weak self] in
+            self?.closed(level.controller)
             result(nil)
         }
     }
 
-    /// The user dragged the sheet away.
+    /// The user dragged a sheet away.
     func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
-        restoreEngine()
+        closed(presentationController.presentedViewController)
         channel.invokeMethod("dismissedByUser", arguments: nil)
     }
 
-    /// Hands the engine back to the page's own view controller. The sheet's
-    /// controller stays alive in [persistent]; releasing it would destroy the
-    /// engine.
-    private func restoreEngine() {
-        sheet = nil
-        guard let engine, let originalHost else { return }
-        engine.viewController = originalHost
-        // Re-attach the page's rendering surface. FlutterViewController does
-        // this when it appears; it did not go away, so ask for it directly.
-        let selector = NSSelectorFromString("surfaceUpdated:")
-        if originalHost.responds(to: selector) {
-            typealias Call = @convention(c) (AnyObject, Selector, Bool) -> Void
-            let call = unsafeBitCast(originalHost.method(for: selector), to: Call.self)
-            call(originalHost, selector, true)
+    /// A sheet is gone: hand the engine to whatever is now on top. The sheet
+    /// controllers stay alive in [pool]; releasing one would destroy the engine.
+    private func closed(_ controller: UIViewController) {
+        guard let index = levels.firstIndex(where: { $0.controller === controller }) else { return }
+        let gone = levels[index...]
+        levels.removeSubrange(index...)
+        stackGeneration += 1
+        // Windows that held nested sheets go too, top first.
+        for level in gone.reversed() {
+            level.window?.isHidden = true
+            level.window = nil
         }
-        originalHost.viewWillAppear(false)
-        originalHost.viewDidAppear(false)
-        originalHost.view.setNeedsLayout()
-        originalHost.view.layoutIfNeeded()
+        (levels.last?.window ?? originalHost?.view.window)?.makeKey()
+        guard let engine, let host = originalHost else { return }
+
+        // The engine goes back to whatever is now on top: the sheet below, or
+        // the page.
+        let target: FlutterViewController? = levels.last?.controller ?? host
+        guard let target else { return }
+        engine.viewController = target
+        reattach(target)
+        thaw(target)
+    }
+
+    /// Covers [controller]'s view with a picture of itself, taken before the
+    /// engine and its native views move elsewhere. The picture sits over the
+    /// Flutter view, not inside it: while handing over, the engine can still
+    /// add its layers to the old view, on top of anything there. It takes the
+    /// touches, which would otherwise reach the engine's current layer.
+    private func freeze(_ controller: FlutterViewController) {
+        let view = controller.view!
+        guard let container = view.superview else { return }
+        let image = UIGraphicsImageRenderer(bounds: view.bounds).image { _ in
+            view.drawHierarchy(in: view.bounds, afterScreenUpdates: false)
+        }
+        let still = UIImageView(image: image)
+        still.frame = view.frame
+        still.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        still.isUserInteractionEnabled = true
+        container.insertSubview(still, aboveSubview: view)
+        stills.removeValue(forKey: ObjectIdentifier(controller))?.removeFromSuperview()
+        stills[ObjectIdentifier(controller)] = still
+    }
+
+    /// Removes [controller]'s snapshot once the engine has drawn into it
+    /// again, so it never flashes empty in between.
+    private func thaw(_ controller: FlutterViewController) {
+        guard let still = stills.removeValue(forKey: ObjectIdentifier(controller)) else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            still.removeFromSuperview()
+        }
+    }
+
+    /// Starts watching the page's size, once.
+    private func observeSize(of host: FlutterViewController) {
+        guard resizeObserver == nil else { return }
+        let view = ResizeObserverView(frame: host.view.bounds)
+        view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.isUserInteractionEnabled = false
+        view.accessibilityElementsHidden = true
+        view.onResize = { [weak self] in self?.sizeChanged() }
+        host.view.insertSubview(view, at: 0)
+        resizeObserver = view
+    }
+
+    /// Draws the covered layers again once the size has settled: a rotation
+    /// resizes the window at its start and animates for a while after.
+    private func sizeChanged() {
+        pendingRedraw?.cancel()
+        guard !levels.isEmpty else { return }
+        let work = DispatchWorkItem { [weak self] in self?.redrawCovered() }
+        pendingRedraw = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
+    }
+
+    /// Lends the engine to the page and to each sheet below the top one, so
+    /// Dart draws each at the window's current size, and snapshots each.
+    /// The top sheet is held still meanwhile, then gets the engine back.
+    private func redrawCovered() {
+        guard let host = originalHost, let top = levels.last else { return }
+        if redrawing {
+            redrawAgain = true
+            return
+        }
+        redrawing = true
+        let generation = stackGeneration
+        let covered = [(-1, host)] + levels.dropLast().map { ($0.depth, $0.controller) }
+        freeze(top.controller)
+
+        func finish() {
+            redrawing = false
+            if redrawAgain {
+                redrawAgain = false
+                redrawCovered()
+            }
+        }
+        // A sheet opened or closed meanwhile: that already moved the engine.
+        // Make Dart draw whatever is now on top, and stop.
+        func abandon() {
+            channel.invokeMethod("drawLayer", arguments: ["index": levels.last?.depth ?? -1])
+            finish()
+        }
+        func step(_ i: Int) {
+            guard generation == stackGeneration else { return abandon() }
+            guard i < covered.count else {
+                lend(top.controller, index: top.depth) { [weak self] in
+                    guard let self else { return }
+                    guard generation == self.stackGeneration else { return abandon() }
+                    self.thaw(top.controller)
+                    finish()
+                }
+                return
+            }
+            let (index, controller) = covered[i]
+            stills.removeValue(forKey: ObjectIdentifier(controller))?.removeFromSuperview()
+            lend(controller, index: index) { [weak self] in
+                guard let self else { return }
+                guard generation == self.stackGeneration else { return abandon() }
+                self.freeze(controller)
+                step(i + 1)
+            }
+        }
+        step(0)
+    }
+
+    /// Gives the engine to [controller] and has Dart draw layer [index] into
+    /// it: -1 for the page, otherwise the sheet at that depth.
+    private func lend(
+        _ controller: FlutterViewController, index: Int, then: @escaping () -> Void
+    ) {
+        engine?.viewController = controller
+        reattach(controller)
+        channel.invokeMethod("drawLayer", arguments: ["index": index]) { _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: then)
+        }
+    }
+
+    /// Makes [target] the engine's surface and the home of its native views,
+    /// through FlutterViewController's private `surfaceUpdated:`.
+    private static func surfaceUpdated(_ target: FlutterViewController) {
+        let selector = NSSelectorFromString("surfaceUpdated:")
+        guard target.responds(to: selector) else { return }
+        typealias Call = @convention(c) (AnyObject, Selector, Bool) -> Void
+        let call = unsafeBitCast(target.method(for: selector), to: Call.self)
+        call(target, selector, true)
+    }
+
+    /// Re-attaches a view controller's rendering surface. FlutterViewController
+    /// does this when it appears; it did not go away, so ask for it directly.
+    private func reattach(_ target: FlutterViewController) {
+        Self.surfaceUpdated(target)
+        target.viewWillAppear(false)
+        target.viewDidAppear(false)
+        target.view.setNeedsLayout()
+        target.view.layoutIfNeeded()
+    }
+}
+
+/// Draws nothing and takes no touches; reports when the view it fills changes
+/// size.
+private final class ResizeObserverView: UIView {
+    var onResize: (() -> Void)?
+    private var lastSize: CGSize = .zero
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard bounds.size != lastSize else { return }
+        let first = lastSize == .zero
+        lastSize = bounds.size
+        if !first { onResize?() }
     }
 }
 ```
 
-## Step 2: register the channel
+## Step 2: register the channel, and measure the Duo title band in the page
 
-In `register(with:)` of `packages/adaptive_platform_ui/ios/adaptive_platform_ui/Sources/adaptive_platform_ui/Plugin/AdaptivePlatformUiPlugin.swift`, add:
+In `register(with:)` of
+`packages/adaptive_platform_ui/ios/adaptive_platform_ui/Sources/adaptive_platform_ui/Plugin/AdaptivePlatformUiPlugin.swift`,
+add the sheet channel:
 
 ```swift
         let widgetSheetChannel = FlutterMethodChannel(
@@ -261,13 +565,166 @@ In `register(with:)` of `packages/adaptive_platform_ui/ios/adaptive_platform_ui/
         }
 ```
 
-## Step 3: the Dart API
+`registrar.viewController` is the engine's *current* view controller. While a sheet is up
+that is the sheet, not the page. Anything that measures the page's layout must therefore
+ask for the page instead. The iPhone Duo title band does: create it after `widgetSheets`,
+with a host provider:
 
-Create `packages/adaptive_platform_ui/lib/src/overlays/native_sheet/adaptive_native_sheet.dart`. It holds
-`AdaptiveNativeSheet` (`show`, `pop`, `active`), the entry type, the layer that draws the
-widget, and the widget that measures it.
+```swift
+        // iPhone Duo: where UIKit lays out a navigation title in this window
+        // Measured in the page's view controller: while a native sheet is up,
+        // the engine's own is the sheet.
+        let titleBand = DuoTitleBand(
+            hostProvider: { widgetSheets.pageController ?? registrar.viewController })
+```
 
-```dart
+and give `DuoTitleBand` that provider in place of the registrar:
+
+```swift
+// packages/adaptive_platform_ui/ios/adaptive_platform_ui/Sources/adaptive_platform_ui/Duo/DuoTitleBand.swift
+import Flutter
+import UIKit
+
+/// Measures where UIKit lays out a navigation bar's title for this window, so
+/// the Flutter-drawn iPhone Duo title band follows the system instead of
+/// assumed sizes. A hidden navigation controller is laid out under the app's
+/// view controller, which gives it the window's traits (the vertical bar edge
+/// among them), then removed again. Nothing is shown on screen.
+final class DuoTitleBand {
+    /// The page's view controller, whose window the band belongs to.
+    private let hostProvider: () -> UIViewController?
+
+    init(hostProvider: @escaping () -> UIViewController?) {
+        self.hostProvider = hostProvider
+    }
+
+    func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard call.method == "measure" else {
+            result(FlutterMethodNotImplemented)
+            return
+        }
+        result(measure())
+    }
+
+    /// `contentTop`: where UIKit starts the page content below the bar.
+    /// `largeTitleMidY` / `inlineTitleMidY`: vertical centre of each title.
+    /// `titleMinX`: leading edge of the title. Positions are in points, in the
+    /// Flutter view's coordinates. `…FontSize` / `…FontWeight`: the type of
+    /// each title, the weight as the index of the nearest `UIFont.Weight`
+    /// from ultra light to black. Nil when the view is not in a window yet.
+    private func measure() -> [String: Double]? {
+        guard let host = hostProvider(), host.view.window != nil else { return nil }
+        guard let large = layout(in: host, large: true),
+              let inline = layout(in: host, large: false) else { return nil }
+        return [
+            "contentTop": Double(large.contentTop),
+            "largeTitleMidY": Double(large.title.midY),
+            "inlineTitleMidY": Double(inline.title.midY),
+            "titleMinX": Double(large.title.minX),
+            "largeTitleFontSize": Double(large.font.pointSize),
+            "largeTitleFontWeight": Double(Self.weightIndex(of: large.font)),
+            "inlineTitleFontSize": Double(inline.font.pointSize),
+            "inlineTitleFontWeight": Double(Self.weightIndex(of: inline.font)),
+        ]
+    }
+
+    private func layout(
+        in host: UIViewController, large: Bool
+    ) -> (contentTop: CGFloat, title: CGRect, font: UIFont)? {
+        let marker = "Title"
+        let page = UIViewController()
+        page.title = marker
+        page.navigationItem.largeTitleDisplayMode = large ? .always : .never
+        let navigation = UINavigationController(rootViewController: page)
+        navigation.navigationBar.prefersLargeTitles = large
+        navigation.view.isHidden = true
+        navigation.view.isUserInteractionEnabled = false
+        navigation.view.accessibilityElementsHidden = true
+        navigation.view.frame = host.view.bounds
+
+        host.addChild(navigation)
+        host.view.insertSubview(navigation.view, at: 0)
+        navigation.didMove(toParent: host)
+        navigation.view.setNeedsLayout()
+        navigation.view.layoutIfNeeded()
+
+        let contentTop = page.view.convert(
+            CGPoint(x: 0, y: page.view.safeAreaInsets.top), to: host.view
+        ).y
+        let label = Self.titleLabel(in: navigation.view, text: marker)
+        let title = label.map { $0.convert($0.bounds, to: host.view) }
+
+        navigation.willMove(toParent: nil)
+        navigation.view.removeFromSuperview()
+        navigation.removeFromParent()
+        guard let title, let font = label?.font, contentTop > 0 else { return nil }
+        return (contentTop, title, font)
+    }
+
+    private static let weights: [UIFont.Weight] = [
+        .ultraLight, .thin, .light, .regular, .medium, .semibold, .bold, .heavy, .black,
+    ]
+
+    /// Index in [weights] of the weight nearest to the font's.
+    private static func weightIndex(of font: UIFont) -> Int {
+        let traits = font.fontDescriptor.object(forKey: .traits) as? [UIFontDescriptor.TraitKey: Any]
+        let raw = (traits?[.weight] as? NSNumber).map { CGFloat($0.doubleValue) }
+            ?? UIFont.Weight.regular.rawValue
+        let distances = weights.map { abs($0.rawValue - raw) }
+        return distances.firstIndex(of: distances.min()!) ?? weights.firstIndex(of: .regular)!
+    }
+
+    /// The label UIKit shows the title in: of the labels carrying it, the
+    /// visible one with the largest font (large and inline labels coexist).
+    private static func titleLabel(in view: UIView, text: String) -> UILabel? {
+        var best: UILabel?
+        func visit(_ view: UIView) {
+            if let label = view as? UILabel,
+               label.text == text || label.attributedText?.string == text,
+               !label.isHidden, label.alpha > 0, !label.bounds.isEmpty,
+               label.font.pointSize > (best?.font.pointSize ?? 0) {
+                best = label
+            }
+            view.subviews.forEach(visit)
+        }
+        visit(view)
+        return best
+    }
+}
+```
+
+## Step 3: Duo vertical bar events carry the view size
+
+In `packages/adaptive_platform_ui/ios/adaptive_platform_ui/Sources/adaptive_platform_ui/Duo/VerticalBarEdgeStreamHandler.swift`,
+`send` must include the view's size. Dart re-measures the title band on each event, and
+events that equal the last one are dropped. Without the size, a rotation can end with no
+event at the final size, and the band keeps a reading taken mid-rotation (a gap above the
+page content).
+
+```swift
+    private func send(_ edge: String, view: UIView? = nil) {
+        // The size is part of the payload so a rotation always ends with an
+        // event once the view reaches its final size. Dart measures the title
+        // band on each event, and the trait change that flips the edge can
+        // arrive while the view still has the previous orientation's size.
+        let payload: NSDictionary = [
+            "edge": edge,
+            "regions": view.map(Self.occlusions) ?? [],
+            "width": Double(view?.bounds.width ?? 0),
+            "height": Double(view?.bounds.height ?? 0),
+        ]
+        guard lastSent == nil || !payload.isEqual(lastSent!) else { return }
+        lastSent = payload
+        sink?(payload)
+    }
+```
+
+## Step 4: the Dart API
+
+Create this file. It holds `AdaptiveNativeSheet` (`show`, `pop`, `active`), the entry
+type, the layer that draws the top sheet's widget, and the widget that measures it.
+
+````dart
 // packages/adaptive_platform_ui/lib/src/overlays/native_sheet/adaptive_native_sheet.dart
 import 'dart:async';
 
@@ -277,6 +734,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/adaptive_style.dart';
+import '../../devices/duo/duo_layout.dart';
 import '../bottom_sheet/adaptive_bottom_sheet.dart';
 import '../filter_sheet/adaptive_filter_sheet.dart';
 
@@ -289,6 +747,9 @@ import '../filter_sheet/adaptive_filter_sheet.dart';
 /// inside the sheet, in the same isolate as the rest of the app. The widget
 /// can be a `StatelessWidget`, close over anything, and read the app's state
 /// (a bloc, a provider, a notifier) as it would anywhere else.
+///
+/// A sheet can open another on top of itself: call [show] again from the
+/// sheet's widget. Each sheet has its own result and its own [pop].
 ///
 /// The widget is not a route. The page behind the sheet stays the current
 /// route, so its navigation bar and toolbar stay in place.
@@ -309,11 +770,63 @@ class AdaptiveNativeSheet {
   AdaptiveNativeSheet._();
   static const _channel = MethodChannel('adaptive_platform_ui/widget_sheet');
 
-  /// The widget the native sheet is showing, or null. `AdaptiveToolbarHost`
-  /// draws it over the whole window, which on iOS is the sheet: the engine
-  /// renders into the sheet while one is up.
+  /// The topmost native sheet's widget, or null. `AdaptiveToolbarHost` draws it
+  /// over the whole window, which on iOS is that sheet: the engine renders
+  /// into the topmost sheet while any is up.
   static final ValueNotifier<AdaptiveNativeSheetEntry?> active =
       ValueNotifier<AdaptiveNativeSheetEntry?>(null);
+
+  /// Open native sheets, bottom first. A sheet can open another on top of
+  /// itself by calling [show] again from its own widget.
+  static final List<AdaptiveNativeSheetEntry> _stack = [];
+
+  static bool _handlerInstalled = false;
+
+  /// One handler for the whole stack.
+  ///
+  /// `dismissedByUser`: the user dragged the top sheet away, so it is already
+  /// gone.
+  ///
+  /// `drawLayer`: after the window changes size, the native side lends the
+  /// engine to each covered layer in turn (the page at index -1, then each
+  /// sheet below the top one) so it can be drawn again at the new size, and
+  /// finally gives it back to the top sheet. Answers once that layer's frame,
+  /// native views included, is on screen.
+  static void _installHandler() {
+    if (_handlerInstalled) return;
+    _handlerInstalled = true;
+    _channel.setMethodCallHandler((call) async {
+      switch (call.method) {
+        case 'dismissedByUser':
+          if (_stack.isNotEmpty) _finish(_stack.last, null);
+        case 'drawLayer':
+          final index = (call.arguments as Map?)?['index'] as int? ?? -1;
+          active.value = index >= 0 && index < _stack.length
+              ? _stack[index]
+              : null;
+          await _settled();
+      }
+      return null;
+    });
+  }
+
+  /// Completes once the current layer has been drawn and its native views,
+  /// which are created and sized over a few more frames, have caught up.
+  static Future<void> _settled() async {
+    SchedulerBinding.instance.ensureVisualUpdate();
+    await SchedulerBinding.instance.endOfFrame;
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    SchedulerBinding.instance.ensureVisualUpdate();
+    await SchedulerBinding.instance.endOfFrame;
+  }
+
+  /// Removes [entry] from the stack and completes its result. The sheet below,
+  /// if any, becomes the one drawn.
+  static void _finish(AdaptiveNativeSheetEntry entry, Object? value) {
+    _stack.remove(entry);
+    active.value = _stack.isEmpty ? null : _stack.last;
+    entry.complete(value);
+  }
 
   /// True while a native sheet is showing. Chrome the app paints over its
   /// pages (such as the Duo bar strip) must not draw over the sheet.
@@ -358,8 +871,7 @@ class AdaptiveNativeSheet {
         backgroundColor: backgroundColor,
       );
     }
-    if (active.value != null) return null;
-
+    _installHandler();
     final done = Completer<T?>();
     final entry = AdaptiveNativeSheetEntry._(
       builder: builder,
@@ -369,14 +881,6 @@ class AdaptiveNativeSheet {
         if (!done.isCompleted) done.complete(value as T?);
       },
     );
-    _channel.setMethodCallHandler((call) async {
-      // The user dragged the sheet down: it is already gone.
-      if (call.method == 'dismissedByUser' && active.value == entry) {
-        active.value = null;
-        entry.complete(null);
-      }
-      return null;
-    });
     try {
       await _channel.invokeMethod<void>('present', {
         'detents': detents.name,
@@ -385,16 +889,11 @@ class AdaptiveNativeSheet {
         'height': _lastOpenHeight > 0 ? _lastOpenHeight : 320.0,
       });
     } on PlatformException {
-      _channel.setMethodCallHandler(null);
       return null;
     }
+    _stack.add(entry);
     active.value = entry;
-    try {
-      return await done.future;
-    } finally {
-      if (active.value == entry) active.value = null;
-      _channel.setMethodCallHandler(null);
-    }
+    return done.future;
   }
 
   static Timer? _heightTimer;
@@ -403,15 +902,19 @@ class AdaptiveNativeSheet {
 
   /// Tells UIKit the content's height, so the "fit" detent follows it. Debounced:
   /// an animating widget changes size every frame.
-  static void _reportHeight(double height) {
+  ///
+  /// [entry] says which sheet: a covered sheet drawn again after a rotation
+  /// can measure differently at its new width.
+  static void _reportHeight(AdaptiveNativeSheetEntry entry, double height) {
     if ((height - _lastHeight).abs() < 0.5) return;
     _lastHeight = height;
     _lastOpenHeight = height;
     _heightTimer?.cancel();
     _heightTimer = Timer(const Duration(milliseconds: 40), () {
-      if (active.value == null) return;
+      final depth = _stack.indexOf(entry);
+      if (depth < 0) return;
       _channel
-          .invokeMethod<void>('setHeight', {'height': height})
+          .invokeMethod<void>('setHeight', {'height': height, 'depth': depth})
           .catchError((Object _) {});
     });
   }
@@ -424,19 +927,16 @@ class AdaptiveNativeSheet {
       Navigator.of(context).pop<T>(value);
       return;
     }
-    final entry = active.value;
-    if (entry == null) return;
-    if (AdaptiveStyle.of(context) == AdaptiveStyle.native) {
-      // Let UIKit finish dismissing first, so the sheet never shows the page
-      // behind it as it leaves.
-      try {
-        await _channel.invokeMethod<void>('dismiss');
-      } on PlatformException {
-        // Already gone.
-      }
+    if (_stack.isEmpty) return;
+    final entry = _stack.last;
+    // Let UIKit finish dismissing first, so the sheet never shows what is
+    // below it as it leaves.
+    try {
+      await _channel.invokeMethod<void>('dismiss');
+    } on PlatformException {
+      // Already gone.
     }
-    active.value = null;
-    entry.complete(value);
+    _finish(entry, value);
   }
 }
 
@@ -459,9 +959,11 @@ class AdaptiveNativeSheetEntry {
 /// Fills the window, which on iOS is the sheet, with the caller's widget.
 ///
 /// Placed above the app by `AdaptiveToolbarHost`. It has its own [Overlay], so
-/// widgets that need one (tooltips, menus) work inside it, and it drops the
-/// side insets the page below carries, since the sheet floats inside the window
-/// and is not part of the strip the system reserves for a vertical bar.
+/// widgets that need one (tooltips, menus) work inside it. Where the window
+/// has a vertical bar (iPhone Duo), it drops that bar's side inset, since the
+/// sheet floats inside the window and is not part of the strip the system
+/// reserves for it. Every other inset stays, such as the camera housing's on
+/// either side of an iPhone in landscape, where the sheet fills the screen.
 class AdaptiveNativeSheetLayer extends StatelessWidget {
   const AdaptiveNativeSheetLayer({super.key});
 
@@ -472,21 +974,32 @@ class AdaptiveNativeSheetLayer extends StatelessWidget {
         builder: (context, entry, _) {
           if (entry == null) return const SizedBox.shrink();
           final mq = MediaQuery.of(context);
+          final pose = DuoPoseScope.of(context);
+          EdgeInsets withoutStrip(EdgeInsets insets) => pose == null
+              ? insets
+              : pose.onLeft
+              ? insets.copyWith(left: 0)
+              : insets.copyWith(right: 0);
           return Positioned.fill(
             child: MediaQuery(
               data: mq.copyWith(
-                padding: mq.padding.copyWith(left: 0, right: 0),
-                viewPadding: mq.viewPadding.copyWith(left: 0, right: 0),
+                padding: withoutStrip(mq.padding),
+                viewPadding: withoutStrip(mq.viewPadding),
               ),
               child: ColoredBox(
                 color:
                     entry.backgroundColor ??
                     CupertinoColors.systemBackground.resolveFrom(context),
                 child: Overlay(
+                  // A different sheet on top gets a fresh overlay.
+                  key: ObjectKey(entry),
                   initialEntries: [
                     OverlayEntry(
                       builder: (context) => entry.fits
-                          ? _FitContent(child: entry.builder(context))
+                          ? _FitContent(
+                              entry: entry,
+                              child: entry.builder(context),
+                            )
                           : entry.builder(context),
                     ),
                   ],
@@ -501,7 +1014,8 @@ class AdaptiveNativeSheetLayer extends StatelessWidget {
 /// Lays [child] out at its natural height and reports it, so the native sheet
 /// can follow it. Scrolls when the sheet is capped at full height.
 class _FitContent extends StatefulWidget {
-  const _FitContent({required this.child});
+  const _FitContent({required this.entry, required this.child});
+  final AdaptiveNativeSheetEntry entry;
   final Widget child;
 
   @override
@@ -515,7 +1029,7 @@ class _FitContentState extends State<_FitContent> {
     SchedulerBinding.instance.addPostFrameCallback((_) {
       final box = _key.currentContext?.findRenderObject();
       if (box is RenderBox && box.hasSize) {
-        AdaptiveNativeSheet._reportHeight(box.size.height);
+        AdaptiveNativeSheet._reportHeight(widget.entry, box.size.height);
       }
     });
   }
@@ -541,7 +1055,7 @@ class _FitContentState extends State<_FitContent> {
         ),
       );
 }
-```
+````
 
 Export it in `packages/adaptive_platform_ui/lib/adaptive_platform_ui.dart`:
 
@@ -549,11 +1063,11 @@ Export it in `packages/adaptive_platform_ui/lib/adaptive_platform_ui.dart`:
 export 'src/overlays/native_sheet/adaptive_native_sheet.dart';
 ```
 
-## Step 4: the detent enum
+## Step 5: the detent enum
 
 `AdaptiveNativeSheet.show` takes `AdaptiveFilterDetents`, defined in
-`packages/adaptive_platform_ui/lib/src/overlays/filter_sheet/adaptive_filter_sheet.dart`. It must contain `fit`,
-which is the default for the native sheet:
+`packages/adaptive_platform_ui/lib/src/overlays/filter_sheet/adaptive_filter_sheet.dart`.
+It must contain `fit`, the default for the native sheet:
 
 ```dart
 /// How tall a filter sheet rests.
@@ -567,22 +1081,20 @@ enum AdaptiveFilterDetents {
   /// A short sheet that fits a single control.
   short,
 
-  /// Follows the height of its content, and grows to full height when the
-  /// content is taller. Only [AdaptiveNativeSheet] measures content; elsewhere
-  /// it rests at half height.
+  /// Follows the height of its content, up to full height when the content is
+  /// taller, and cannot be dragged taller than that. Only
+  /// [AdaptiveNativeSheet] measures content; elsewhere it rests at half
+  /// height.
   fit,
 }
 ```
 
-## Step 5: mount the layer in the toolbar host
+## Step 6: mount the layer in the toolbar host
 
-The layer must sit above everything the app draws, inside the same `Stack` that holds
-the navigator and the native toolbar. The strip the host paints for the iPhone Duo must
-not draw over the sheet, because the engine renders into the sheet while it is up.
-
-Edit `packages/adaptive_platform_ui/lib/src/navigation/chrome/adaptive_toolbar_host.dart`: import the sheet file,
-listen to `AdaptiveNativeSheet.active` for the strip colour, and add
-`AdaptiveNativeSheetLayer` after the toolbar. The complete file:
+The layer must sit above everything the app draws, inside the same `Stack` that holds the
+navigator and the native toolbar, and inside `DuoPoseScope` (the layer reads the pose to
+know which side inset belongs to the Duo vertical bar). The strip the host paints for the
+iPhone Duo must not draw while a sheet is up. The complete file:
 
 ```dart
 // packages/adaptive_platform_ui/lib/src/navigation/chrome/adaptive_toolbar_host.dart
@@ -784,12 +1296,15 @@ class _BarStrip extends StatelessWidget {
 }
 ```
 
-## Step 6: the app
+## Step 7: the app
 
-### A frame for the sheet's content
+The example is an Orders page. Its filter sheet is built from the package's native
+controls, and its accounts line opens a nested sheet of native switches.
 
-A widget that takes its natural height, so the sheet can fit it: a title with a reset
-icon, the caller's children, and a full-width apply button that shows a live count.
+### A frame for a filter sheet's content
+
+It takes its natural height, so the sheet can fit it: a title with a reset icon, the
+caller's children, and a full-width apply button showing a live count.
 
 ```dart
 // lib/core/widgets/sheet_frame.dart
@@ -945,14 +1460,217 @@ class OpenSection extends StatelessWidget {
 }
 ```
 
-### The sheet's widget, with the package's native controls
-
-The widget is stateless. The draft filter lives in a `ValueNotifier` that the open
-function creates and disposes. The segmented controls, slider and switches are the
-package's own, so on iOS they are real UIKit controls inside the sheet.
+### The models (pure data)
 
 ```dart
-// lib/features/markets/view/market_filter_sheet.dart
+// lib/features/orders/models/order.dart
+import 'package:equatable/equatable.dart';
+import 'package:flutter/material.dart';
+
+enum OrderSide { buy, sell }
+
+enum OrderStatus { open, filled, cancelled }
+
+enum Account {
+  personal('Personal', Icons.person_outline_rounded),
+  isa('ISA', Icons.savings_outlined),
+  pension('Pension', Icons.account_balance_outlined);
+
+  const Account(this.title, this.icon);
+  final String title;
+  final IconData icon;
+}
+
+class Order extends Equatable {
+  const Order(
+    this.symbol,
+    this.side,
+    this.quantity,
+    this.price,
+    this.status,
+    this.account, {
+    this.limit = false,
+  });
+
+  final String symbol;
+  final OrderSide side;
+  final double quantity, price;
+  final OrderStatus status;
+  final Account account;
+
+  /// A limit order rather than a market order.
+  final bool limit;
+
+  double get value => quantity * price;
+
+  @override
+  List<Object> get props => [
+    symbol,
+    side,
+    quantity,
+    price,
+    status,
+    account,
+    limit,
+  ];
+}
+
+/// Newest first.
+const orders = [
+  Order('NVDA', OrderSide.buy, 10, 142.87, OrderStatus.open, Account.personal),
+  Order(
+    'VOO',
+    OrderSide.buy,
+    4,
+    538.26,
+    OrderStatus.filled,
+    Account.isa,
+    limit: true,
+  ),
+  Order(
+    'AAPL',
+    OrderSide.sell,
+    6,
+    237.49,
+    OrderStatus.filled,
+    Account.personal,
+  ),
+  Order(
+    'MSFT',
+    OrderSide.buy,
+    2,
+    428.76,
+    OrderStatus.cancelled,
+    Account.pension,
+    limit: true,
+  ),
+  Order('VTI', OrderSide.buy, 12, 291.42, OrderStatus.filled, Account.pension),
+  Order(
+    'AMZN',
+    OrderSide.sell,
+    8,
+    219.32,
+    OrderStatus.open,
+    Account.isa,
+    limit: true,
+  ),
+  Order('NVDA', OrderSide.sell, 15, 142.87, OrderStatus.filled, Account.isa),
+  Order(
+    'AAPL',
+    OrderSide.buy,
+    3,
+    237.49,
+    OrderStatus.cancelled,
+    Account.personal,
+  ),
+  Order(
+    'VOO',
+    OrderSide.sell,
+    1,
+    538.26,
+    OrderStatus.open,
+    Account.pension,
+    limit: true,
+  ),
+  Order('MSFT', OrderSide.buy, 5, 428.76, OrderStatus.filled, Account.personal),
+];
+```
+
+```dart
+// lib/features/orders/models/orders_filter.dart
+import 'package:equatable/equatable.dart';
+
+import 'package:native_widgets_on_duo/features/orders/models/order.dart';
+
+enum OrderSort { newest, value }
+
+class OrdersFilter extends Equatable {
+  const OrdersFilter({
+    this.side,
+    this.sort = OrderSort.newest,
+    this.minValue = 0,
+    this.limitOnly = false,
+    this.showCancelled = true,
+    this.accounts = const {},
+  });
+
+  static const double maxValue = 4000;
+
+  /// Null means buys and sells.
+  final OrderSide? side;
+  final OrderSort sort;
+  final double minValue;
+  final bool limitOnly;
+  final bool showCancelled;
+
+  /// Empty means every account.
+  final Set<Account> accounts;
+
+  int get activeCount =>
+      (side != null ? 1 : 0) +
+      (sort != OrderSort.newest ? 1 : 0) +
+      (minValue > 0 ? 1 : 0) +
+      (limitOnly ? 1 : 0) +
+      (showCancelled ? 0 : 1) +
+      (accounts.isEmpty ? 0 : 1);
+
+  OrdersFilter copyWith({
+    OrderSide? side,
+    bool clearSide = false,
+    OrderSort? sort,
+    double? minValue,
+    bool? limitOnly,
+    bool? showCancelled,
+    Set<Account>? accounts,
+  }) => OrdersFilter(
+    side: clearSide ? null : (side ?? this.side),
+    sort: sort ?? this.sort,
+    minValue: minValue ?? this.minValue,
+    limitOnly: limitOnly ?? this.limitOnly,
+    showCancelled: showCancelled ?? this.showCancelled,
+    accounts: accounts ?? this.accounts,
+  );
+
+  bool allows(Order o) =>
+      (side == null || o.side == side) &&
+      o.value >= minValue &&
+      (!limitOnly || o.limit) &&
+      (showCancelled || o.status != OrderStatus.cancelled) &&
+      (accounts.isEmpty || accounts.contains(o.account));
+
+  List<Order> apply(List<Order> all) {
+    final kept = all.where(allows).toList();
+    if (sort == OrderSort.value) {
+      kept.sort((a, b) => b.value.compareTo(a.value));
+    }
+    return kept;
+  }
+
+  @override
+  List<Object?> get props => [
+    side,
+    sort,
+    minValue,
+    limitOnly,
+    showCancelled,
+    accounts,
+  ];
+}
+```
+
+### The sheets: a filter sheet, and a nested sheet opened from it
+
+Each sheet has an open function that creates the draft notifiers, calls
+`AdaptiveNativeSheet.show`, and disposes the notifiers when the sheet completes. The
+widgets are stateless. The nested sheet is opened from the filter sheet's widget with that
+widget's own `context`, exactly like the first one.
+
+The line that opens the nested sheet uses a `GestureDetector`, not an `InkWell`: the sheet
+below is frozen into a bitmap as the nested sheet opens, and a ripple would be caught
+mid-animation and stay on screen.
+
+```dart
+// lib/features/orders/view/orders_filter_sheet.dart
 import 'package:flutter/material.dart';
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 
@@ -960,214 +1678,255 @@ import 'package:native_widgets_on_duo/app/theme/palette.dart';
 import 'package:native_widgets_on_duo/core/formatting/money.dart';
 import 'package:native_widgets_on_duo/core/widgets/label.dart';
 import 'package:native_widgets_on_duo/core/widgets/sheet_frame.dart';
-import 'package:native_widgets_on_duo/features/investment/data/demo_assets.dart';
-import 'package:native_widgets_on_duo/features/markets/models/market_filter.dart';
-import 'package:native_widgets_on_duo/features/portfolio/models/holdings_filter.dart';
+import 'package:native_widgets_on_duo/features/orders/models/order.dart';
+import 'package:native_widgets_on_duo/features/orders/models/orders_filter.dart';
 
-/// The sheet's content is a plain widget built from the package's native
-/// controls: the segmented controls, slider and switches are real UIKit views
-/// on iOS, drawn inside the native sheet like any other widget.
-Future<MarketFilter?> showMarketFilterSheet(
+/// A native sheet holding the app's own widget, built from the package's
+/// native controls: segmented controls, a slider and switches, each a real
+/// UIKit view on iOS. The accounts line opens a second native sheet on top,
+/// holding another widget of native switches.
+Future<OrdersFilter?> showOrdersFilterSheet(
   BuildContext context,
-  MarketFilter current,
+  OrdersFilter current,
 ) {
   final draft = ValueNotifier(current);
-  return AdaptiveNativeSheet.show<MarketFilter>(
+  return AdaptiveNativeSheet.show<OrdersFilter>(
     context: context,
-    builder: (_) => MarketFilterContent(draft: draft),
+    builder: (_) => OrdersFilterContent(draft: draft),
   ).whenComplete(draft.dispose);
 }
 
-class MarketFilterContent extends StatelessWidget {
-  const MarketFilterContent({super.key, required this.draft});
+class OrdersFilterContent extends StatelessWidget {
+  const OrdersFilterContent({super.key, required this.draft});
 
-  final ValueNotifier<MarketFilter> draft;
+  final ValueNotifier<OrdersFilter> draft;
+
+  /// Opens the accounts as a second sheet over this one.
+  Future<void> _pickAccounts(BuildContext context) async {
+    final picked = await showAccountsSheet(context, draft.value.accounts);
+    if (picked != null) draft.value = draft.value.copyWith(accounts: picked);
+  }
 
   @override
-  Widget build(BuildContext context) => ValueListenableBuilder<MarketFilter>(
+  Widget build(BuildContext context) => ValueListenableBuilder<OrdersFilter>(
     valueListenable: draft,
     builder: (context, filter, _) => SheetFrame(
-      count: filter.apply(assets).length,
-      onReset: filter == const MarketFilter()
+      count: filter.apply(orders).length,
+      onReset: filter == const OrdersFilter()
           ? null
-          : () => draft.value = const MarketFilter(),
+          : () => draft.value = const OrdersFilter(),
       onApply: () => AdaptiveNativeSheet.pop(context, draft.value),
       children: [
         AdaptiveSegmentedControl(
-          labels: const ['All', 'Gainers', 'Losers'],
-          selectedIndex: filter.movement.index,
-          onValueChanged: (i) =>
-              draft.value = filter.copyWith(movement: MarketMovement.values[i]),
+          labels: const ['All', 'Buy', 'Sell'],
+          icons: const [
+            AdaptiveIcon(
+              sfSymbol: 'arrow.up.arrow.down',
+              icon: Icons.swap_vert_rounded,
+            ),
+            AdaptiveIcon(
+              sfSymbol: 'arrow.down.left',
+              icon: Icons.south_west_rounded,
+            ),
+            AdaptiveIcon(
+              sfSymbol: 'arrow.up.right',
+              icon: Icons.north_east_rounded,
+            ),
+          ],
+          selectedIndex: filter.side == null ? 0 : filter.side!.index + 1,
+          onValueChanged: (i) => draft.value = i == 0
+              ? filter.copyWith(clearSide: true)
+              : filter.copyWith(side: OrderSide.values[i - 1]),
         ),
         const SizedBox(height: 16),
         AdaptiveSegmentedControl(
-          labels: const ['A-Z', 'Price', 'Change'],
+          labels: const ['Newest', 'Value'],
+          icons: const [
+            AdaptiveIcon(sfSymbol: 'clock', icon: Icons.schedule_rounded),
+            AdaptiveIcon(
+              sfSymbol: 'dollarsign.circle',
+              icon: Icons.paid_outlined,
+            ),
+          ],
           selectedIndex: filter.sort.index,
           onValueChanged: (i) =>
-              draft.value = filter.copyWith(sort: MarketSort.values[i]),
+              draft.value = filter.copyWith(sort: OrderSort.values[i]),
         ),
         const SizedBox(height: 24),
         label(
-          filter.maxPrice >= MarketFilter.ceiling
-              ? 'Any price'
-              : 'Up to ${money(filter.maxPrice)}',
+          filter.minValue <= 0 ? 'Any value' : 'Over ${money(filter.minValue)}',
           size: 28,
           weight: FontWeight.w600,
         ),
         AdaptiveSlider(
-          value: filter.maxPrice,
-          min: 100,
-          max: MarketFilter.ceiling,
+          value: filter.minValue,
+          max: OrdersFilter.maxValue,
           activeColor: red,
-          onChanged: (v) => draft.value = filter.copyWith(maxPrice: v),
+          onChanged: (v) => draft.value = filter.copyWith(minValue: v),
         ),
         const SizedBox(height: 8),
         _SwitchLine(
-          text: 'Stocks',
-          value: filter.types.contains(HoldingType.stock),
-          onChanged: (on) => draft.value = filter.copyWith(
-            types: _toggled(filter.types, HoldingType.stock, on),
-          ),
+          icon: Icons.price_change_outlined,
+          text: 'Limit only',
+          value: filter.limitOnly,
+          onChanged: (on) => draft.value = filter.copyWith(limitOnly: on),
         ),
         _SwitchLine(
-          text: 'ETFs',
-          value: filter.types.contains(HoldingType.etf),
-          onChanged: (on) => draft.value = filter.copyWith(
-            types: _toggled(filter.types, HoldingType.etf, on),
-          ),
+          icon: Icons.block_rounded,
+          text: 'Cancelled',
+          value: filter.showCancelled,
+          onChanged: (on) => draft.value = filter.copyWith(showCancelled: on),
+        ),
+        _AccountsLine(
+          accounts: filter.accounts,
+          onTap: () => _pickAccounts(context),
         ),
       ],
     ),
   );
-
-  Set<HoldingType> _toggled(Set<HoldingType> set, HoldingType type, bool on) =>
-      on ? {...set, type} : ({...set}..remove(type));
 }
 
-/// A title with a native switch at the trailing edge.
+/// An icon and title with a native switch at the trailing edge.
 class _SwitchLine extends StatelessWidget {
   const _SwitchLine({
+    required this.icon,
     required this.text,
     required this.value,
     required this.onChanged,
   });
 
+  final IconData icon;
   final String text;
   final bool value;
   final ValueChanged<bool> onChanged;
 
   @override
-  Widget build(BuildContext context) => Stack(
-    alignment: Alignment.centerRight,
-    children: [
-      Align(
-        alignment: Alignment.centerLeft,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          child: label(text, size: 17),
-        ),
-      ),
-      AdaptiveSwitch(value: value, onChanged: onChanged),
-    ],
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 6),
+    child: Row(
+      children: [
+        Icon(icon, color: muted),
+        const SizedBox(width: 14),
+        Expanded(child: label(text, size: 17)),
+        AdaptiveSwitch(value: value, activeColor: red, onChanged: onChanged),
+      ],
+    ),
   );
 }
-```
 
-### The filter model (pure data)
+/// A tappable line showing the chosen accounts, opening the accounts sheet.
+class _AccountsLine extends StatelessWidget {
+  const _AccountsLine({required this.accounts, required this.onTap});
 
-```dart
-// lib/features/markets/models/market_filter.dart
-import 'package:equatable/equatable.dart';
+  final Set<Account> accounts;
+  final VoidCallback onTap;
 
-import 'package:native_widgets_on_duo/features/investment/models/asset.dart';
-import 'package:native_widgets_on_duo/features/portfolio/models/holdings_filter.dart';
-
-enum MarketMovement { all, gainers, losers }
-
-enum MarketSort { symbol, price, change }
-
-class MarketFilter extends Equatable {
-  const MarketFilter({
-    this.movement = MarketMovement.all,
-    this.sort = MarketSort.symbol,
-    this.maxPrice = ceiling,
-    this.types = const {},
-    this.minChange = floor,
-    this.symbols = const {},
-  });
-
-  static const double ceiling = 600;
-  static const double floor = -5;
-
-  final MarketMovement movement;
-  final MarketSort sort;
-  final double maxPrice;
-
-  /// Empty means every type.
-  final Set<HoldingType> types;
-  final double minChange;
-
-  /// Empty means every symbol.
-  final Set<String> symbols;
-
-  int get activeCount =>
-      (movement != MarketMovement.all ? 1 : 0) +
-      (sort != MarketSort.symbol ? 1 : 0) +
-      (maxPrice < ceiling ? 1 : 0) +
-      (types.isEmpty ? 0 : 1) +
-      (minChange > floor ? 1 : 0) +
-      (symbols.isEmpty ? 0 : 1);
-
-  MarketFilter copyWith({
-    MarketMovement? movement,
-    MarketSort? sort,
-    double? maxPrice,
-    Set<HoldingType>? types,
-    double? minChange,
-    Set<String>? symbols,
-  }) => MarketFilter(
-    movement: movement ?? this.movement,
-    sort: sort ?? this.sort,
-    maxPrice: maxPrice ?? this.maxPrice,
-    types: types ?? this.types,
-    minChange: minChange ?? this.minChange,
-    symbols: symbols ?? this.symbols,
+  // No ink: the sheet opening is the feedback, and a ripple would be
+  // caught mid-animation in the still frame this sheet shows underneath.
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    behavior: HitTestBehavior.opaque,
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        children: [
+          const Icon(Icons.account_balance_wallet_outlined, color: muted),
+          const SizedBox(width: 14),
+          Expanded(
+            child: accounts.isEmpty
+                ? label('All accounts', size: 17)
+                : Row(
+                    children: [
+                      for (final a in Account.values)
+                        if (accounts.contains(a))
+                          Padding(
+                            padding: const EdgeInsets.only(right: 10),
+                            child: Icon(a.icon, color: red),
+                          ),
+                    ],
+                  ),
+          ),
+          const Icon(Icons.chevron_right_rounded, color: muted),
+        ],
+      ),
+    ),
   );
+}
 
-  List<Asset> apply(List<Asset> source) {
-    final result = source
-        .where(
-          (a) =>
-              a.price <= maxPrice &&
-              a.change >= minChange &&
-              (types.isEmpty || types.contains(holdingType(a))) &&
-              (symbols.isEmpty || symbols.contains(a.symbol)) &&
-              switch (movement) {
-                MarketMovement.all => true,
-                MarketMovement.gainers => a.change > 0,
-                MarketMovement.losers => a.change < 0,
-              },
-        )
-        .toList();
-    result.sort(
-      (a, b) => switch (sort) {
-        MarketSort.symbol => a.symbol.compareTo(b.symbol),
-        MarketSort.price => b.price.compareTo(a.price),
-        MarketSort.change => b.change.compareTo(a.change),
-      },
-    );
-    return result;
-  }
+/// Opens a second native sheet over the first, holding a native switch per
+/// account. Returns the chosen accounts, or null when the sheet is dragged
+/// away. An empty set means every account.
+Future<Set<Account>?> showAccountsSheet(
+  BuildContext context,
+  Set<Account> initial,
+) {
+  final chosen = ValueNotifier(
+    initial.isEmpty ? Account.values.toSet() : initial,
+  );
+  return AdaptiveNativeSheet.show<Set<Account>>(
+    context: context,
+    builder: (_) => AccountsSheetContent(chosen: chosen),
+  ).whenComplete(chosen.dispose);
+}
+
+/// The second sheet's widget: a native switch per account, and a Done button.
+class AccountsSheetContent extends StatelessWidget {
+  const AccountsSheetContent({super.key, required this.chosen});
+
+  final ValueNotifier<Set<Account>> chosen;
 
   @override
-  List<Object> get props => [
-    movement,
-    sort,
-    maxPrice,
-    types,
-    minChange,
-    symbols,
-  ];
+  Widget build(BuildContext context) => Material(
+    type: MaterialType.transparency,
+    child: SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
+        child: ValueListenableBuilder<Set<Account>>(
+          valueListenable: chosen,
+          builder: (context, set, _) => Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              label('Accounts', size: 22, weight: FontWeight.w600),
+              const SizedBox(height: 12),
+              for (final a in Account.values)
+                _SwitchLine(
+                  icon: a.icon,
+                  text: a.title,
+                  value: set.contains(a),
+                  onChanged: (on) =>
+                      chosen.value = on ? {...set, a} : ({...set}..remove(a)),
+                ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: red,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: const StadiumBorder(),
+                  ),
+                  // Every account, or none, both mean no account filter.
+                  onPressed: set.isEmpty
+                      ? null
+                      : () => AdaptiveNativeSheet.pop(
+                          context,
+                          set.length == Account.values.length
+                              ? <Account>{}
+                              : set,
+                        ),
+                  icon: const Icon(Icons.check_rounded),
+                  label: Text('${set.length}'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
 }
 ```
 
@@ -1177,67 +1936,108 @@ The page keeps the filter, opens the sheet, and rebuilds with the result. It nev
 how the sheet is presented or how tall it is.
 
 ```dart
-// lib/features/markets/view/markets_page.dart
+// lib/features/orders/view/orders_page.dart
 import 'package:flutter/material.dart';
 
 import 'package:native_widgets_on_duo/app/theme/palette.dart';
-import 'package:native_widgets_on_duo/core/widgets/chart_painter.dart';
+import 'package:native_widgets_on_duo/core/formatting/money.dart';
 import 'package:native_widgets_on_duo/core/widgets/filter_section_header.dart';
-import 'package:native_widgets_on_duo/core/widgets/metric.dart';
+import 'package:native_widgets_on_duo/core/widgets/label.dart';
 import 'package:native_widgets_on_duo/core/widgets/page_scroll.dart';
-import 'package:native_widgets_on_duo/core/widgets/section.dart';
-import 'package:native_widgets_on_duo/features/investment/data/demo_assets.dart';
-import 'package:native_widgets_on_duo/features/investment/widgets/asset_row.dart';
-import 'package:native_widgets_on_duo/features/markets/models/market_filter.dart';
-import 'package:native_widgets_on_duo/features/markets/view/market_filter_sheet.dart';
+import 'package:native_widgets_on_duo/features/orders/models/order.dart';
+import 'package:native_widgets_on_duo/features/orders/models/orders_filter.dart';
+import 'package:native_widgets_on_duo/features/orders/view/orders_filter_sheet.dart';
 
-class Markets extends StatefulWidget {
-  const Markets({super.key});
+class Orders extends StatefulWidget {
+  const Orders({super.key});
   @override
-  State<Markets> createState() => _MarketsState();
+  State<Orders> createState() => _OrdersState();
 }
 
-class _MarketsState extends State<Markets> {
-  MarketFilter filter = const MarketFilter();
+class _OrdersState extends State<Orders> {
+  OrdersFilter filter = const OrdersFilter();
 
   Future<void> openFilters() async {
-    final result = await showMarketFilterSheet(context, filter);
+    final result = await showOrdersFilterSheet(context, filter);
     if (result != null && mounted) setState(() => filter = result);
   }
 
   @override
-  Widget build(BuildContext context) => PageScroll(
-    storageKey: 'markets',
-    children: [
-      section('Market overview', 'Demo prices'),
-      const SizedBox(height: 20),
-      Row(
+  Widget build(BuildContext context) {
+    final rows = filter.apply(orders);
+    return PageScroll(
+      storageKey: 'orders',
+      children: [
+        FilterSectionHeader(
+          title: 'Recent orders',
+          onPressed: openFilters,
+          activeCount: filter.activeCount,
+        ),
+        const SizedBox(height: 20),
+        for (final o in rows) _OrderRow(order: o),
+        if (rows.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 40),
+            child: Icon(Icons.search_off_rounded, size: 40, color: muted),
+          ),
+      ],
+    );
+  }
+}
+
+class _OrderRow extends StatelessWidget {
+  const _OrderRow({required this.order});
+
+  final Order order;
+
+  @override
+  Widget build(BuildContext context) {
+    final buy = order.side == OrderSide.buy;
+    final cancelled = order.status == OrderStatus.cancelled;
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(vertical: 9),
+      leading: CircleAvatar(
+        backgroundColor: buy
+            ? const Color(0xFFE5EBE1)
+            : const Color(0xFFF3E1E2),
+        child: Icon(
+          buy ? Icons.south_west_rounded : Icons.north_east_rounded,
+          color: buy ? green : red,
+          size: 20,
+        ),
+      ),
+      title: label(
+        '${order.quantity.toStringAsFixed(0)} ${order.symbol}',
+        weight: FontWeight.w500,
+        color: cancelled ? muted : ink,
+      ),
+      subtitle: Row(
         children: [
-          Expanded(child: metric('S&P 500', '5,892.16')),
-          const SizedBox(width: 12),
-          Expanded(child: metric('NASDAQ', '18,421.09')),
+          Icon(order.account.icon, size: 14, color: muted),
+          if (order.limit) ...[
+            const SizedBox(width: 6),
+            const Icon(Icons.price_change_outlined, size: 14, color: muted),
+          ],
         ],
       ),
-      const SizedBox(height: 22),
-      SizedBox(
-        height: 150,
-        child: CustomPaint(painter: ChartPainter(seed: 7, filled: true)),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          label(money(order.value), size: 14, color: cancelled ? muted : ink),
+          const SizedBox(width: 10),
+          Icon(
+            switch (order.status) {
+              OrderStatus.open => Icons.schedule_rounded,
+              OrderStatus.filled => Icons.check_circle_rounded,
+              OrderStatus.cancelled => Icons.block_rounded,
+            },
+            size: 18,
+            color: order.status == OrderStatus.filled ? green : muted,
+          ),
+        ],
       ),
-      const SizedBox(height: 24),
-      FilterSectionHeader(
-        title: 'Explore',
-        onPressed: openFilters,
-        activeCount: filter.activeCount,
-      ),
-      const SizedBox(height: 8),
-      ...filter.apply(assets).map((a) => AssetRow(asset: a)),
-      if (filter.apply(assets).isEmpty)
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: 40),
-          child: Icon(Icons.search_off_rounded, size: 40, color: muted),
-        ),
-    ],
-  );
+    );
+  }
 }
 ```
 
@@ -1322,236 +2122,136 @@ class FilterSectionHeader extends StatelessWidget {
 }
 ```
 
-### A sheet whose height changes with its content
-
-The Watchlist sheet has a "more" section that opens and closes. The sheet grows and
-shrinks with it.
-
-```dart
-// lib/features/watchlist/models/watchlist_filter.dart
-import 'package:equatable/equatable.dart';
-
-import 'package:native_widgets_on_duo/features/investment/models/asset.dart';
-import 'package:native_widgets_on_duo/features/markets/models/market_filter.dart';
-import 'package:native_widgets_on_duo/features/portfolio/models/holdings_filter.dart';
-
-class WatchlistFilter extends Equatable {
-  const WatchlistFilter({
-    this.movement = MarketMovement.all,
-    this.maxPrice = ceiling,
-    this.types = const {},
-  });
-
-  static const double ceiling = 600;
-
-  final MarketMovement movement;
-  final double maxPrice;
-
-  /// Empty means every type.
-  final Set<HoldingType> types;
-
-  int get activeCount =>
-      (movement == MarketMovement.all ? 0 : 1) +
-      (maxPrice < ceiling ? 1 : 0) +
-      (types.isEmpty ? 0 : 1);
-
-  WatchlistFilter copyWith({
-    MarketMovement? movement,
-    double? maxPrice,
-    Set<HoldingType>? types,
-  }) => WatchlistFilter(
-    movement: movement ?? this.movement,
-    maxPrice: maxPrice ?? this.maxPrice,
-    types: types ?? this.types,
-  );
-
-  bool allows(Asset a) =>
-      a.price <= maxPrice &&
-      (types.isEmpty || types.contains(holdingType(a))) &&
-      switch (movement) {
-        MarketMovement.all => true,
-        MarketMovement.gainers => a.change > 0,
-        MarketMovement.losers => a.change < 0,
-      };
-
-  @override
-  List<Object> get props => [movement, maxPrice, types];
-}
-```
-
-```dart
-// lib/features/watchlist/view/watchlist_filter_sheet.dart
-import 'package:flutter/material.dart';
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
-
-import 'package:native_widgets_on_duo/core/formatting/money.dart';
-import 'package:native_widgets_on_duo/core/widgets/label.dart';
-import 'package:native_widgets_on_duo/core/widgets/sheet_frame.dart';
-import 'package:native_widgets_on_duo/features/investment/data/demo_assets.dart';
-import 'package:native_widgets_on_duo/features/markets/models/market_filter.dart';
-import 'package:native_widgets_on_duo/features/portfolio/models/holdings_filter.dart';
-import 'package:native_widgets_on_duo/features/watchlist/models/watchlist_filter.dart';
-
-/// A native sheet that follows the height of the widget it is given. The
-/// widget is plain Flutter, stateless, and owned by the app: the draft and the
-/// open state live in notifiers made here.
-Future<WatchlistFilter?> showWatchlistFilterSheet(
-  BuildContext context,
-  WatchlistFilter current,
-) {
-  final draft = ValueNotifier(current);
-  final more = ValueNotifier(
-    current.maxPrice < WatchlistFilter.ceiling || current.types.isNotEmpty,
-  );
-  return AdaptiveNativeSheet.show<WatchlistFilter>(
-    context: context,
-    builder: (_) => WatchlistFilterContent(draft: draft, more: more),
-  ).whenComplete(() {
-    draft.dispose();
-    more.dispose();
-  });
-}
-
-class WatchlistFilterContent extends StatelessWidget {
-  const WatchlistFilterContent({
-    super.key,
-    required this.draft,
-    required this.more,
-  });
-
-  final ValueNotifier<WatchlistFilter> draft;
-  final ValueNotifier<bool> more;
-
-  @override
-  Widget build(BuildContext context) => ValueListenableBuilder<WatchlistFilter>(
-    valueListenable: draft,
-    builder: (context, filter, _) => SheetFrame(
-      count: assets.where(filter.allows).length,
-      onReset: filter == const WatchlistFilter()
-          ? null
-          : () => draft.value = const WatchlistFilter(),
-      onApply: () => AdaptiveNativeSheet.pop(context, draft.value),
-      children: [
-        ChipGroup<MarketMovement>(
-          options: const [
-            (MarketMovement.all, Icons.all_inclusive_rounded, 'All'),
-            (MarketMovement.gainers, Icons.north_east_rounded, 'Gainers'),
-            (MarketMovement.losers, Icons.south_east_rounded, 'Losers'),
-          ],
-          isSelected: (m) => filter.movement == m,
-          onTap: (m) => draft.value = filter.copyWith(movement: m),
-        ),
-        OpenSection(
-          open: more,
-          icon: Icons.tune_rounded,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ChipGroup<HoldingType>(
-                options: const [
-                  (HoldingType.stock, Icons.business_rounded, 'Stocks'),
-                  (HoldingType.etf, Icons.pie_chart_outline_rounded, 'ETFs'),
-                ],
-                isSelected: filter.types.contains,
-                onTap: (t) => draft.value = filter.copyWith(
-                  types: filter.types.contains(t)
-                      ? ({...filter.types}..remove(t))
-                      : {...filter.types, t},
-                ),
-              ),
-              const SizedBox(height: 16),
-              label(
-                filter.maxPrice >= WatchlistFilter.ceiling
-                    ? 'Any price'
-                    : 'Up to ${money(filter.maxPrice)}',
-                size: 28,
-                weight: FontWeight.w600,
-              ),
-              Slider(
-                value: filter.maxPrice,
-                min: 100,
-                max: WatchlistFilter.ceiling,
-                onChanged: (v) => draft.value = filter.copyWith(maxPrice: v),
-              ),
-            ],
-          ),
-        ),
-      ],
-    ),
-  );
-}
-```
+Add the page to the router and a tab for it, as for any other page.
 
 ## Rules the implementation must follow
 
 **Swift**
 
-* One `FlutterViewController` drives an engine at a time. Present the sheet's controller
-  and let it take the engine. Never create a second engine.
-* Keep the sheet's `FlutterViewController` alive for the life of the app (`persistent`).
-  Releasing a `FlutterViewController` destroys the engine, which crashes the app.
-* On close, set `engine.viewController` back to the page's controller synchronously, and
-  re-attach its surface. Do it on both paths: `dismiss` and drag to dismiss.
-* Answer the `present` call as soon as presenting starts, not when the slide-up finishes.
-  Dart switches the sheet's content on at that point, so the sheet never shows the page it
-  covers as it rises.
-* Give the controller's view a solid background so nothing blank flashes.
-* Build the `fit` detent with `UISheetPresentationController.Detent.custom`, read its
-  height from a property, and resize it by changing that property then calling
-  `animateChanges { sheet.invalidateDetents() }`. Always offer `.large()` as well, so
-  content taller than the screen scrolls.
-* Resolve the presenting view controller at call time, not during plugin registration.
-  Present from the topmost presented controller and refuse a second sheet.
-* Guard `#available(iOS 16.0, *)` for custom detents and fall back to `.medium()`.
+* One `FlutterViewController` drives an engine at a time. Hand the engine to the top
+  sheet's controller. Never create a second engine.
+* Keep every sheet controller alive for the life of the app (`pool`, one per depth).
+  Releasing a `FlutterViewController` destroys the engine and crashes the app.
+* Present a nested sheet from its own transparent `UIWindow` one level above the sheet
+  below. Never let a sheet present another: UIKit then shrinks the lower sheet to the
+  upper sheet's height, whatever its detents say.
+* Before the engine leaves a sheet, cover it with a bitmap of itself:
+  `drawHierarchy(in:afterScreenUpdates: false)` into an image, in a `UIImageView` added
+  *above* the Flutter view in its superview, taking touches. Not `snapshotView`: that one
+  can keep showing the engine's surface, which the engine reuses. Not inside the Flutter
+  view: the engine can still add its layers there while handing over. Remove the bitmap
+  shortly after the engine has drawn into the view again.
+* On close, hand the engine to whatever is now on top and re-attach its surface
+  (`surfaceUpdated:`), on both paths: `dismiss` and drag to dismiss. Hide the overlay
+  window of every closed nested sheet.
+* After the app becomes active, every `FlutterViewController` on the engine claims the
+  engine's native views, and the last one wins. On the next run loop, call
+  `surfaceUpdated:` on `engine.viewController` so the controller on screen gets them back.
+* Answer `present` as soon as presenting starts, not when the slide-up finishes, so the
+  sheet never shows what it covers as it rises.
+* The `fit` detent is the only detent (`.custom`, capped at `maximumDetentValue`). Add no
+  `.large()`: it lets the user drag the sheet tall and leave it there. Give each depth its
+  own detent identifier, and change the height by swapping in a new detent with a new
+  identifier inside `animateChanges`, never by invalidating detents (that resizes the
+  sheets below too).
+* Watch the page's size. When it changes while a sheet is up, wait for it to settle, then
+  lend the engine to the page and to each covered sheet in turn, have Dart draw each
+  (`drawLayer`), snapshot each, and give the engine back to the top sheet. Stop and resync
+  if a sheet opens or closes meanwhile.
+* Anything that measures the page (the Duo title band) uses the page's controller
+  (`pageController`), not `registrar.viewController`.
+* Guard `#available(iOS 16.0, *)` for custom detents. Before iOS 16 there are no custom
+  detents, so `fit` falls back to `[.medium(), .large()]`.
 
 **Dart**
 
 * The widget is not a route. If it is pushed as one, the page behind stops being the
   current route and the package hides its navigation bar. Draw it as a layer in the
-  toolbar host instead.
-* The layer has its own `Overlay`, so tooltips and menus inside the sheet work, and it
-  drops the left and right insets, because the sheet floats inside the window and is not
-  part of the strip the system reserves for a vertical bar.
+  toolbar host.
+* Keep a stack of entries; `active` is the top one, or the one `drawLayer` asks for while
+  Swift redraws covered layers. `pop` closes the top of the stack.
+* Install the channel handler once, for the whole stack.
+* The layer has its own `Overlay` keyed by the entry, so tooltips and menus work and a
+  different sheet gets a fresh overlay. It drops only the Duo vertical bar's side inset;
+  every other inset stays (an iPhone in landscape needs them clear of the camera housing).
 * Measure the content with a `GlobalKey` and `SizeChangedLayoutNotifier`, wrapped in a
-  `SingleChildScrollView`. Report the height after the frame and debounce it, because an
-  animating widget changes size every frame.
+  `SingleChildScrollView`. Report the height after the frame, debounced, with the sheet's
+  depth, so a covered sheet redrawn at a new width resizes itself and not the top one.
 * Open at the last measured height so a repeat open does not visibly resize.
-* Clear the channel handler when the sheet is done.
 * `pop` waits for UIKit to finish dismissing before it completes the result.
-* Off iOS, show `showModalBottomSheet` with `useRootNavigator: true` so the sheet covers
-  the bottom bar, and make `pop` call `Navigator.pop`.
+* Off iOS, show `showModalBottomSheet` with `useRootNavigator: true`, and make `pop` call
+  `Navigator.pop`. Nested sheets then stack as ordinary routes.
 * While a native sheet is up, do not paint chrome over the window (the Duo strip).
 
 **App**
 
-* Keep the sheet's widget stateless. Put the draft and any open or closed state in
+* Keep each sheet's widget stateless. Put the draft and any open or closed state in
   `ValueNotifier`s created by the open function and disposed when the sheet completes.
-* The apply button's count comes from the same filter function the page uses.
+* Open a nested sheet from the sheet's widget with its own `context`, and apply the result
+  to the outer sheet's draft.
+* Rows that open a nested sheet get no ink ripple (`GestureDetector`, not `InkWell`).
+* The apply count comes from the same filter function the page uses.
 * Use the package's `Adaptive` controls for anything that should look native on iOS.
 * Respect the system colour scheme. Do not force light or dark.
 
-## Step 7: verify
+## Troubleshooting
+
+Each of these was hit while building this, and the listings above already contain the
+fix. If you see one, check that part of your copy.
+
+* **The sheet below shrinks to the nested sheet's height.** The nested sheet was presented
+  by the sheet below. Present it from an overlay window (`overlayWindow(over:)`).
+* **The sheet below loses its switches and sliders while a nested sheet is open.** It was
+  not frozen, or the bitmap went inside the Flutter view or came from `snapshotView`. Use
+  `freeze(_:)` as listed.
+* **A highlight stays stuck on the row that opened the nested sheet.** The row has an ink
+  ripple that the freeze captured. Use a `GestureDetector`.
+* **Dragging the sheet up leaves it at full height.** The `fit` detents include
+  `.large()`. Keep the fit detent alone.
+* **Native controls in a sheet vanish after locking and unlocking the phone**, once a
+  nested sheet has been opened. A pooled, off-screen controller claimed the native views
+  on becoming active. Keep `becameActive()`.
+* **iPhone Duo: after rotating with a sheet open, the page behind (and any covered sheet)
+  is squeezed or stretched.** It is the previous orientation's frame, scaled. The redraw
+  after a resize (`observeSize`, `redrawCovered`, `lend`, and Dart's `drawLayer`) fixes
+  it about half a second after the rotation settles. Check that `observeSize` runs in
+  `present`, and that Dart answers `drawLayer` only after its frame is drawn.
+* **iPhone Duo: after rotating, a gap appears between the title band and the page
+  content**, in the page behind a sheet or on the page itself. The title band was measured
+  in the wrong place or at the wrong time. It must be measured in the page's controller
+  (Step 2), and the vertical bar events must carry the view size (Step 3).
+* **iPhone in landscape: the sheet's content sits under the Dynamic Island.** The layer
+  dropped all side insets. Drop only the Duo vertical bar's side.
+* **In the simulator, a tap on a native switch is occasionally ignored** right after a
+  sheet opens or closes. This was seen in the simulator only and could not be reproduced
+  on demand. Wait for the sheet to settle before tapping, and tap again before treating
+  it as a bug.
+
+## Step 8: verify
 
 ```sh
 flutter analyze lib packages/adaptive_platform_ui/lib
 ```
 
-Run on real runtimes and check each item on every sheet:
+Run on real runtimes and check:
 
-* it opens with its content already inside, with no flash of the page behind it;
-* native controls inside the widget respond (segmented, slider, switch);
-* choosing an option changes the apply count and applying filters the list;
-* the sheet's height follows the content when a section opens or closes;
-* dragging the sheet away returns `null` and the page stays usable;
-* reopening works, and remembers the current filter;
-* the top navigation bar stays visible behind the dimming, and on the iPhone Duo the
-  vertical bar and its strip too.
+* the sheet opens with its content already inside, with no flash of what it covers;
+* native controls inside the sheet respond (segmented, slider, switch);
+* choosing an option changes the apply count, and applying filters the list;
+* the height follows the content when a section opens or closes, and a drag up springs
+  back;
+* the nested sheet opens over the filter sheet, which keeps its full height and its
+  controls; Done returns the result to the filter sheet, and a drag away returns `null`;
+* closing a sheet leaves the page usable, and reopening remembers the current filter;
+* with a nested sheet opened once, locking and unlocking keeps every sheet's controls;
+* on the iPhone Duo, rotating with one sheet and with two sheets open ends with the page
+  and every covered sheet drawn correctly at the new size, the title band without a gap,
+  and the page live after the sheets close;
+* on an iPhone in landscape, the sheet's content clears the Dynamic Island.
 
-iOS: build and run with XcodeBuildMCP on an iPhone simulator and the iPhone Duo. Use
-`snapshot_ui` to read control labels, switches and the live count, and record the open
-animation with `record_sim_video`, then look at the frames. Re-read the screenshot
-orientation before computing tap coordinates, because a rotated simulator misplaces taps.
-Native switches need a short press (about 0.15 seconds) in the simulator.
+iOS: build and run with XcodeBuildMCP on an iPhone simulator, on the iPhone Duo, and on
+iOS 18 and iOS 26 or later. Use `snapshot_ui` to read switch values and the live count.
+Re-read the screenshot orientation before computing tap coordinates after a rotation.
 
 Android:
 
@@ -1563,8 +2263,8 @@ adb -s emulator-5554 shell input tap 964 792
 adb -s emulator-5554 exec-out screencap -p > shot.png
 ```
 
-Wait for the app to finish installing before sending taps. Android screenshot
-coordinates are physical pixels (1080 by 2400 on the test emulators).
+Wait for the app to finish installing before sending taps. Android screenshot coordinates
+are physical pixels (1080 by 2400 on the test emulators).
 
 ## Adding a sheet to another page: checklist
 
@@ -1572,7 +2272,9 @@ coordinates are physical pixels (1080 by 2400 on the test emulators).
 2. Write the sheet's widget, stateless, taking `ValueNotifier`s from its open function.
 3. Write `show<Name>Sheet` that creates the notifiers, calls `AdaptiveNativeSheet.show`
    with `builder: (_) => <Name>Content(...)`, and disposes the notifiers in `whenComplete`.
-4. In the page state, keep the filter, call the show function from `openFilters`, and
+4. For a nested sheet, write a second open function and content widget the same way, and
+   call the open function from the first sheet's widget, from a row without ink.
+5. In the page state, keep the filter, call the show function from `openFilters`, and
    rebuild with the result when it is not `null`.
-5. Place `FilterSectionHeader(title: ..., onPressed: openFilters, activeCount: filter.activeCount)`.
-6. Run the verification steps.
+6. Place `FilterSectionHeader(title: ..., onPressed: openFilters, activeCount: filter.activeCount)`.
+7. Run the verification steps.
