@@ -1,4 +1,4 @@
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
 import 'adaptive_drawer.dart';
@@ -6,10 +6,18 @@ import 'adaptive_drawer.dart';
 /// A [ChangeNotifier] others can ask to notify, for [DrawerCoverScope].
 class DrawerCoverPulse extends ChangeNotifier {
   void ping() => notifyListeners();
+
+  /// The panel's colour, when the drawer says what it is. An
+  /// [AdaptiveDrawer.custom] anywhere in the drawer sets it as it builds.
+  /// Null falls back to the theme's drawer colour.
+  Color? panelColor;
 }
 
-/// Tells an [AdaptiveDrawer.custom] it is on a native page: its panel lies
-/// beneath the native bars, so UIKit cuts them open where the panel is.
+/// Tells the drawer it is on a native page: its panel lies beneath the
+/// native bars, so UIKit cuts them open where the panel is. The scaffold
+/// puts it around whatever drawer it is given, wrapped in the app's own
+/// widgets or not, together with a [DrawerCoverReporter] that follows the
+/// panel.
 class DrawerCoverScope extends InheritedWidget {
   const DrawerCoverScope({
     super.key,
@@ -34,16 +42,21 @@ class DrawerCoverScope extends InheritedWidget {
 
 /// Follows its own left edge, which is the drawer panel's, frame by frame
 /// while it moves, and has UIKit cut the bars open there.
+///
+/// It wraps the drawer itself, so it is laid out at the panel's size.
 class DrawerCoverReporter extends StatefulWidget {
   const DrawerCoverReporter({
     super.key,
-    required this.scope,
-    required this.color,
+    required this.pulse,
+    required this.isOpen,
     required this.child,
   });
 
-  final DrawerCoverScope scope;
-  final Color color;
+  /// Pinged whenever the drawer may have started to move.
+  final DrawerCoverPulse pulse;
+
+  /// Whether the drawer is open or opening, as its owner last heard.
+  final bool Function() isOpen;
   final Widget child;
 
   @override
@@ -62,7 +75,7 @@ class _DrawerCoverReporterState extends State<DrawerCoverReporter> {
   @override
   void initState() {
     super.initState();
-    widget.scope.pulse.addListener(_start);
+    widget.pulse.addListener(_start);
     // The panel is only built once it starts to open, after the callback.
     _start();
   }
@@ -78,15 +91,15 @@ class _DrawerCoverReporterState extends State<DrawerCoverReporter> {
   @override
   void didUpdateWidget(DrawerCoverReporter oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.scope.pulse != widget.scope.pulse) {
-      oldWidget.scope.pulse.removeListener(_start);
-      widget.scope.pulse.addListener(_start);
+    if (oldWidget.pulse != widget.pulse) {
+      oldWidget.pulse.removeListener(_start);
+      widget.pulse.addListener(_start);
     }
   }
 
   @override
   void dispose() {
-    widget.scope.pulse.removeListener(_start);
+    widget.pulse.removeListener(_start);
     if (_covering) AdaptiveDrawer.clearCover();
     super.dispose();
   }
@@ -111,7 +124,7 @@ class _DrawerCoverReporterState extends State<DrawerCoverReporter> {
     }
     final x = box.localToGlobal(Offset.zero).dx;
     final width = box.size.width;
-    final open = widget.scope.isOpen();
+    final open = widget.isOpen();
     // Closing from a tap that also pushes a page: once the push covers this
     // page its animations pause, so the panel may never get out of sight.
     final covered = ModalRoute.isCurrentOf(context) == false;
@@ -128,7 +141,13 @@ class _DrawerCoverReporterState extends State<DrawerCoverReporter> {
       _lastWidth = width;
       _stable = 0;
       _covering = true;
-      AdaptiveDrawer.reportCover(x: x, width: width, color: widget.color);
+      AdaptiveDrawer.reportCover(
+        x: x,
+        width: width,
+        color:
+            widget.pulse.panelColor ??
+            AdaptiveDrawer.defaultBackground(Theme.of(context)),
+      );
     } else {
       _stable++;
     }

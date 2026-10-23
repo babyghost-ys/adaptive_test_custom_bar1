@@ -87,6 +87,13 @@ class AdaptiveDrawer extends StatelessWidget {
 
   static const _channel = MethodChannel('adaptive_platform_ui/navigation');
 
+  /// The panel colour a drawer without its own takes from [theme].
+  static Color defaultBackground(ThemeData theme) =>
+      theme.drawerTheme.backgroundColor ??
+      (theme.useMaterial3
+          ? theme.colorScheme.surfaceContainerLow
+          : theme.canvasColor);
+
   /// Presents the native iOS panel and completes when it closes.
   Future<void> presentNative(BuildContext context) async {
     final tint = CupertinoDynamicColor.resolve(
@@ -156,12 +163,10 @@ class AdaptiveDrawer extends StatelessWidget {
     final theme = Theme.of(context);
     if (child != null) {
       final cover = DrawerCoverScope.maybeOf(context);
-      final color =
-          backgroundColor ??
-          theme.drawerTheme.backgroundColor ??
-          (theme.useMaterial3
-              ? theme.colorScheme.surfaceContainerLow
-              : theme.canvasColor);
+      final color = backgroundColor ?? defaultBackground(theme);
+      // The scaffold's reporter, around the whole drawer, tells UIKit the
+      // panel's colour so the status bar stays legible over it.
+      cover?.pulse.panelColor = color;
       // The panel lies over the bottom bar, so only the system's own inset
       // applies at the bottom. The page's padding there also counts the
       // bar, which in landscape would cut the panel's content off well
@@ -177,9 +182,7 @@ class AdaptiveDrawer extends StatelessWidget {
         width: _width(context),
         backgroundColor: color,
         shape: cover == null ? null : const RoundedRectangleBorder(),
-        child: cover == null
-            ? content
-            : DrawerCoverReporter(scope: cover, color: color, child: content),
+        child: content,
       );
     }
     return Drawer(

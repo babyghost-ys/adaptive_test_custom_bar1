@@ -195,6 +195,12 @@ class AdaptiveScaffold extends StatefulWidget {
   /// [AdaptiveDrawer.custom], like any other widget, is a Material drawer
   /// everywhere. Open it with
   /// [AdaptiveScaffoldState.openDrawer].
+  ///
+  /// On iOS 26 and later the bars are native views above the drawer, so
+  /// they are cut open where its panel is and the panel shows above them.
+  /// That works for any drawer, including one wrapped in the app's own
+  /// widget. Only an item-based [AdaptiveDrawer] passed here directly opens
+  /// as the native panel.
   final Widget? drawer;
 
   /// A panel displayed on the opposite side of the drawer.
@@ -546,12 +552,21 @@ class AdaptiveScaffoldState extends State<AdaptiveScaffold> {
 
   Widget _wrapWithDrawerIfNeeded(Widget child) {
     var drawer = _nativeDrawer == null ? widget.drawer : null;
-    final coversBars = _native && drawer is AdaptiveDrawer;
+    // On iOS 26+ the bars are UIKit views above everything Flutter draws,
+    // the drawer panel included, so UIKit cuts them open where the panel
+    // is. That follows the panel itself, so it works for any drawer: an
+    // AdaptiveDrawer, one wrapped in the app's own widget, or a plain
+    // Drawer.
+    final coversBars = _native && drawer != null;
     if (coversBars) {
       drawer = DrawerCoverScope(
         pulse: _drawerPulse,
         isOpen: () => _customDrawerOpen,
-        child: drawer,
+        child: DrawerCoverReporter(
+          pulse: _drawerPulse,
+          isOpen: () => _customDrawerOpen,
+          child: drawer,
+        ),
       );
     }
     if (drawer != null) {
