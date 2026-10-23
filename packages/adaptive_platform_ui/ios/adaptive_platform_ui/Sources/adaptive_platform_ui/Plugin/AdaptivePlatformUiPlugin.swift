@@ -131,7 +131,10 @@ public class AdaptivePlatformUiPlugin: NSObject, FlutterPlugin {
         verticalBarEdgeChannel.setStreamHandler(VerticalBarEdgeStreamHandler(registrar: registrar))
 
         // iPhone Duo: where UIKit lays out a navigation title in this window
-        let titleBand = DuoTitleBand(registrar: registrar)
+        // Measured in the page's view controller: while a native sheet is up,
+        // the engine's own is the sheet.
+        let titleBand = DuoTitleBand(
+            hostProvider: { widgetSheets.pageController ?? registrar.viewController })
         let titleBandChannel = FlutterMethodChannel(
             name: "adaptive_platform_ui/duo_title_band",
             binaryMessenger: registrar.messenger()

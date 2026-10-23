@@ -7,10 +7,11 @@ import UIKit
 /// view controller, which gives it the window's traits (the vertical bar edge
 /// among them), then removed again. Nothing is shown on screen.
 final class DuoTitleBand {
-    private let registrar: FlutterPluginRegistrar
+    /// The page's view controller, whose window the band belongs to.
+    private let hostProvider: () -> UIViewController?
 
-    init(registrar: FlutterPluginRegistrar) {
-        self.registrar = registrar
+    init(hostProvider: @escaping () -> UIViewController?) {
+        self.hostProvider = hostProvider
     }
 
     func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -28,7 +29,7 @@ final class DuoTitleBand {
     /// each title, the weight as the index of the nearest `UIFont.Weight`
     /// from ultra light to black. Nil when the view is not in a window yet.
     private func measure() -> [String: Double]? {
-        guard let host = registrar.viewController, host.view.window != nil else { return nil }
+        guard let host = hostProvider(), host.view.window != nil else { return nil }
         guard let large = layout(in: host, large: true),
               let inline = layout(in: host, large: false) else { return nil }
         return [

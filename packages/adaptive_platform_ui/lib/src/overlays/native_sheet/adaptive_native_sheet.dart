@@ -6,6 +6,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/adaptive_style.dart';
+import '../../devices/duo/duo_layout.dart';
 import '../bottom_sheet/adaptive_bottom_sheet.dart';
 import '../filter_sheet/adaptive_filter_sheet.dart';
 
@@ -53,17 +54,42 @@ class AdaptiveNativeSheet {
 
   static bool _handlerInstalled = false;
 
-  /// One handler for the whole stack: the user dragged the top sheet away, so
-  /// it is already gone.
+  /// One handler for the whole stack.
+  ///
+  /// `dismissedByUser`: the user dragged the top sheet away, so it is already
+  /// gone.
+  ///
+  /// `drawLayer`: after the window changes size, the native side lends the
+  /// engine to each covered layer in turn (the page at index -1, then each
+  /// sheet below the top one) so it can be drawn again at the new size, and
+  /// finally gives it back to the top sheet. Answers once that layer's frame,
+  /// native views included, is on screen.
   static void _installHandler() {
     if (_handlerInstalled) return;
     _handlerInstalled = true;
     _channel.setMethodCallHandler((call) async {
-      if (call.method == 'dismissedByUser' && _stack.isNotEmpty) {
-        _finish(_stack.last, null);
+      switch (call.method) {
+        case 'dismissedByUser':
+          if (_stack.isNotEmpty) _finish(_stack.last, null);
+        case 'drawLayer':
+          final index = (call.arguments as Map?)?['index'] as int? ?? -1;
+          active.value = index >= 0 && index < _stack.length
+              ? _stack[index]
+              : null;
+          await _settled();
       }
       return null;
     });
+  }
+
+  /// Completes once the current layer has been drawn and its native views,
+  /// which are created and sized over a few more frames, have caught up.
+  static Future<void> _settled() async {
+    SchedulerBinding.instance.ensureVisualUpdate();
+    await SchedulerBinding.instance.endOfFrame;
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    SchedulerBinding.instance.ensureVisualUpdate();
+    await SchedulerBinding.instance.endOfFrame;
   }
 
   /// Removes [entry] from the stack and completes its result. The sheet below,
@@ -148,15 +174,19 @@ class AdaptiveNativeSheet {
 
   /// Tells UIKit the content's height, so the "fit" detent follows it. Debounced:
   /// an animating widget changes size every frame.
-  static void _reportHeight(double height) {
+  ///
+  /// [entry] says which sheet: a covered sheet drawn again after a rotation
+  /// can measure differently at its new width.
+  static void _reportHeight(AdaptiveNativeSheetEntry entry, double height) {
     if ((height - _lastHeight).abs() < 0.5) return;
     _lastHeight = height;
     _lastOpenHeight = height;
     _heightTimer?.cancel();
     _heightTimer = Timer(const Duration(milliseconds: 40), () {
-      if (active.value == null) return;
+      final depth = _stack.indexOf(entry);
+      if (depth < 0) return;
       _channel
-          .invokeMethod<void>('setHeight', {'height': height})
+          .invokeMethod<void>('setHeight', {'height': height, 'depth': depth})
           .catchError((Object _) {});
     });
   }
@@ -169,8 +199,8 @@ class AdaptiveNativeSheet {
       Navigator.of(context).pop<T>(value);
       return;
     }
-    final entry = active.value;
-    if (entry == null) return;
+    if (_stack.isEmpty) return;
+    final entry = _stack.last;
     // Let UIKit finish dismissing first, so the sheet never shows what is
     // below it as it leaves.
     try {
@@ -201,9 +231,11 @@ class AdaptiveNativeSheetEntry {
 /// Fills the window, which on iOS is the sheet, with the caller's widget.
 ///
 /// Placed above the app by `AdaptiveToolbarHost`. It has its own [Overlay], so
-/// widgets that need one (tooltips, menus) work inside it, and it drops the
-/// side insets the page below carries, since the sheet floats inside the window
-/// and is not part of the strip the system reserves for a vertical bar.
+/// widgets that need one (tooltips, menus) work inside it. Where the window
+/// has a vertical bar (iPhone Duo), it drops that bar's side inset, since the
+/// sheet floats inside the window and is not part of the strip the system
+/// reserves for it. Every other inset stays, such as the camera housing's on
+/// either side of an iPhone in landscape, where the sheet fills the screen.
 class AdaptiveNativeSheetLayer extends StatelessWidget {
   const AdaptiveNativeSheetLayer({super.key});
 
@@ -214,11 +246,17 @@ class AdaptiveNativeSheetLayer extends StatelessWidget {
         builder: (context, entry, _) {
           if (entry == null) return const SizedBox.shrink();
           final mq = MediaQuery.of(context);
+          final pose = DuoPoseScope.of(context);
+          EdgeInsets withoutStrip(EdgeInsets insets) => pose == null
+              ? insets
+              : pose.onLeft
+              ? insets.copyWith(left: 0)
+              : insets.copyWith(right: 0);
           return Positioned.fill(
             child: MediaQuery(
               data: mq.copyWith(
-                padding: mq.padding.copyWith(left: 0, right: 0),
-                viewPadding: mq.viewPadding.copyWith(left: 0, right: 0),
+                padding: withoutStrip(mq.padding),
+                viewPadding: withoutStrip(mq.viewPadding),
               ),
               child: ColoredBox(
                 color:
@@ -230,7 +268,10 @@ class AdaptiveNativeSheetLayer extends StatelessWidget {
                   initialEntries: [
                     OverlayEntry(
                       builder: (context) => entry.fits
-                          ? _FitContent(child: entry.builder(context))
+                          ? _FitContent(
+                              entry: entry,
+                              child: entry.builder(context),
+                            )
                           : entry.builder(context),
                     ),
                   ],
@@ -245,7 +286,8 @@ class AdaptiveNativeSheetLayer extends StatelessWidget {
 /// Lays [child] out at its natural height and reports it, so the native sheet
 /// can follow it. Scrolls when the sheet is capped at full height.
 class _FitContent extends StatefulWidget {
-  const _FitContent({required this.child});
+  const _FitContent({required this.entry, required this.child});
+  final AdaptiveNativeSheetEntry entry;
   final Widget child;
 
   @override
@@ -259,7 +301,7 @@ class _FitContentState extends State<_FitContent> {
     SchedulerBinding.instance.addPostFrameCallback((_) {
       final box = _key.currentContext?.findRenderObject();
       if (box is RenderBox && box.hasSize) {
-        AdaptiveNativeSheet._reportHeight(box.size.height);
+        AdaptiveNativeSheet._reportHeight(widget.entry, box.size.height);
       }
     });
   }
