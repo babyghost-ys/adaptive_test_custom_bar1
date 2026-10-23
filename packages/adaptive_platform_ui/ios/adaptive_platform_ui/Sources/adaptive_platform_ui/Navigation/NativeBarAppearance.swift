@@ -88,7 +88,7 @@ enum NativeBarAppearance {
 
     /// A vertical fade from opaque to clear. As a template image, the
     /// appearance's shadowColor sets its strength.
-    private static let shadowImage: UIImage = {
+    static let shadowImage: UIImage = {
         let size = CGSize(width: 1, height: 6)
         let image = UIGraphicsImageRenderer(size: size).image { context in
             let colors = [UIColor.black.cgColor, UIColor.black.withAlphaComponent(0).cgColor] as CFArray

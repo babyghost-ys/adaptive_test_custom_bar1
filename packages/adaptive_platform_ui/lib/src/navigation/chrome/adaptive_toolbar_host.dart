@@ -75,15 +75,10 @@ class _AdaptiveToolbarHostState extends State<AdaptiveToolbarHost>
     super.dispose();
   }
 
-  /// The app's strip gradient, or its bar colour, where it asks for the Duo
-  /// strip to be filled.
-  Decoration? _stripDecoration(BuildContext context) {
+  /// The app's bar style where it asks for the Duo strip to be filled.
+  AdaptiveBarStyle? _stripStyle(BuildContext context) {
     final bar = AdaptiveTheme.of(context).barStyle;
-    if (!bar.fillsDuoStrip) return null;
-    if (bar.duoStripGradient case final gradient?) {
-      return BoxDecoration(gradient: gradient);
-    }
-    return bar.color == null ? null : BoxDecoration(color: bar.color);
+    return bar.fillsDuoStrip && bar.color != null ? bar : null;
   }
 
   @override
@@ -126,9 +121,7 @@ class _AdaptiveToolbarHostState extends State<AdaptiveToolbarHost>
                   builder: (context, sheet, _) => _BarStrip(
                     pose: pose,
                     // The engine renders into a native sheet while one is up.
-                    decoration: sheet != null
-                        ? null
-                        : _stripDecoration(context),
+                    style: sheet != null ? null : _stripStyle(context),
                   ),
                 ),
               ),
@@ -176,27 +169,53 @@ class _BarInset extends StatelessWidget {
 }
 
 /// Fills the strip the system reserves for the iPhone Duo vertical bar with
-/// the app's bar colour or strip gradient, so the bar reads as one band down
-/// that edge. Draws nothing without a pose or a decoration, and never takes a
-/// touch.
+/// the app's bar colour, so the bar reads as one band down that edge. A strip
+/// gradient starts where the title band ends, so the bar runs into it without
+/// a step; above that the strip keeps the bar colour. Draws nothing without a
+/// pose or a style, and never takes a touch.
 class _BarStrip extends StatelessWidget {
-  const _BarStrip({required this.pose, required this.decoration});
+  const _BarStrip({required this.pose, required this.style});
 
   final DuoPose? pose;
-  final Decoration? decoration;
+  final AdaptiveBarStyle? style;
 
   @override
   Widget build(BuildContext context) {
     final pose = this.pose;
-    final decoration = this.decoration;
-    if (pose == null || decoration == null) return const SizedBox.shrink();
+    final style = this.style;
+    final color = style?.color;
+    if (pose == null || style == null || color == null) {
+      return const SizedBox.shrink();
+    }
+    final gradient = style.duoStripGradient;
     return IgnorePointer(
       child: Align(
         alignment: pose.onLeft ? Alignment.centerLeft : Alignment.centerRight,
         child: SizedBox(
           width: pose.stripWidth,
           height: double.infinity,
-          child: DecoratedBox(decoration: decoration),
+          child: gradient == null
+              ? ColoredBox(color: color)
+              : ValueListenableBuilder<DuoTitleBandMetrics?>(
+                  valueListenable: SystemVerticalBar.titleBand,
+                  builder: (context, _, _) => Column(
+                    children: [
+                      SizedBox(
+                        height: DuoTitleBand.of(context).contentTop,
+                        width: double.infinity,
+                        child: ColoredBox(color: color),
+                      ),
+                      Expanded(
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(gradient: gradient),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
         ),
       ),
     );

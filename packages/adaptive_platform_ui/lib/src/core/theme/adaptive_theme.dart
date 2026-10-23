@@ -22,8 +22,9 @@ class AdaptiveBarStyle {
   /// the vertical bar. [fillsDuoStrip] paints that strip with [color], so the
   /// bar reads as one band from the top of the window down the strip. Pass
   /// false to leave the strip in the page background. [duoStripGradient]
-  /// paints the strip with a gradient instead of [color]; start a vertical
-  /// one at [color] so it joins the solid top bar without a seam.
+  /// paints the strip below the title band with a gradient instead of
+  /// [color]; start a vertical one at [color] so it joins the bar without a
+  /// step.
   const AdaptiveBarStyle.solid(
     Color this.color, {
     this.foreground,

@@ -8,6 +8,8 @@ final class NativeNavigationController: UINavigationController, UINavigationCont
         background.accessibilityElementsHidden = true
         return background
     }()
+    private let stripShadowMask = CAShapeLayer()
+    private weak var maskedShadow: UIView?
 
     var completedLayout: (() -> Void)?
     /// Background of the appearance applied to the bar itself, shared by
@@ -59,7 +61,59 @@ final class NativeNavigationController: UINavigationController, UINavigationCont
         super.viewDidLayoutSubviews()
         layoutTransitionBackdrop()
         layoutNavigationSafeAreaBackground()
+        layoutStripShadowMask()
         completedLayout?()
+    }
+    /// Keeps the bar's shadow off the iPhone Duo vertical bar strip, so the
+    /// bar runs straight into the strip below it. UIKit draws the shadow the
+    /// full width of the bar; this masks out only the part over the strip and
+    /// leaves the bar, its controls and the status cluster untouched.
+    private func layoutStripShadowMask() {
+        navigationBar.layoutIfNeeded()
+        let shadow = Self.shadowView(in: navigationBar)
+        if maskedShadow !== shadow {
+            maskedShadow?.layer.mask = nil
+            maskedShadow = shadow
+        }
+        guard let shadow, let strip = verticalBarStrip() else {
+            shadow?.layer.mask = nil
+            return
+        }
+        let cut = shadow.convert(strip, from: view).intersection(shadow.bounds)
+        guard !cut.isEmpty else {
+            shadow.layer.mask = nil
+            return
+        }
+        let path = UIBezierPath(rect: shadow.bounds)
+        path.append(UIBezierPath(rect: cut))
+        stripShadowMask.fillRule = .evenOdd
+        stripShadowMask.frame = shadow.bounds
+        stripShadowMask.path = path.cgPath
+        shadow.layer.mask = stripShadowMask
+    }
+    /// The strip the window keeps for the vertical bar, full height, in this
+    /// view's coordinates, or nil where bars stay horizontal. Matches the
+    /// Dart side: the safe-area inset where the system reserves one, the
+    /// bar's own width in the leading Split View pane where it does not.
+    private func verticalBarStrip() -> CGRect? {
+        let edge = VerticalBarEdgeStreamHandler.edge(of: view)
+        guard edge == "left" || edge == "right" else { return nil }
+        let insets = view.safeAreaInsets
+        let left = edge == "left"
+        let inset = left ? insets.left : insets.right
+        let width = inset > 0 ? inset : 84
+        return CGRect(x: left ? view.bounds.minX : view.bounds.maxX - width,
+                      y: view.bounds.minY, width: width, height: view.bounds.height)
+    }
+    /// The view UIKit draws the bar's shadow image in, found by the image the
+    /// package hands it rather than by private class names.
+    private static func shadowView(in view: UIView) -> UIImageView? {
+        for child in view.subviews {
+            if let image = child as? UIImageView,
+               image.image === NativeBarAppearance.shadowImage { return image }
+            if let found = shadowView(in: child) { return found }
+        }
+        return nil
     }
     private func layoutNavigationSafeAreaBackground() {
         // The vertical navigation layout can leave a safe-area strip above
