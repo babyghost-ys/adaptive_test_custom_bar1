@@ -81,7 +81,7 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
     /// Controllers by depth. When a FlutterViewController is released, Flutter
     /// destroys an engine that may not run headless, so each is created once
     /// and kept for the life of the app, and reused.
-    private var pool: [FlutterViewController] = []
+    private var pool: [SheetViewController] = []
 
     init(channel: FlutterMethodChannel, hostProvider: @escaping () -> UIViewController?) {
         self.channel = channel
@@ -139,7 +139,9 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         let engine: FlutterEngine = host.engine
         let depth = levels.count
         if pool.count <= depth {
-            pool.append(FlutterViewController(engine: engine, nibName: nil, bundle: nil))
+            let controller = SheetViewController(engine: engine, nibName: nil, bundle: nil)
+            controller.onRotated = { [weak self] in self?.rotationEnded() }
+            pool.append(controller)
         }
         let level = Level(
             controller: pool[depth],
@@ -364,13 +366,41 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
     }
 
     /// Draws the covered layers again once the size has settled: a rotation
-    /// resizes the window at its start and animates for a while after.
+    /// resizes the window at its start and animates for a while after. The
+    /// top sheet reports when a rotation ends (see `rotationEnded`); this
+    /// delay is the fallback for a resize that is not a rotation.
     private func sizeChanged() {
         pendingRedraw?.cancel()
         guard !levels.isEmpty else { return }
         let work = DispatchWorkItem { [weak self] in self?.redrawCovered() }
         pendingRedraw = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
+    }
+
+    /// A rotation has finished animating: the sheets are at their final
+    /// size, so draw the covered layers now instead of waiting out the
+    /// fallback delay, which a fast device finishes its rotation well before.
+    ///
+    /// The top sheet's native views (segmented controls, switches) keep the
+    /// layout they had mid-rotation until the sheet's surface is attached
+    /// again, so that comes first, and the top sheet is drawn and settled
+    /// at its final size before it is snapshotted for the redraw. Otherwise
+    /// the snapshot holds the stale controls and they jump when the sheet
+    /// gets the engine back.
+    private func rotationEnded() {
+        guard let top = levels.last else { return }
+        pendingRedraw?.cancel()
+        pendingRedraw = nil
+        if redrawing {
+            redrawAgain = true
+            return
+        }
+        let generation = stackGeneration
+        reattach(top.controller)
+        channel.invokeMethod("drawLayer", arguments: ["index": top.depth]) { [weak self] _ in
+            guard let self, generation == self.stackGeneration else { return }
+            self.redrawCovered()
+        }
     }
 
     /// Lends the engine to the page and to each sheet below the top one, so
@@ -453,6 +483,21 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         target.viewDidAppear(false)
         target.view.setNeedsLayout()
         target.view.layoutIfNeeded()
+    }
+}
+
+/// A sheet's view controller: reports when a rotation it takes part in has
+/// finished animating, the moment every view has its final size.
+private final class SheetViewController: FlutterViewController {
+    var onRotated: (() -> Void)?
+
+    override func viewWillTransition(
+        to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator
+    ) {
+        super.viewWillTransition(to: size, with: coordinator)
+        coordinator.animate(alongsideTransition: nil) { [weak self] _ in
+            self?.onRotated?()
+        }
     }
 }
 

@@ -213,6 +213,10 @@ final class FilterSheetController: UIViewController {
         }
         sheet.prefersGrabberVisible = true
         sheet.prefersScrollingExpandsWhenScrolledToEdge = true
+        // In landscape on an iPhone the sheet would otherwise span the whole
+        // screen, with nothing outside it to tap. Attached to the bottom edge
+        // it keeps its portrait width, with the dimmed page either side.
+        sheet.prefersEdgeAttachedInCompactHeight = true
     }
 
     override func viewDidLoad() {
