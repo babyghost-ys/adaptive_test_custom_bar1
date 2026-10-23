@@ -35,6 +35,11 @@ final result = await AdaptiveNativeSheet.show<MyFilter>(
   the new sheet's dimming. Each sheet has its own result.
 * **Closing:** call `AdaptiveNativeSheet.pop(context, value)` from inside the widget. It
   closes the top sheet. Dragging a sheet away returns `null`.
+* **Not dismissible:** pass `isDismissible: false` to `show` when tapping outside must not
+  close the sheet. The widget then needs its own close control (a close icon calling
+  `pop`). On iOS the sheet also cannot be dragged away and shows no grabber, because UIKit
+  blocks both together (`isModalInPresentation`). Off iOS the drag and the drag handle go
+  too. The default, `true`, keeps tapping outside and dragging away.
 
 ```dart
 // Inside a sheet's widget: open a second sheet, then use its result.
@@ -78,7 +83,8 @@ page
   v
 AdaptiveNativeSheet (Dart)  -- stack of entries, active = top
   |-- iOS ----> MethodChannel "adaptive_platform_ui/widget_sheet"
-  |               present {detents, height}  --> NativeWidgetSheet.swift
+  |               present {detents, height,  --> NativeWidgetSheet.swift
+  |                        dismissible}
   |                                               freezes the sheet below (bitmap)
   |                                               presents a pooled FlutterViewController,
   |                                               from an overlay window when nested
@@ -145,6 +151,9 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         let controller: FlutterViewController
         /// How this sheet rests: `fit`, `full`, `short` or `halfAndFull`.
         let detents: String
+        /// Whether tapping outside or dragging the sheet down closes it. When
+        /// false, only Dart's `dismiss` does.
+        let dismissible: Bool
         /// Position in the stack, bottom is 0.
         let depth: Int
         /// Height of the "fit" detent: what Dart measured for the content.
@@ -154,9 +163,10 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         /// The window a nested sheet is presented from. Nil for the bottom
         /// sheet, which the page presents.
         var window: UIWindow?
-        init(controller: FlutterViewController, detents: String, depth: Int) {
+        init(controller: FlutterViewController, detents: String, dismissible: Bool, depth: Int) {
             self.controller = controller
             self.detents = detents
+            self.dismissible = dismissible
             self.depth = depth
         }
     }
@@ -250,7 +260,12 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         if pool.count <= depth {
             pool.append(FlutterViewController(engine: engine, nibName: nil, bundle: nil))
         }
-        let level = Level(controller: pool[depth], detents: args["detents"] as? String ?? "fit", depth: depth)
+        let level = Level(
+            controller: pool[depth],
+            detents: args["detents"] as? String ?? "fit",
+            dismissible: args["dismissible"] as? Bool ?? true,
+            depth: depth
+        )
         level.fitHeight = CGFloat((args["height"] as? NSNumber)?.doubleValue ?? 320)
 
         originalHost = host
@@ -276,6 +291,9 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         guard let presenter = level.window?.rootViewController ?? topPresenter(from: host) else { return }
         let controller = level.controller
         controller.modalPresentationStyle = .pageSheet
+        // UIKit cannot stop a tap outside without also stopping the drag, so a
+        // sheet that is not dismissible keeps still and drops its grabber.
+        controller.isModalInPresentation = !level.dismissible
         if let sheet = controller.sheetPresentationController {
             switch level.detents {
             case "full":
@@ -309,7 +327,7 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
             default:
                 sheet.detents = [.medium(), .large()]
             }
-            sheet.prefersGrabberVisible = true
+            sheet.prefersGrabberVisible = level.dismissible
             sheet.prefersScrollingExpandsWhenScrolledToEdge = true
         }
         controller.presentationController?.delegate = self
@@ -834,10 +852,16 @@ class AdaptiveNativeSheet {
 
   /// Shows [builder]'s widget in the sheet. Returns the value passed to [pop],
   /// or null when the sheet is dragged away.
+  ///
+  /// With [isDismissible] false, tapping outside the sheet does not close it,
+  /// so the widget must offer its own close control. On iOS the sheet cannot
+  /// be dragged away either and shows no grabber, since UIKit stops both
+  /// together. Off iOS the drag handle goes too.
   static Future<T?> show<T>({
     required BuildContext context,
     required WidgetBuilder builder,
     AdaptiveFilterDetents detents = AdaptiveFilterDetents.fit,
+    bool isDismissible = true,
     Color? backgroundColor,
   }) async {
     if (AdaptiveStyle.of(context) != AdaptiveStyle.native) {
@@ -847,7 +871,9 @@ class AdaptiveNativeSheet {
           isScrollControlled: true,
           useRootNavigator: true,
           useSafeArea: true,
-          showDragHandle: true,
+          showDragHandle: isDismissible,
+          enableDrag: isDismissible,
+          isDismissible: isDismissible,
           backgroundColor: backgroundColor,
           builder: (context) => SingleChildScrollView(
             padding: EdgeInsets.only(
@@ -869,6 +895,7 @@ class AdaptiveNativeSheet {
             ? 0.94
             : null,
         backgroundColor: backgroundColor,
+        isDismissible: isDismissible,
       );
     }
     _installHandler();
@@ -884,6 +911,7 @@ class AdaptiveNativeSheet {
     try {
       await _channel.invokeMethod<void>('present', {
         'detents': detents.name,
+        'dismissible': isDismissible,
         // Until the widget has been measured, open at the height the last
         // sheet measured, so a repeat open does not visibly resize.
         'height': _lastOpenHeight > 0 ? _lastOpenHeight : 320.0,
@@ -1303,8 +1331,9 @@ controls, and its accounts line opens a nested sheet of native switches.
 
 ### A frame for a filter sheet's content
 
-It takes its natural height, so the sheet can fit it: a title with a reset icon, the
-caller's children, and a full-width apply button showing a live count.
+It takes its natural height, so the sheet can fit it: a title with a reset icon (or a
+close icon, for a sheet opened with `isDismissible: false`), the caller's children, and a
+full-width apply button showing a live count.
 
 ```dart
 // lib/core/widgets/sheet_frame.dart
@@ -1313,9 +1342,10 @@ import 'package:flutter/material.dart';
 import 'package:native_widgets_on_duo/app/theme/palette.dart';
 import 'package:native_widgets_on_duo/core/widgets/label.dart';
 
-/// The shell of a filter sheet's content: a title with a reset icon, the
-/// caller's [children], and a full-width apply button showing [count]. It
-/// takes its natural height, so a sheet can fit it.
+/// The shell of a filter sheet's content: a title with a reset icon (or a
+/// close icon, given [onClose]), the caller's [children], and a full-width
+/// apply button showing [count]. It takes its natural height, so a sheet can
+/// fit it.
 class SheetFrame extends StatelessWidget {
   const SheetFrame({
     super.key,
@@ -1323,6 +1353,7 @@ class SheetFrame extends StatelessWidget {
     required this.count,
     required this.onApply,
     this.onReset,
+    this.onClose,
   });
 
   final List<Widget> children;
@@ -1331,6 +1362,10 @@ class SheetFrame extends StatelessWidget {
 
   /// Null disables the reset icon.
   final VoidCallback? onReset;
+
+  /// Shows a close icon in place of the reset icon, for a sheet that tapping
+  /// outside does not close.
+  final VoidCallback? onClose;
 
   @override
   Widget build(BuildContext context) => Material(
@@ -1351,8 +1386,12 @@ class SheetFrame extends StatelessWidget {
                   child: label('Filters', size: 22, weight: FontWeight.w600),
                 ),
                 IconButton(
-                  onPressed: onReset,
-                  icon: const Icon(Icons.restart_alt_rounded),
+                  onPressed: onClose ?? onReset,
+                  icon: Icon(
+                    onClose == null
+                        ? Icons.restart_alt_rounded
+                        : Icons.close_rounded,
+                  ),
                   color: ink,
                 ),
               ],
@@ -2160,6 +2199,9 @@ Add the page to the router and a tab for it, as for any other page.
   if a sheet opens or closes meanwhile.
 * Anything that measures the page (the Duo title band) uses the page's controller
   (`pageController`), not `registrar.viewController`.
+* For a sheet presented with `dismissible: false`, set `isModalInPresentation = true` and
+  hide the grabber. UIKit has no way to block only the tap outside; the drag goes with it.
+  Set `isModalInPresentation` on every present, since the pooled controllers are reused.
 * Guard `#available(iOS 16.0, *)` for custom detents. Before iOS 16 there are no custom
   detents, so `fit` falls back to `[.medium(), .large()]`.
 
@@ -2182,6 +2224,8 @@ Add the page to the router and a tab for it, as for any other page.
 * Off iOS, show `showModalBottomSheet` with `useRootNavigator: true`, and make `pop` call
   `Navigator.pop`. Nested sheets then stack as ordinary routes.
 * While a native sheet is up, do not paint chrome over the window (the Duo strip).
+* Pass `isDismissible` through on every path: `dismissible` in the `present` arguments,
+  and `isDismissible`, `enableDrag` and `showDragHandle` off iOS.
 
 **App**
 
@@ -2189,6 +2233,9 @@ Add the page to the router and a tab for it, as for any other page.
   `ValueNotifier`s created by the open function and disposed when the sheet completes.
 * Open a nested sheet from the sheet's widget with its own `context`, and apply the result
   to the outer sheet's draft.
+* A sheet opened with `isDismissible: false` must show a close control that calls
+  `AdaptiveNativeSheet.pop(context)`, or the user cannot leave it. With `SheetFrame`, pass
+  `onClose` instead of `onReset`.
 * Rows that open a nested sheet get no ink ripple (`GestureDetector`, not `InkWell`).
 * The apply count comes from the same filter function the page uses.
 * Use the package's `Adaptive` controls for anything that should look native on iOS.
@@ -2206,6 +2253,9 @@ fix. If you see one, check that part of your copy.
   `freeze(_:)` as listed.
 * **A highlight stays stuck on the row that opened the nested sheet.** The row has an ink
   ripple that the freeze captured. Use a `GestureDetector`.
+* **A sheet opened with `isDismissible: false` still closes on a tap outside.** The
+  `dismissible` argument is missing from `present`, or `isModalInPresentation` is not set
+  in `presentLevel`.
 * **Dragging the sheet up leaves it at full height.** The `fit` detents include
   `.large()`. Keep the fit detent alone.
 * **Native controls in a sheet vanish after locking and unlocking the phone**, once a
@@ -2243,6 +2293,8 @@ Run on real runtimes and check:
 * the nested sheet opens over the filter sheet, which keeps its full height and its
   controls; Done returns the result to the filter sheet, and a drag away returns `null`;
 * closing a sheet leaves the page usable, and reopening remembers the current filter;
+* a sheet opened with `isDismissible: false` stays open on a tap outside and a drag down,
+  shows no grabber, and closes with its close icon, returning `null`;
 * with a nested sheet opened once, locking and unlocking keeps every sheet's controls;
 * on the iPhone Duo, rotating with one sheet and with two sheets open ends with the page
   and every covered sheet drawn correctly at the new size, the title band without a gap,
@@ -2272,6 +2324,8 @@ are physical pixels (1080 by 2400 on the test emulators).
 2. Write the sheet's widget, stateless, taking `ValueNotifier`s from its open function.
 3. Write `show<Name>Sheet` that creates the notifiers, calls `AdaptiveNativeSheet.show`
    with `builder: (_) => <Name>Content(...)`, and disposes the notifiers in `whenComplete`.
+   If tapping outside must not close the sheet, also pass `isDismissible: false` and give
+   the widget a close icon (`SheetFrame(onClose: () => AdaptiveNativeSheet.pop<T>(context))`).
 4. For a nested sheet, write a second open function and content widget the same way, and
    call the open function from the first sheet's widget, from a row without ink.
 5. In the page state, keep the filter, call the show function from `openFilters`, and
