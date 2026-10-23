@@ -60,10 +60,17 @@ final class NativeDrawerCover: UIView {
         scrim.frame = CGRect(x: right, y: 0, width: max(0, bounds.width - right), height: bounds.height)
         scrim.alpha = progress
         guard let window else { return }
-        let hole = CGRect(x: x, y: -64, width: width, height: bounds.height + 128)
         for target in targets {
-            let path = UIBezierPath(rect: target.view.bounds.insetBy(dx: -64, dy: -64))
-            path.append(UIBezierPath(rect: target.view.convert(hole, from: window)))
+            // The mask keeps everything the bar draws on screen, including
+            // glass and shadows past its own bounds, so it spans the whole
+            // window as well as the view. The opening is the panel's column,
+            // the full height of that.
+            let view = target.view
+            let visible = view.bounds.union(view.convert(window.bounds, from: window))
+            let column = view.convert(CGRect(x: x, y: 0, width: width, height: 1), from: window)
+            let hole = CGRect(x: column.minX, y: visible.minY, width: column.width, height: visible.height)
+            let path = UIBezierPath(rect: visible)
+            path.append(UIBezierPath(rect: hole))
             let layer = CAShapeLayer()
             layer.path = path.cgPath
             layer.fillRule = .evenOdd
