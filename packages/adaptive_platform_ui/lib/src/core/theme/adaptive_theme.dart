@@ -11,7 +11,8 @@ class AdaptiveBarStyle {
       foreground = null,
       shadow = false,
       plainButtons = false,
-      fillsDuoStrip = false;
+      fillsDuoStrip = false,
+      duoStripGradient = null;
 
   /// A solid [color] bar with [foreground] title, back button and actions.
   /// [shadow] draws a subtle shadow below it; [plainButtons] removes the
@@ -20,13 +21,16 @@ class AdaptiveBarStyle {
   /// On iPhone Duo the system reserves a strip at one edge of the window for
   /// the vertical bar. [fillsDuoStrip] paints that strip with [color], so the
   /// bar reads as one band from the top of the window down the strip. Pass
-  /// false to leave the strip in the page background.
+  /// false to leave the strip in the page background. [duoStripGradient]
+  /// paints the strip with a gradient instead of [color]; start a vertical
+  /// one at [color] so it joins the solid top bar without a seam.
   const AdaptiveBarStyle.solid(
     Color this.color, {
     this.foreground,
     this.shadow = false,
     this.plainButtons = false,
     this.fillsDuoStrip = true,
+    this.duoStripGradient,
   });
 
   final Color? color;
@@ -37,6 +41,9 @@ class AdaptiveBarStyle {
   /// Whether the iPhone Duo vertical bar strip is painted with [color].
   final bool fillsDuoStrip;
 
+  /// Paints the iPhone Duo strip in place of [color] when [fillsDuoStrip].
+  final Gradient? duoStripGradient;
+
   @override
   bool operator ==(Object other) =>
       other is AdaptiveBarStyle &&
@@ -44,11 +51,18 @@ class AdaptiveBarStyle {
       foreground == other.foreground &&
       shadow == other.shadow &&
       plainButtons == other.plainButtons &&
-      fillsDuoStrip == other.fillsDuoStrip;
+      fillsDuoStrip == other.fillsDuoStrip &&
+      duoStripGradient == other.duoStripGradient;
 
   @override
-  int get hashCode =>
-      Object.hash(color, foreground, shadow, plainButtons, fillsDuoStrip);
+  int get hashCode => Object.hash(
+    color,
+    foreground,
+    shadow,
+    plainButtons,
+    fillsDuoStrip,
+    duoStripGradient,
+  );
 }
 
 /// The app's look, set once on `AdaptiveApp` and shared by every platform.

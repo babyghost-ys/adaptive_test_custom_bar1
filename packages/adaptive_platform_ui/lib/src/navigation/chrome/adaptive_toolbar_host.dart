@@ -75,10 +75,15 @@ class _AdaptiveToolbarHostState extends State<AdaptiveToolbarHost>
     super.dispose();
   }
 
-  /// The app's bar colour where it asks for the Duo strip to be filled.
-  Color? _stripColor(BuildContext context) {
+  /// The app's strip gradient, or its bar colour, where it asks for the Duo
+  /// strip to be filled.
+  Decoration? _stripDecoration(BuildContext context) {
     final bar = AdaptiveTheme.of(context).barStyle;
-    return bar.fillsDuoStrip ? bar.color : null;
+    if (!bar.fillsDuoStrip) return null;
+    if (bar.duoStripGradient case final gradient?) {
+      return BoxDecoration(gradient: gradient);
+    }
+    return bar.color == null ? null : BoxDecoration(color: bar.color);
   }
 
   @override
@@ -121,7 +126,9 @@ class _AdaptiveToolbarHostState extends State<AdaptiveToolbarHost>
                   builder: (context, sheet, _) => _BarStrip(
                     pose: pose,
                     // The engine renders into a native sheet while one is up.
-                    color: sheet != null ? null : _stripColor(context),
+                    decoration: sheet != null
+                        ? null
+                        : _stripDecoration(context),
                   ),
                 ),
               ),
@@ -169,26 +176,27 @@ class _BarInset extends StatelessWidget {
 }
 
 /// Fills the strip the system reserves for the iPhone Duo vertical bar with
-/// the app's bar colour, so the bar reads as one band down that edge. Draws
-/// nothing without a pose or a colour, and never takes a touch.
+/// the app's bar colour or strip gradient, so the bar reads as one band down
+/// that edge. Draws nothing without a pose or a decoration, and never takes a
+/// touch.
 class _BarStrip extends StatelessWidget {
-  const _BarStrip({required this.pose, required this.color});
+  const _BarStrip({required this.pose, required this.decoration});
 
   final DuoPose? pose;
-  final Color? color;
+  final Decoration? decoration;
 
   @override
   Widget build(BuildContext context) {
     final pose = this.pose;
-    final color = this.color;
-    if (pose == null || color == null) return const SizedBox.shrink();
+    final decoration = this.decoration;
+    if (pose == null || decoration == null) return const SizedBox.shrink();
     return IgnorePointer(
       child: Align(
         alignment: pose.onLeft ? Alignment.centerLeft : Alignment.centerRight,
         child: SizedBox(
           width: pose.stripWidth,
           height: double.infinity,
-          child: ColoredBox(color: color),
+          child: DecoratedBox(decoration: decoration),
         ),
       ),
     );

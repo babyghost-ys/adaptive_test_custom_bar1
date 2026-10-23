@@ -19,6 +19,11 @@ class MeridianApp extends StatelessWidget {
         foreground: Colors.white,
         shadow: true,
         plainButtons: true,
+        duoStripGradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [red, redLight],
+        ),
       ),
     ),
   );
