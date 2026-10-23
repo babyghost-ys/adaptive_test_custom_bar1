@@ -495,7 +495,8 @@ class iOS26ToolbarPlatformView: NSObject, FlutterPlatformView, NativeNavigationP
         }
     }
 
-    private static let leadingIdentifier = "adaptive_platform_ui.leading"
+    /// Marks the leading control UIKit morphs between pages on Duo.
+    static let leadingIdentifier = "adaptive_platform_ui.leading"
 
     private static func colorFromARGB(_ argb: Int) -> UIColor {
         let a = CGFloat((argb >> 24) & 0xFF) / 255.0

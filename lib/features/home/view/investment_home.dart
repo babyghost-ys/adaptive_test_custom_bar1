@@ -34,7 +34,7 @@ class _InvestmentHomeState extends State<InvestmentHome> {
               sfSymbol: menuOpen ? 'xmark' : 'line.3.horizontal',
               icon: menuOpen ? Icons.close : Icons.menu_rounded,
             ),
-            label: menuOpen ? 'Close accounts' : 'Open accounts',
+            label: menuOpen ? 'Close menu' : 'Menu',
             spacerAfter: ToolbarSpacerType.flexible,
             onPressed: () => scaffoldKey.currentState?.openDrawer(),
           ),

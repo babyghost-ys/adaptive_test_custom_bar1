@@ -152,6 +152,28 @@ final class NativeNavigationController: UINavigationController, UINavigationCont
             container.insertSubview(transitionHeaderBackdrop, at: 0)
         }
     }
+    /// On Duo's vertical bar, the outgoing page's leading control morphs into
+    /// the incoming page's (menu into Back). Leaving the outgoing bar, it
+    /// frees its room there, so controls the bar had folded into its "more"
+    /// menu briefly fit and spring out on their own as the page leaves. Only
+    /// the morphing control stays; the rest go with the page.
+    private static func hideItemsLeftBehindByMorph(on controller: UIViewController?) {
+        guard #available(iOS 26.0, *), let item = controller?.navigationItem else { return }
+        let items = (item.leftBarButtonItems ?? []) + (item.rightBarButtonItems ?? [])
+        guard items.contains(where: { $0.identifier == iOS26ToolbarPlatformView.leadingIdentifier }) else { return }
+        for barItem in items where barItem.identifier != iOS26ToolbarPlatformView.leadingIdentifier {
+            barItem.isHidden = true
+        }
+    }
+
+    /// Shows or hides every bar control of [controller]'s page.
+    private static func setBarItems(of controller: UIViewController?, hidden: Bool) {
+        guard #available(iOS 16.0, *), let item = controller?.navigationItem else { return }
+        for barItem in (item.leftBarButtonItems ?? []) + (item.rightBarButtonItems ?? []) where barItem.isHidden != hidden {
+            barItem.isHidden = hidden
+        }
+    }
+
     func navigationController(_ navigationController: UINavigationController,
                               willShow viewController: UIViewController, animated: Bool) {
         guard usesManagedRoutes else { return }
@@ -167,11 +189,15 @@ final class NativeNavigationController: UINavigationController, UINavigationCont
         // Duo's detached title otherwise outlives the interactive content slide.
         // Keep Flutter rebuilds from restoring the outgoing bar mid-transition.
         setNavigationBarHidden(hidesBar, animated: hidesBar ? false : animated)
+        Self.setBarItems(of: viewController, hidden: false)
         if let coordinator = transitionCoordinator {
             let source = coordinator.viewController(forKey: .from) as? NativeNavigationContent
             let sourceHidesBar = source?.transitionHeaderHeight ?? 0 > 0
+            let from = coordinator.viewController(forKey: .from)
+            Self.hideItemsLeftBehindByMorph(on: from)
             coordinator.animate(alongsideTransition: nil) { [weak self] context in
                 guard context.isCancelled else { return }
+                Self.setBarItems(of: from, hidden: false)
                 DispatchQueue.main.async { [weak self] in
                     guard let self else { return }
                     self.transitioningBetweenRoutes = false
