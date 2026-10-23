@@ -36,9 +36,10 @@ enum AdaptiveFilterDetents {
   /// A short sheet that fits a single control.
   short,
 
-  /// Follows the height of its content, and grows to full height when the
-  /// content is taller. Only [AdaptiveNativeSheet] measures content; elsewhere
-  /// it rests at half height.
+  /// Follows the height of its content, up to full height when the content is
+  /// taller, and cannot be dragged taller than that. Only
+  /// [AdaptiveNativeSheet] measures content; elsewhere it rests at half
+  /// height.
   fit,
 }
 

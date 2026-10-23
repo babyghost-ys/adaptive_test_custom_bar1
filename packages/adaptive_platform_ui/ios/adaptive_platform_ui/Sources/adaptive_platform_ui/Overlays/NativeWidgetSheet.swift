@@ -127,12 +127,14 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
                 if #available(iOS 16.0, *) {
                     // Each level needs its own name: UIKit resolves a lower sheet from the
                     // sheet above it when both use the same detent identifier.
+                    // The only detent: the sheet cannot be dragged taller than
+                    // its content. Content taller than the screen is capped and
+                    // scrolls.
                     let fit = UISheetPresentationController.Detent.Identifier("fit\(level.depth)")
                     sheet.detents = [
                         .custom(identifier: fit) { [weak level] context in
                             min(context.maximumDetentValue, level?.fitHeight ?? 320)
                         },
-                        .large(),
                     ]
                     sheet.selectedDetentIdentifier = fit
                 } else {
@@ -191,7 +193,6 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         sheet.animateChanges {
             sheet.detents = [
                 .custom(identifier: fit) { context in min(context.maximumDetentValue, target) },
-                .large(),
             ]
             sheet.selectedDetentIdentifier = fit
         }
