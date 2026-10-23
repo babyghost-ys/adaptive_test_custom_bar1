@@ -93,6 +93,7 @@ class ChipGroup<T> extends StatelessWidget {
           avatar: Icon(icon, size: 18),
           label: Text(text),
           selected: isSelected(value),
+          showCheckmark: false,
           onSelected: (_) => onTap(value),
         ),
     ],
