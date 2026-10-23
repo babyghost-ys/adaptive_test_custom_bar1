@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../../style/adaptive_icon.dart';
 import '../../core/adaptive_style.dart';
 import '../tab_bar/native_tab_bar.dart';
@@ -283,17 +285,31 @@ class AdaptiveScaffoldState extends State<AdaptiveScaffold> {
       await drawer.presentNative(context);
     } finally {
       _nativeDrawerOpen = false;
+      _completeDrawerClosed();
       if (mounted) widget.onDrawerChanged?.call(false);
     }
   }
 
-  /// Closes the drawer without a selection.
-  void closeDrawer() {
+  /// Completes when the open drawer has finished closing.
+  Completer<void>? _drawerClosed;
+
+  /// Closes the drawer without a selection. Completes once it has finished
+  /// closing, so a tap that also opens a page can wait for it: a page pushed
+  /// over a drawer still sliding away pauses it there until the page goes.
+  Future<void> closeDrawer() {
+    if (!isDrawerOpen) return Future<void>.value();
+    final closed = _drawerClosed ??= Completer<void>();
     if (_nativeDrawerOpen) {
       AdaptiveDrawer.dismissNative();
     } else {
       _scaffoldKey.currentState?.closeDrawer();
     }
+    return closed.future;
+  }
+
+  void _completeDrawerClosed() {
+    _drawerClosed?.complete();
+    _drawerClosed = null;
   }
 
   /// The fixed toolbar chrome this page publishes its app bar to, if an
@@ -386,6 +402,7 @@ class AdaptiveScaffoldState extends State<AdaptiveScaffold> {
     _toolbarRegistry?.remove(this);
     _pageScroll?.dispose();
     _drawerPulse.dispose();
+    _completeDrawerClosed();
     super.dispose();
   }
 
@@ -528,6 +545,9 @@ class AdaptiveScaffoldState extends State<AdaptiveScaffold> {
         isOpen: () => _customDrawerOpen,
         child: drawer,
       );
+    }
+    if (drawer != null) {
+      drawer = _DrawerLifetime(onGone: _completeDrawerClosed, child: drawer);
     }
     if (drawer == null && widget.endDrawer == null) {
       return child;
@@ -682,4 +702,28 @@ class _MaterialAncestor extends StatelessWidget {
     textStyle: DefaultTextStyle.of(context).style,
     child: child,
   );
+}
+
+/// Reports when the drawer has finished closing. The Material drawer says it
+/// is closed as it starts to slide away, but only drops its content once it
+/// is out of sight.
+class _DrawerLifetime extends StatefulWidget {
+  const _DrawerLifetime({required this.onGone, required this.child});
+
+  final VoidCallback onGone;
+  final Widget child;
+
+  @override
+  State<_DrawerLifetime> createState() => _DrawerLifetimeState();
+}
+
+class _DrawerLifetimeState extends State<_DrawerLifetime> {
+  @override
+  void dispose() {
+    widget.onGone();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }

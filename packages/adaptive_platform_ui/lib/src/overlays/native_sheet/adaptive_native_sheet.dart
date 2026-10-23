@@ -1,7 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show showModalBottomSheet;
+import 'package:flutter/material.dart'
+    show MaterialPageRoute, PopScope, showModalBottomSheet;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
@@ -106,12 +107,35 @@ class AdaptiveNativeSheet {
 
   /// Shows [builder]'s widget in the sheet. Returns the value passed to [pop],
   /// or null when the sheet is dragged away.
+  ///
+  /// With [fullScreen], the sheet covers the whole screen (UIKit's
+  /// `.overFullScreen` presentation) and cannot be dragged away: only [pop]
+  /// closes it, so the widget must offer its own close control. [detents]
+  /// is then ignored. Off iOS it is a full-screen dialog route that the
+  /// system back gesture does not close.
   static Future<T?> show<T>({
     required BuildContext context,
     required WidgetBuilder builder,
     AdaptiveFilterDetents detents = AdaptiveFilterDetents.fit,
+    bool fullScreen = false,
     Color? backgroundColor,
   }) async {
+    if (AdaptiveStyle.of(context) != AdaptiveStyle.native && fullScreen) {
+      return Navigator.of(context, rootNavigator: true).push<T>(
+        MaterialPageRoute<T>(
+          fullscreenDialog: true,
+          builder: (context) => PopScope(
+            canPop: false,
+            child: ColoredBox(
+              color:
+                  backgroundColor ??
+                  CupertinoColors.systemBackground.resolveFrom(context),
+              child: builder(context),
+            ),
+          ),
+        ),
+      );
+    }
     if (AdaptiveStyle.of(context) != AdaptiveStyle.native) {
       if (detents == AdaptiveFilterDetents.fit) {
         return showModalBottomSheet<T>(
@@ -148,14 +172,15 @@ class AdaptiveNativeSheet {
     final entry = AdaptiveNativeSheetEntry._(
       builder: builder,
       backgroundColor: backgroundColor,
-      fits: detents == AdaptiveFilterDetents.fit,
+      fits: !fullScreen && detents == AdaptiveFilterDetents.fit,
+      fullScreen: fullScreen,
       complete: (value) {
         if (!done.isCompleted) done.complete(value as T?);
       },
     );
     try {
       await _channel.invokeMethod<void>('present', {
-        'detents': detents.name,
+        'detents': fullScreen ? 'fullScreen' : detents.name,
         // Until the widget has been measured, open at the height the last
         // sheet measured, so a repeat open does not visibly resize.
         'height': _lastOpenHeight > 0 ? _lastOpenHeight : 320.0,
@@ -218,11 +243,15 @@ class AdaptiveNativeSheetEntry {
     required this.builder,
     required this.backgroundColor,
     required this.fits,
+    required this.fullScreen,
     required this.complete,
   });
 
   /// Whether the sheet's height follows [builder]'s widget.
   final bool fits;
+
+  /// Whether the sheet covers the whole screen.
+  final bool fullScreen;
   final WidgetBuilder builder;
   final Color? backgroundColor;
   final void Function(Object? value) complete;
@@ -247,7 +276,10 @@ class AdaptiveNativeSheetLayer extends StatelessWidget {
           if (entry == null) return const SizedBox.shrink();
           final mq = MediaQuery.of(context);
           final pose = DuoPoseScope.of(context);
-          EdgeInsets withoutStrip(EdgeInsets insets) => pose == null
+          // A full-screen sheet fills the window like a page, so it keeps
+          // the strip's inset.
+          EdgeInsets withoutStrip(EdgeInsets insets) =>
+              pose == null || entry.fullScreen
               ? insets
               : pose.onLeft
               ? insets.copyWith(left: 0)

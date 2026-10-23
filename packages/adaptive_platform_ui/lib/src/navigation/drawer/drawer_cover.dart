@@ -103,7 +103,10 @@ class _DrawerCoverReporterState extends State<DrawerCoverReporter> {
     final x = box.localToGlobal(Offset.zero).dx;
     final width = box.size.width;
     final open = widget.scope.isOpen();
-    if (x <= -width + 0.5 && !open) {
+    // Closing from a tap that also pushes a page: once the push covers this
+    // page its animations pause, so the panel may never get out of sight.
+    final covered = ModalRoute.isCurrentOf(context) == false;
+    if ((x <= -width + 0.5 || covered) && !open) {
       if (_covering) AdaptiveDrawer.clearCover();
       _covering = false;
       _lastX = null;

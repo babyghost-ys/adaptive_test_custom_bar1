@@ -224,6 +224,11 @@ class iOS26ToolbarPlatformView: NSObject, FlutterPlatformView, NativeNavigationP
                     btn.tag = index
                     if let label = action["label"] as? String {
                         btn.accessibilityLabel = label
+                        // An icon item still shows only its icon in the bar,
+                        // but when the bar runs out of room (the Duo's
+                        // vertical bar above a tall tab rail) UIKit folds it
+                        // into a "more" menu, which lists it by this title.
+                        if btn.image != nil, btn.title == nil { btn.title = label }
                     }
 
                     // Apply prominent style (iOS 26+)

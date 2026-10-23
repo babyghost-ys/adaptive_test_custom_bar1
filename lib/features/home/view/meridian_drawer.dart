@@ -6,6 +6,7 @@ import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:native_widgets_on_duo/app/theme/palette.dart';
 import 'package:native_widgets_on_duo/app/theme/typography.dart';
 import 'package:native_widgets_on_duo/features/investment/bloc/investment_bloc.dart';
+import 'package:native_widgets_on_duo/features/sign_in/view/sign_in_sheet.dart';
 
 /// The home drawer's own content, handed to [AdaptiveDrawer.custom].
 class MeridianDrawer extends StatelessWidget {
@@ -57,11 +58,28 @@ class MeridianDrawer extends StatelessWidget {
               ListTile(
                 leading: Icon(icon),
                 title: Text(route[0].toUpperCase() + route.substring(1)),
-                onTap: () {
-                  AdaptiveScaffold.of(context).closeDrawer();
-                  context.push('/$route');
+                // The page opens once the menu is away, so the menu is not
+                // left half closed under it.
+                onTap: () async {
+                  final router = GoRouter.of(context);
+                  await AdaptiveScaffold.of(context).closeDrawer();
+                  router.push('/$route');
                 },
               ),
+            const Divider(height: 32),
+            ListTile(
+              leading: const Icon(Icons.login_rounded),
+              title: const Text('Sign in'),
+              // The menu stays open under the sheet, so closing the sheet
+              // returns to it, and the page's last frame behind the sheet is
+              // still current. Signing in closes it.
+              onTap: () async {
+                final scaffold = AdaptiveScaffold.of(context);
+                if (await showSignInSheet(context) != null) {
+                  scaffold.closeDrawer();
+                }
+              },
+            ),
           ],
         ),
       );

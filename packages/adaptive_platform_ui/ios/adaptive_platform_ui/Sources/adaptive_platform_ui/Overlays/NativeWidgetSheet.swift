@@ -29,7 +29,8 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
     /// One open sheet.
     private final class Level {
         let controller: FlutterViewController
-        /// How this sheet rests: `fit`, `full`, `short` or `halfAndFull`.
+        /// How this sheet rests: `fit`, `full`, `short`, `halfAndFull`, or
+        /// `fullScreen`, which covers the screen and cannot be dragged away.
         let detents: String
         /// Position in the stack, bottom is 0.
         let depth: Int
@@ -146,6 +147,12 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         if let below = levels.last {
             freeze(below.controller)
             level.window = overlayWindow(over: below.controller.view.window ?? host.view.window)
+        } else if level.detents == "fullScreen" {
+            // A full-screen sheet slides over the page undimmed, so the page
+            // must keep looking as it did: once the engine leaves, the
+            // Flutter layers drawn above its native views (a drawer's dim
+            // over the bars, say) go with it.
+            freeze(host)
         }
         levels.append(level)
         // The new sheet's controller takes the engine.
@@ -161,7 +168,21 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
     private func presentLevel(_ level: Level, over host: FlutterViewController) {
         guard let presenter = level.window?.rootViewController ?? topPresenter(from: host) else { return }
         let controller = level.controller
+        if level.detents == "fullScreen" {
+            // No grabber, no drag-to-dismiss: Dart closes it with `dismiss`.
+            // Over, not instead of, the page: `.fullScreen` takes the page's
+            // views out of the window and puts them back on top of anything
+            // laid over it there, such as a drawer's dimmed backdrop.
+            controller.modalPresentationStyle = .overFullScreen
+            controller.modalPresentationCapturesStatusBarAppearance = true
+            controller.isModalInPresentation = true
+            controller.view.backgroundColor = .systemBackground
+            presenter.present(controller, animated: true)
+            return
+        }
         controller.modalPresentationStyle = .pageSheet
+        controller.modalPresentationCapturesStatusBarAppearance = false
+        controller.isModalInPresentation = false
         if let sheet = controller.sheetPresentationController {
             switch level.detents {
             case "full":
