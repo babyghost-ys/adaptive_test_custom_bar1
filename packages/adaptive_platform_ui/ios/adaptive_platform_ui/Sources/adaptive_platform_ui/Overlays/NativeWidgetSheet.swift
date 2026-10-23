@@ -229,6 +229,11 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
             }
             sheet.prefersGrabberVisible = level.dismissible
             sheet.prefersScrollingExpandsWhenScrolledToEdge = true
+            // In landscape on an iPhone a sheet would otherwise span the
+            // whole screen, leaving nothing outside it to tap and no grabber.
+            // Attached to the bottom edge it keeps its portrait width, with
+            // the dimmed page on either side.
+            sheet.prefersEdgeAttachedInCompactHeight = true
         }
         controller.presentationController?.delegate = self
         controller.view.backgroundColor = .systemBackground

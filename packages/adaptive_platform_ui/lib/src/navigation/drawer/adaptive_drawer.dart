@@ -162,7 +162,17 @@ class AdaptiveDrawer extends StatelessWidget {
           (theme.useMaterial3
               ? theme.colorScheme.surfaceContainerLow
               : theme.canvasColor);
-      final content = SafeArea(child: child!);
+      // The panel lies over the bottom bar, so only the system's own inset
+      // applies at the bottom. The page's padding there also counts the
+      // bar, which in landscape would cut the panel's content off well
+      // above the screen's edge.
+      final mq = MediaQuery.of(context);
+      final content = MediaQuery(
+        data: mq.copyWith(
+          padding: mq.padding.copyWith(bottom: mq.viewPadding.bottom),
+        ),
+        child: SafeArea(child: child!),
+      );
       return Drawer(
         width: _width(context),
         backgroundColor: color,

@@ -12,7 +12,11 @@ import '../../core/adaptive_style.dart';
 /// padding, so content never sits under a bar it cannot scroll out from.
 @immutable
 class BodyPlacement {
-  const BodyPlacement({required this.underTop, required this.underBottom});
+  const BodyPlacement({
+    required this.underTop,
+    required this.underBottom,
+    this.underSides = false,
+  });
 
   /// Content scrolls under the top bar and starts below it.
   final bool underTop;
@@ -20,22 +24,31 @@ class BodyPlacement {
   /// Content scrolls under the tab bar and ends above it.
   final bool underBottom;
 
+  /// Content runs to the screen's side edges, under the camera housing of
+  /// an iPhone in landscape, and the side insets stay in
+  /// [MediaQuery.padding] for the content to apply. Lets a page draw
+  /// full-bleed bands while keeping its text clear.
+  final bool underSides;
+
   /// Aligned first: the body sits between the bars, unless it is a scroll
   /// view that applies the insets itself and the platform draws glass bars
   /// over content (iOS 26 and later). A large title needs the content below
   /// it to collapse, so it runs under the top bar on every iOS version.
-  /// [extendBehindTop] and [extendBehindBottom] override either edge.
+  /// [extendBehindTop] and [extendBehindBottom] override either edge;
+  /// [extendBehindSides] lets the body run to the side edges.
   factory BodyPlacement.resolve({
     required Widget? body,
     required bool largeTitle,
     bool? extendBehindTop,
     bool? extendBehindBottom,
+    bool extendBehindSides = false,
   }) {
     final scrolls = appliesInsets(body);
     final glass = AdaptiveCapabilities.liquidGlass;
     return BodyPlacement(
       underTop: extendBehindTop ?? (scrolls && (glass || largeTitle)),
       underBottom: extendBehindBottom ?? (scrolls && glass),
+      underSides: extendBehindSides,
     );
   }
 
@@ -106,15 +119,15 @@ class PlacedBody extends StatelessWidget {
     final padding = MediaQuery.paddingOf(context);
     return Padding(
       padding: EdgeInsets.fromLTRB(
-        padding.left,
+        placement.underSides ? 0 : padding.left,
         placement.underTop ? 0 : padding.top,
-        padding.right,
+        placement.underSides ? 0 : padding.right,
         placement.underBottom ? 0 : padding.bottom,
       ),
       child: MediaQuery.removePadding(
         context: context,
-        removeLeft: true,
-        removeRight: true,
+        removeLeft: !placement.underSides,
+        removeRight: !placement.underSides,
         removeTop: !placement.underTop,
         removeBottom: !placement.underBottom,
         child: child,

@@ -26,6 +26,7 @@ class _InvestmentHomeState extends State<InvestmentHome> {
     builder: (context, state) => AdaptiveScaffold(
       key: scaffoldKey,
       extendBody: true,
+      extendBodyBehindSides: true,
       appBar: AdaptiveAppBar(
         titleStyle: barTitleStyle,
         actions: [

@@ -15,12 +15,27 @@ class PageScroll extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bottom = MediaQuery.paddingOf(context).bottom + 28;
+    // Side insets are left here when the body runs under the camera housing
+    // of an iPhone in landscape, so the header can reach the edges.
+    final insets = MediaQuery.paddingOf(context);
+    final bottom = insets.bottom + 28;
+    final left = insets.left + 24;
+    final right = insets.right + 24;
+    // Applied here, so rows that pad themselves to the safe area (a
+    // ListTile does) do not add the side insets a second time.
+    Widget consumed(Widget child) => MediaQuery.removePadding(
+      context: context,
+      removeLeft: true,
+      removeRight: true,
+      child: child,
+    );
     if (header == null) {
-      return ListView(
-        key: PageStorageKey(storageKey ?? 'page'),
-        padding: EdgeInsets.fromLTRB(24, 28, 24, bottom),
-        children: children,
+      return consumed(
+        ListView(
+          key: PageStorageKey(storageKey ?? 'page'),
+          padding: EdgeInsets.fromLTRB(left, 28, right, bottom),
+          children: children,
+        ),
       );
     }
     return ListView(
@@ -28,11 +43,13 @@ class PageScroll extends StatelessWidget {
       padding: EdgeInsets.only(bottom: bottom),
       children: [
         header!,
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 28, 24, 0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: children,
+        consumed(
+          Padding(
+            padding: EdgeInsets.fromLTRB(left, 28, right, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: children,
+            ),
           ),
         ),
       ],

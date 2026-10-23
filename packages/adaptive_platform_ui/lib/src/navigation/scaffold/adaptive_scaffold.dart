@@ -118,6 +118,7 @@ class AdaptiveScaffold extends StatefulWidget {
     this.floatingActionButton,
     this.extendBodyBehindAppBar,
     this.extendBody,
+    this.extendBodyBehindSides = false,
     this.backgroundColor,
     this.customHeaderBackgroundColor,
     this.customHeaderHeight = 0,
@@ -170,6 +171,13 @@ class AdaptiveScaffold extends StatefulWidget {
   /// [extendBodyBehindAppBar] does: under the glass tab bar of iOS 26+ for a
   /// body that is a scroll view, above the bar otherwise.
   final bool? extendBody;
+
+  /// Whether the body runs to the screen's side edges on iOS, under the
+  /// camera housing of an iPhone in landscape, so a page can draw
+  /// full-bleed bands. The side insets then stay in [MediaQuery.padding]
+  /// for the body to keep its text clear of. False keeps the body inside
+  /// them. Elsewhere the body already runs edge to edge.
+  final bool extendBodyBehindSides;
 
   /// Background colour of the page on every platform. Null keeps the
   /// platform default: the Material or Cupertino theme's scaffold colour

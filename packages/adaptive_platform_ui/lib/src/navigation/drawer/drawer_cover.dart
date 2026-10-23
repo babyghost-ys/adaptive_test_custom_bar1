@@ -56,6 +56,7 @@ class _DrawerCoverReporterState extends State<DrawerCoverReporter> {
   bool _looping = false;
   bool _covering = false;
   double? _lastX;
+  double? _lastWidth;
   int _stable = 0;
 
   @override
@@ -63,6 +64,14 @@ class _DrawerCoverReporterState extends State<DrawerCoverReporter> {
     super.initState();
     widget.scope.pulse.addListener(_start);
     // The panel is only built once it starts to open, after the callback.
+    _start();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // A rotation can change the panel's width without moving its edge.
+    MediaQuery.sizeOf(context);
     _start();
   }
 
@@ -110,11 +119,13 @@ class _DrawerCoverReporterState extends State<DrawerCoverReporter> {
       if (_covering) AdaptiveDrawer.clearCover();
       _covering = false;
       _lastX = null;
+      _lastWidth = null;
       _looping = false;
       return;
     }
-    if (x != _lastX) {
+    if (x != _lastX || width != _lastWidth) {
       _lastX = x;
+      _lastWidth = width;
       _stable = 0;
       _covering = true;
       AdaptiveDrawer.reportCover(x: x, width: width, color: widget.color);

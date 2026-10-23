@@ -6,6 +6,9 @@ import UIKit
 final class NativeDrawerCover: UIView {
     private let scrim = UIControl()
     private var targets: [(view: UIView, mask: CALayer?, interaction: Bool, hidden: Bool)] = []
+    /// The panel's last reported edge and width, to place everything again
+    /// when the window changes size.
+    private var panel: (x: CGFloat, width: CGFloat)?
 
     var tapped: (() -> Void)?
 
@@ -46,10 +49,12 @@ final class NativeDrawerCover: UIView {
             target.view.accessibilityElementsHidden = target.hidden
         }
         targets = []
+        panel = nil
     }
 
     /// Places the opening and backdrop for a panel whose left edge is at [x].
     func update(x: CGFloat, width: CGFloat) {
+        panel = (x, width)
         let progress = min(1, max(0, (x + width) / width))
         let right = x + width
         scrim.frame = CGRect(x: right, y: 0, width: max(0, bounds.width - right), height: bounds.height)
@@ -63,6 +68,20 @@ final class NativeDrawerCover: UIView {
             layer.path = path.cgPath
             layer.fillRule = .evenOdd
             target.view.layer.mask = layer
+        }
+    }
+
+    /// A rotation with the panel open resizes the window and the bars, but
+    /// the panel does not move, so Dart reports nothing new. Size the
+    /// backdrop and the bars' openings again, once the bars have their new
+    /// size too.
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard let panel else { return }
+        update(x: panel.x, width: panel.width)
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let panel = self.panel else { return }
+            self.update(x: panel.x, width: panel.width)
         }
     }
 

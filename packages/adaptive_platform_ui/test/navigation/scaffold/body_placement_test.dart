@@ -134,5 +134,20 @@ void main() {
       expect(rect, const Rect.fromLTRB(4, 0, 794, 600));
       expect(inner, const EdgeInsets.only(top: 100, bottom: 80));
     });
+
+    testWidgets('runs to the side edges, leaving their insets to the body', (
+      tester,
+    ) async {
+      final (rect, inner) = await place(
+        tester,
+        const BodyPlacement(
+          underTop: false,
+          underBottom: false,
+          underSides: true,
+        ),
+      );
+      expect(rect, const Rect.fromLTRB(0, 100, 800, 520));
+      expect(inner, const EdgeInsets.only(left: 4, right: 6));
+    });
   });
 }

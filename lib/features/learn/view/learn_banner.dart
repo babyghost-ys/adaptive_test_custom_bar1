@@ -22,8 +22,13 @@ class LearnBanner extends StatelessWidget {
       ),
       child: InkWell(
         onTap: () => context.push('/learn/1'),
+        // The band runs to the screen's edges; its content keeps clear of
+        // the camera housing in landscape.
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+          padding: EdgeInsets.only(
+            left: MediaQuery.paddingOf(context).left + 24,
+            right: MediaQuery.paddingOf(context).right + 24,
+          ),
           child: Row(
             children: [
               const Icon(Icons.school_rounded, size: 40, color: Colors.white),

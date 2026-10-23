@@ -16,6 +16,7 @@ extension _NativeScaffold on AdaptiveScaffoldState {
       largeTitle: appBar?.largeTitle ?? false,
       extendBehindTop: widget.extendBodyBehindAppBar,
       extendBehindBottom: widget.extendBody,
+      extendBehindSides: widget.extendBodyBehindSides,
     );
     Widget body = _MaterialAncestor(
       child:
