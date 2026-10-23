@@ -101,7 +101,15 @@ extension NativeNavigationHost {
             }
             return
         }
-        guard content.hasCompletedAppearance else { return }
+        // A tab switch shows the new page in place straight away, but on
+        // iOS 26 UIKit only completes its appearance when the switch's
+        // transition ends, about 0.6s later. Measure it as soon as it is in
+        // the window instead, so the page is not held back until then.
+        let switchingTabs = tabs?.transitionCoordinator != nil && content.view.window != nil
+        guard content.hasCompletedAppearance || switchingTabs else { return }
+        // Until Flutter has appeared here it keeps showing its last frame,
+        // which is the tab being left.
+        if switchingTabs { content.completeFlutterAppearance(early: true) }
         layingOut = true
         defer { layingOut = false }
         let scroll = content.scroll

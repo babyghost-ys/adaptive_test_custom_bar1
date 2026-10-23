@@ -6,6 +6,9 @@ import UIKit
 final class NativeDrawerCover: UIView {
     private let scrim = UIControl()
     private var targets: [(view: UIView, mask: CALayer?, interaction: Bool, hidden: Bool)] = []
+    /// Tab bars hidden while the panel is out, and whether each was hidden
+    /// before.
+    private var hiddenBars: [(view: UIView, wasHidden: Bool)] = []
     /// The panel's last reported edge and width, to place everything again
     /// when the window changes size.
     private var panel: (x: CGFloat, width: CGFloat)?
@@ -39,6 +42,17 @@ final class NativeDrawerCover: UIView {
             view.isUserInteractionEnabled = false
             view.accessibilityElementsHidden = true
         }
+        // Before iOS 27 the tab bar's Liquid Glass is drawn whole whatever
+        // masks, clips or fades its views: the mask cuts its items open but
+        // the glass capsule stays over the panel. Hidden is the one state it
+        // honours, so the tab bar goes while the panel is out.
+        if #unavailable(iOS 27) {
+            func hasTabBar(_ view: UIView) -> Bool {
+                view is UITabBar || view.subviews.contains(where: hasTabBar)
+            }
+            hiddenBars = views.filter(hasTabBar).map { ($0, $0.isHidden) }
+            for bar in hiddenBars { bar.view.isHidden = true }
+        }
     }
 
     /// Puts every cut view back as it was.
@@ -48,6 +62,8 @@ final class NativeDrawerCover: UIView {
             target.view.isUserInteractionEnabled = target.interaction
             target.view.accessibilityElementsHidden = target.hidden
         }
+        for bar in hiddenBars { bar.view.isHidden = bar.wasHidden }
+        hiddenBars = []
         targets = []
         panel = nil
     }

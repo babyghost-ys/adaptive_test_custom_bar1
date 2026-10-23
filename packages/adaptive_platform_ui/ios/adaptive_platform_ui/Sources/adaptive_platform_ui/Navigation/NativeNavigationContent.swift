@@ -209,8 +209,11 @@ final class NativeNavigationContent: UIViewController {
         finishSearchTransitionGlass()
         if forwardingDisappearance { flutter?.endAppearanceTransition(); forwardingDisappearance = false }
     }
-    func completeFlutterAppearance() {
-        guard hasCompletedAppearance, !flutterAppeared, !forwardingDisappearance,
+    /// With [early], Flutter appears before this page's own appearance has
+    /// completed: during a tab switch, which shows the page in place at once
+    /// but only completes its appearance when the switch's transition ends.
+    func completeFlutterAppearance(early: Bool = false) {
+        guard hasCompletedAppearance || early, !flutterAppeared, !forwardingDisappearance,
               let flutter, flutter.view.window != nil else { return }
         flutter.beginAppearanceTransition(true, animated: false)
         flutter.endAppearanceTransition()
