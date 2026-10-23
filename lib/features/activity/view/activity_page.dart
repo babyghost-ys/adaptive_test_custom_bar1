@@ -50,7 +50,11 @@ class _ActivityState extends State<Activity> {
               i % 3 == 0 ? 'Dividend · VOO' : 'Bought ${assets[i % 6].symbol}',
               weight: FontWeight.w500,
             ),
-            subtitle: label('Oct ${19 - i} · Personal', size: 12, color: muted),
+            subtitle: label(
+              'Oct ${activityDate(i).day} · Personal',
+              size: 12,
+              color: muted,
+            ),
             trailing: label(
               i % 3 == 0 ? '+\$128.40' : money(assets[i % 6].price),
               size: 14,

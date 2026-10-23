@@ -19,6 +19,9 @@ import '../filter_sheet/adaptive_filter_sheet.dart';
 /// can be a `StatelessWidget`, close over anything, and read the app's state
 /// (a bloc, a provider, a notifier) as it would anywhere else.
 ///
+/// A sheet can open another on top of itself: call [show] again from the
+/// sheet's widget. Each sheet has its own result and its own [pop].
+///
 /// The widget is not a route. The page behind the sheet stays the current
 /// route, so its navigation bar and toolbar stay in place.
 ///
@@ -38,11 +41,38 @@ class AdaptiveNativeSheet {
   AdaptiveNativeSheet._();
   static const _channel = MethodChannel('adaptive_platform_ui/widget_sheet');
 
-  /// The widget the native sheet is showing, or null. `AdaptiveToolbarHost`
-  /// draws it over the whole window, which on iOS is the sheet: the engine
-  /// renders into the sheet while one is up.
+  /// The topmost native sheet's widget, or null. `AdaptiveToolbarHost` draws it
+  /// over the whole window, which on iOS is that sheet: the engine renders
+  /// into the topmost sheet while any is up.
   static final ValueNotifier<AdaptiveNativeSheetEntry?> active =
       ValueNotifier<AdaptiveNativeSheetEntry?>(null);
+
+  /// Open native sheets, bottom first. A sheet can open another on top of
+  /// itself by calling [show] again from its own widget.
+  static final List<AdaptiveNativeSheetEntry> _stack = [];
+
+  static bool _handlerInstalled = false;
+
+  /// One handler for the whole stack: the user dragged the top sheet away, so
+  /// it is already gone.
+  static void _installHandler() {
+    if (_handlerInstalled) return;
+    _handlerInstalled = true;
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'dismissedByUser' && _stack.isNotEmpty) {
+        _finish(_stack.last, null);
+      }
+      return null;
+    });
+  }
+
+  /// Removes [entry] from the stack and completes its result. The sheet below,
+  /// if any, becomes the one drawn.
+  static void _finish(AdaptiveNativeSheetEntry entry, Object? value) {
+    _stack.remove(entry);
+    active.value = _stack.isEmpty ? null : _stack.last;
+    entry.complete(value);
+  }
 
   /// True while a native sheet is showing. Chrome the app paints over its
   /// pages (such as the Duo bar strip) must not draw over the sheet.
@@ -87,8 +117,7 @@ class AdaptiveNativeSheet {
         backgroundColor: backgroundColor,
       );
     }
-    if (active.value != null) return null;
-
+    _installHandler();
     final done = Completer<T?>();
     final entry = AdaptiveNativeSheetEntry._(
       builder: builder,
@@ -98,14 +127,6 @@ class AdaptiveNativeSheet {
         if (!done.isCompleted) done.complete(value as T?);
       },
     );
-    _channel.setMethodCallHandler((call) async {
-      // The user dragged the sheet down: it is already gone.
-      if (call.method == 'dismissedByUser' && active.value == entry) {
-        active.value = null;
-        entry.complete(null);
-      }
-      return null;
-    });
     try {
       await _channel.invokeMethod<void>('present', {
         'detents': detents.name,
@@ -114,16 +135,11 @@ class AdaptiveNativeSheet {
         'height': _lastOpenHeight > 0 ? _lastOpenHeight : 320.0,
       });
     } on PlatformException {
-      _channel.setMethodCallHandler(null);
       return null;
     }
+    _stack.add(entry);
     active.value = entry;
-    try {
-      return await done.future;
-    } finally {
-      if (active.value == entry) active.value = null;
-      _channel.setMethodCallHandler(null);
-    }
+    return done.future;
   }
 
   static Timer? _heightTimer;
@@ -155,17 +171,14 @@ class AdaptiveNativeSheet {
     }
     final entry = active.value;
     if (entry == null) return;
-    if (AdaptiveStyle.of(context) == AdaptiveStyle.native) {
-      // Let UIKit finish dismissing first, so the sheet never shows the page
-      // behind it as it leaves.
-      try {
-        await _channel.invokeMethod<void>('dismiss');
-      } on PlatformException {
-        // Already gone.
-      }
+    // Let UIKit finish dismissing first, so the sheet never shows what is
+    // below it as it leaves.
+    try {
+      await _channel.invokeMethod<void>('dismiss');
+    } on PlatformException {
+      // Already gone.
     }
-    active.value = null;
-    entry.complete(value);
+    _finish(entry, value);
   }
 }
 
@@ -212,6 +225,8 @@ class AdaptiveNativeSheetLayer extends StatelessWidget {
                     entry.backgroundColor ??
                     CupertinoColors.systemBackground.resolveFrom(context),
                 child: Overlay(
+                  // A different sheet on top gets a fresh overlay.
+                  key: ObjectKey(entry),
                   initialEntries: [
                     OverlayEntry(
                       builder: (context) => entry.fits

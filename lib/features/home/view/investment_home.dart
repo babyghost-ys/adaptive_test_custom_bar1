@@ -91,6 +91,17 @@ class _InvestmentHomeState extends State<InvestmentHome> {
             ),
             label: 'Activity',
           ),
+          AdaptiveNavigationDestination(
+            icon: AdaptiveIcon(
+              sfSymbol: 'list.bullet.rectangle',
+              icon: Icons.receipt_long_outlined,
+            ),
+            selectedIcon: AdaptiveIcon(
+              sfSymbol: 'list.bullet.rectangle.fill',
+              icon: Icons.receipt_long,
+            ),
+            label: 'Orders',
+          ),
         ],
       ),
       body: widget.shell,

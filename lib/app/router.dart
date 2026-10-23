@@ -8,6 +8,7 @@ import 'package:native_widgets_on_duo/features/home/view/investment_home.dart';
 import 'package:native_widgets_on_duo/features/investment/data/demo_assets.dart';
 import 'package:native_widgets_on_duo/features/markets/view/markets_page.dart';
 import 'package:native_widgets_on_duo/features/portfolio/view/portfolio_page.dart';
+import 'package:native_widgets_on_duo/features/orders/view/orders_page.dart';
 import 'package:native_widgets_on_duo/features/preferences/view/preferences_page.dart';
 import 'package:native_widgets_on_duo/features/profile/view/profile_page.dart';
 import 'package:native_widgets_on_duo/features/search/view/search_page.dart';
@@ -29,6 +30,7 @@ final router = GoRouter(
           ('/markets', const Markets()),
           ('/watchlist', const WatchlistTab()),
           ('/activity', const Activity()),
+          ('/orders', const Orders()),
         ])
           StatefulShellBranch(
             routes: [GoRoute(path: path, builder: (context, state) => page)],
