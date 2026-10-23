@@ -59,12 +59,6 @@ class AdaptiveNativeSheet {
   ///
   /// `dismissedByUser`: the user dragged the top sheet away, so it is already
   /// gone.
-  ///
-  /// `drawLayer`: after the window changes size, the native side lends the
-  /// engine to each covered layer in turn (the page at index -1, then each
-  /// sheet below the top one) so it can be drawn again at the new size, and
-  /// finally gives it back to the top sheet. Answers once that layer's frame,
-  /// native views included, is on screen.
   static void _installHandler() {
     if (_handlerInstalled) return;
     _handlerInstalled = true;
@@ -72,25 +66,9 @@ class AdaptiveNativeSheet {
       switch (call.method) {
         case 'dismissedByUser':
           if (_stack.isNotEmpty) _finish(_stack.last, null);
-        case 'drawLayer':
-          final index = (call.arguments as Map?)?['index'] as int? ?? -1;
-          active.value = index >= 0 && index < _stack.length
-              ? _stack[index]
-              : null;
-          await _settled();
       }
       return null;
     });
-  }
-
-  /// Completes once the current layer has been drawn and its native views,
-  /// which are created and sized over a few more frames, have caught up.
-  static Future<void> _settled() async {
-    SchedulerBinding.instance.ensureVisualUpdate();
-    await SchedulerBinding.instance.endOfFrame;
-    await Future<void>.delayed(const Duration(milliseconds: 150));
-    SchedulerBinding.instance.ensureVisualUpdate();
-    await SchedulerBinding.instance.endOfFrame;
   }
 
   /// Removes [entry] from the stack and completes its result. The sheet below,

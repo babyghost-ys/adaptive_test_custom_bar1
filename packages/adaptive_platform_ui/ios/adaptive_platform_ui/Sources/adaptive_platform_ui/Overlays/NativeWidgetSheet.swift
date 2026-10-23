@@ -7,10 +7,14 @@ import UIKit
 /// sliders, segmented controls) follow it there, so a lower sheet is covered
 /// by a snapshot of itself until the engine comes back.
 ///
-/// When the window changes size (a rotation) while a sheet is up, those
-/// snapshots, and the page's last frame, would be stretched. Once the size
-/// settles, the engine is lent to the page and to each covered sheet in turn,
-/// so Dart draws each again at the new size, and each is snapshotted afresh.
+/// When the window changes size (a rotation) while a sheet is up, the top
+/// sheet keeps the engine throughout, so its content and its native views
+/// follow the turn like any other Flutter view. The layers behind it keep
+/// the last frame they drew, which UIKit stretches to the new size, until
+/// the sheet above them closes and the engine comes back. Lending the engine
+/// to them to draw them again would take the top sheet's native views away
+/// and give them back, and they are laid out afresh each time they return,
+/// which is seen as a jump; a still page behind the sheet is the lesser evil.
 ///
 /// A nested sheet is not presented by the sheet below it. When one sheet
 /// presents another, UIKit tucks the lower one behind the top one and shrinks
@@ -68,20 +72,10 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
     /// by controller.
     private var stills: [ObjectIdentifier: UIView] = [:]
 
-    /// Watches the page's size, to draw the covered layers again after it
-    /// changes.
-    private var resizeObserver: ResizeObserverView?
-    private var pendingRedraw: DispatchWorkItem?
-    private var redrawing = false
-    private var redrawAgain = false
-
-    /// Bumped when a sheet opens or closes, so a redraw in progress stops.
-    private var stackGeneration = 0
-
     /// Controllers by depth. When a FlutterViewController is released, Flutter
     /// destroys an engine that may not run headless, so each is created once
     /// and kept for the life of the app, and reused.
-    private var pool: [SheetViewController] = []
+    private var pool: [FlutterViewController] = []
 
     init(channel: FlutterMethodChannel, hostProvider: @escaping () -> UIViewController?) {
         self.channel = channel
@@ -139,9 +133,7 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         let engine: FlutterEngine = host.engine
         let depth = levels.count
         if pool.count <= depth {
-            let controller = SheetViewController(engine: engine, nibName: nil, bundle: nil)
-            controller.onRotated = { [weak self] in self?.rotationEnded() }
-            pool.append(controller)
+            pool.append(FlutterViewController(engine: engine, nibName: nil, bundle: nil))
         }
         let level = Level(
             controller: pool[depth],
@@ -153,8 +145,6 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
 
         originalHost = host
         self.engine = engine
-        observeSize(of: host)
-        stackGeneration += 1
         if let below = levels.last {
             freeze(below.controller)
             level.window = overlayWindow(over: below.controller.view.window ?? host.view.window)
@@ -306,7 +296,6 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         guard let index = levels.firstIndex(where: { $0.controller === controller }) else { return }
         let gone = levels[index...]
         levels.removeSubrange(index...)
-        stackGeneration += 1
         // Windows that held nested sheets go too, top first.
         for level in gone.reversed() {
             level.window?.isHidden = true
@@ -328,7 +317,8 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
     /// engine and its native views move elsewhere. The picture sits over the
     /// Flutter view, not inside it: while handing over, the engine can still
     /// add its layers to the old view, on top of anything there. It takes the
-    /// touches, which would otherwise reach the engine's current layer.
+    /// touches, which would otherwise reach the engine's current layer. A
+    /// picture already there is replaced in the same frame.
     private func freeze(_ controller: FlutterViewController) {
         let view = controller.view!
         guard let container = view.superview else { return }
@@ -353,118 +343,6 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         }
     }
 
-    /// Starts watching the page's size, once.
-    private func observeSize(of host: FlutterViewController) {
-        guard resizeObserver == nil else { return }
-        let view = ResizeObserverView(frame: host.view.bounds)
-        view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        view.isUserInteractionEnabled = false
-        view.accessibilityElementsHidden = true
-        view.onResize = { [weak self] in self?.sizeChanged() }
-        host.view.insertSubview(view, at: 0)
-        resizeObserver = view
-    }
-
-    /// Draws the covered layers again once the size has settled: a rotation
-    /// resizes the window at its start and animates for a while after. The
-    /// top sheet reports when a rotation ends (see `rotationEnded`); this
-    /// delay is the fallback for a resize that is not a rotation.
-    private func sizeChanged() {
-        pendingRedraw?.cancel()
-        guard !levels.isEmpty else { return }
-        let work = DispatchWorkItem { [weak self] in self?.redrawCovered() }
-        pendingRedraw = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
-    }
-
-    /// A rotation has finished animating: the sheets are at their final
-    /// size, so draw the covered layers now instead of waiting out the
-    /// fallback delay, which a fast device finishes its rotation well before.
-    ///
-    /// The top sheet's native views (segmented controls, switches) keep the
-    /// layout they had mid-rotation until the sheet's surface is attached
-    /// again, so that comes first, and the top sheet is drawn and settled
-    /// at its final size before it is snapshotted for the redraw. Otherwise
-    /// the snapshot holds the stale controls and they jump when the sheet
-    /// gets the engine back.
-    private func rotationEnded() {
-        guard let top = levels.last else { return }
-        pendingRedraw?.cancel()
-        pendingRedraw = nil
-        if redrawing {
-            redrawAgain = true
-            return
-        }
-        let generation = stackGeneration
-        reattach(top.controller)
-        channel.invokeMethod("drawLayer", arguments: ["index": top.depth]) { [weak self] _ in
-            guard let self, generation == self.stackGeneration else { return }
-            self.redrawCovered()
-        }
-    }
-
-    /// Lends the engine to the page and to each sheet below the top one, so
-    /// Dart draws each at the window's current size, and snapshots each.
-    /// The top sheet is held still meanwhile, then gets the engine back.
-    private func redrawCovered() {
-        guard let host = originalHost, let top = levels.last else { return }
-        if redrawing {
-            redrawAgain = true
-            return
-        }
-        redrawing = true
-        let generation = stackGeneration
-        let covered = [(-1, host)] + levels.dropLast().map { ($0.depth, $0.controller) }
-        freeze(top.controller)
-
-        func finish() {
-            redrawing = false
-            if redrawAgain {
-                redrawAgain = false
-                redrawCovered()
-            }
-        }
-        // A sheet opened or closed meanwhile: that already moved the engine.
-        // Make Dart draw whatever is now on top, and stop.
-        func abandon() {
-            channel.invokeMethod("drawLayer", arguments: ["index": levels.last?.depth ?? -1])
-            finish()
-        }
-        func step(_ i: Int) {
-            guard generation == stackGeneration else { return abandon() }
-            guard i < covered.count else {
-                lend(top.controller, index: top.depth) { [weak self] in
-                    guard let self else { return }
-                    guard generation == self.stackGeneration else { return abandon() }
-                    self.thaw(top.controller)
-                    finish()
-                }
-                return
-            }
-            let (index, controller) = covered[i]
-            stills.removeValue(forKey: ObjectIdentifier(controller))?.removeFromSuperview()
-            lend(controller, index: index) { [weak self] in
-                guard let self else { return }
-                guard generation == self.stackGeneration else { return abandon() }
-                self.freeze(controller)
-                step(i + 1)
-            }
-        }
-        step(0)
-    }
-
-    /// Gives the engine to [controller] and has Dart draw layer [index] into
-    /// it: -1 for the page, otherwise the sheet at that depth.
-    private func lend(
-        _ controller: FlutterViewController, index: Int, then: @escaping () -> Void
-    ) {
-        engine?.viewController = controller
-        reattach(controller)
-        channel.invokeMethod("drawLayer", arguments: ["index": index]) { _ in
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: then)
-        }
-    }
-
     /// Makes [target] the engine's surface and the home of its native views,
     /// through FlutterViewController's private `surfaceUpdated:`.
     private static func surfaceUpdated(_ target: FlutterViewController) {
@@ -483,35 +361,5 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         target.viewDidAppear(false)
         target.view.setNeedsLayout()
         target.view.layoutIfNeeded()
-    }
-}
-
-/// A sheet's view controller: reports when a rotation it takes part in has
-/// finished animating, the moment every view has its final size.
-private final class SheetViewController: FlutterViewController {
-    var onRotated: (() -> Void)?
-
-    override func viewWillTransition(
-        to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator
-    ) {
-        super.viewWillTransition(to: size, with: coordinator)
-        coordinator.animate(alongsideTransition: nil) { [weak self] _ in
-            self?.onRotated?()
-        }
-    }
-}
-
-/// Draws nothing and takes no touches; reports when the view it fills changes
-/// size.
-private final class ResizeObserverView: UIView {
-    var onResize: (() -> Void)?
-    private var lastSize: CGSize = .zero
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        guard bounds.size != lastSize else { return }
-        let first = lastSize == .zero
-        lastSize = bounds.size
-        if !first { onResize?() }
     }
 }
