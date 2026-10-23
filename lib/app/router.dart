@@ -6,6 +6,8 @@ import 'package:native_widgets_on_duo/features/activity/view/activity_page.dart'
 import 'package:native_widgets_on_duo/features/asset_detail/view/asset_details_page.dart';
 import 'package:native_widgets_on_duo/features/home/view/investment_home.dart';
 import 'package:native_widgets_on_duo/features/investment/data/demo_assets.dart';
+import 'package:native_widgets_on_duo/features/learn/view/learn_result_page.dart';
+import 'package:native_widgets_on_duo/features/learn/view/question_page.dart';
 import 'package:native_widgets_on_duo/features/markets/view/markets_page.dart';
 import 'package:native_widgets_on_duo/features/portfolio/view/portfolio_page.dart';
 import 'package:native_widgets_on_duo/features/orders/view/orders_page.dart';
@@ -69,6 +71,22 @@ final router = GoRouter(
           },
         ),
       ],
+    ),
+    GoRoute(
+      path: '/learn/:step',
+      pageBuilder: (context, state) {
+        final step = state.pathParameters['step']!;
+        final picks = state.extra as List<int>? ?? const [];
+        if (step == 'done') {
+          return detailPage(state, 'Results', LearnResultContent(picks: picks));
+        }
+        final index = int.parse(step) - 1;
+        return detailPage(
+          state,
+          'Question $step',
+          QuestionContent(index: index, picks: picks),
+        );
+      },
     ),
     GoRoute(
       path: '/asset/:symbol',

@@ -174,6 +174,12 @@ extension NativeNavigationHost {
                 deferredTabSelection = nil
                 selectContent(selection.0, searchNavigation: selection.1, tabNavigation: selection.2)
             } else { deferredTabSelection = nil }
+            if let replacement = poppingTargetPage, page == nil || page === replacement {
+                page = replacement
+                managedRoutes.last?.page = replacement
+                remember(replacement)
+            }
+            poppingTargetPage = nil
             if let page { configure(page) }
             restoreAppearance()
             layout()
@@ -257,8 +263,15 @@ extension NativeNavigationHost {
     func updateTabBar(for controller: UIViewController, in navigation: UINavigationController) {
         guard #available(iOS 18.0, *), let tabs else { return }
         guard verticalTabs else {
-            // A posture change can leave the regular layout in charge mid-stack.
-            if tabs.isTabBarHidden, managedRoutes.count <= 1 { tabs.setTabBarHidden(false, animated: false) }
+            // A posture change can leave the regular layout in charge mid-stack,
+            // with the bar still hidden by a push made in the vertical layout.
+            guard tabs.isTabBarHidden,
+                  managedRoutes.count <= 1 || controller === managedRoutes.first?.content else { return }
+            tabs.setTabBarHidden(false, animated: false)
+            navigation.transitionCoordinator?.animate(alongsideTransition: nil) { [weak tabs] context in
+                guard context.isCancelled else { return }
+                tabs?.setTabBarHidden(true, animated: false)
+            }
             return
         }
         let hidden = controller !== managedRoutes.first?.content

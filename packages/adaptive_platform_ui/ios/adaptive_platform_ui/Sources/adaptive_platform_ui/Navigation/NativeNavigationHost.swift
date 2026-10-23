@@ -16,6 +16,9 @@ final class NativeNavigationHost {
     weak var regularNavigation: UINavigationController?
     weak var outgoingPage: NativeNavigationPage?
     weak var pendingBackPage: NativeNavigationPage?
+    /// A replacement anchor for the route being revealed by a pop. Rotating
+    /// Duo rebuilds a covered page's anchor, so its original page is gone.
+    weak var poppingTargetPage: NativeNavigationPage?
     weak var dismissingSearch: UISearchController?
     weak var geometrySearch: UISearchController?
     weak var geometryContent: NativeNavigationContent?
@@ -349,6 +352,7 @@ final class NativeNavigationHost {
         if preparingPop {
             // Do not rewrite the outgoing native item as Dart reveals the
             // target underneath its retained content image.
+            if next !== managedRoutes.last?.page { poppingTargetPage = next }
             return
         }
         // An outgoing anchor can reconnect before Flutter consumes the native

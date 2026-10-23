@@ -5,6 +5,7 @@ import 'package:native_widgets_on_duo/core/formatting/money.dart';
 import 'package:native_widgets_on_duo/core/widgets/filter_section_header.dart';
 import 'package:native_widgets_on_duo/core/widgets/label.dart';
 import 'package:native_widgets_on_duo/core/widgets/page_scroll.dart';
+import 'package:native_widgets_on_duo/features/learn/view/learn_banner.dart';
 import 'package:native_widgets_on_duo/features/orders/models/order.dart';
 import 'package:native_widgets_on_duo/features/orders/models/orders_filter.dart';
 import 'package:native_widgets_on_duo/features/orders/view/orders_filter_sheet.dart';
@@ -28,6 +29,7 @@ class _OrdersState extends State<Orders> {
     final rows = filter.apply(orders);
     return PageScroll(
       storageKey: 'orders',
+      header: const LearnBanner(),
       children: [
         FilterSectionHeader(
           title: 'Recent orders',
