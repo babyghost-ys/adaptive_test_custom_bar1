@@ -113,11 +113,17 @@ class AdaptiveNativeSheet {
   /// closes it, so the widget must offer its own close control. [detents]
   /// is then ignored. Off iOS it is a full-screen dialog route that the
   /// system back gesture does not close.
+  ///
+  /// With [isDismissible] false, tapping outside the sheet does not close it,
+  /// so the widget must offer its own close control. On iOS the sheet cannot
+  /// be dragged away either and shows no grabber, since UIKit stops both
+  /// together. Off iOS the drag handle goes too.
   static Future<T?> show<T>({
     required BuildContext context,
     required WidgetBuilder builder,
     AdaptiveFilterDetents detents = AdaptiveFilterDetents.fit,
     bool fullScreen = false,
+    bool isDismissible = true,
     Color? backgroundColor,
   }) async {
     if (AdaptiveStyle.of(context) != AdaptiveStyle.native && fullScreen) {
@@ -143,7 +149,9 @@ class AdaptiveNativeSheet {
           isScrollControlled: true,
           useRootNavigator: true,
           useSafeArea: true,
-          showDragHandle: true,
+          showDragHandle: isDismissible,
+          enableDrag: isDismissible,
+          isDismissible: isDismissible,
           backgroundColor: backgroundColor,
           builder: (context) => SingleChildScrollView(
             padding: EdgeInsets.only(
@@ -165,6 +173,7 @@ class AdaptiveNativeSheet {
             ? 0.94
             : null,
         backgroundColor: backgroundColor,
+        isDismissible: isDismissible,
       );
     }
     _installHandler();
@@ -181,6 +190,7 @@ class AdaptiveNativeSheet {
     try {
       await _channel.invokeMethod<void>('present', {
         'detents': fullScreen ? 'fullScreen' : detents.name,
+        'dismissible': isDismissible,
         // Until the widget has been measured, open at the height the last
         // sheet measured, so a repeat open does not visibly resize.
         'height': _lastOpenHeight > 0 ? _lastOpenHeight : 320.0,

@@ -3,9 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:native_widgets_on_duo/app/theme/palette.dart';
 import 'package:native_widgets_on_duo/core/widgets/label.dart';
 
-/// The shell of a filter sheet's content: a title with a reset icon, the
-/// caller's [children], and a full-width apply button showing [count]. It
-/// takes its natural height, so a sheet can fit it.
+/// The shell of a filter sheet's content: a title with a reset icon (or a
+/// close icon, given [onClose]), the caller's [children], and a full-width
+/// apply button showing [count]. It takes its natural height, so a sheet can
+/// fit it.
 class SheetFrame extends StatelessWidget {
   const SheetFrame({
     super.key,
@@ -13,6 +14,7 @@ class SheetFrame extends StatelessWidget {
     required this.count,
     required this.onApply,
     this.onReset,
+    this.onClose,
   });
 
   final List<Widget> children;
@@ -21,6 +23,10 @@ class SheetFrame extends StatelessWidget {
 
   /// Null disables the reset icon.
   final VoidCallback? onReset;
+
+  /// Shows a close icon in place of the reset icon, for a sheet that tapping
+  /// outside does not close.
+  final VoidCallback? onClose;
 
   @override
   Widget build(BuildContext context) => Material(
@@ -41,8 +47,12 @@ class SheetFrame extends StatelessWidget {
                   child: label('Filters', size: 22, weight: FontWeight.w600),
                 ),
                 IconButton(
-                  onPressed: onReset,
-                  icon: const Icon(Icons.restart_alt_rounded),
+                  onPressed: onClose ?? onReset,
+                  icon: Icon(
+                    onClose == null
+                        ? Icons.restart_alt_rounded
+                        : Icons.close_rounded,
+                  ),
                   color: ink,
                 ),
               ],

@@ -32,6 +32,9 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         /// How this sheet rests: `fit`, `full`, `short`, `halfAndFull`, or
         /// `fullScreen`, which covers the screen and cannot be dragged away.
         let detents: String
+        /// Whether tapping outside or dragging the sheet down closes it. When
+        /// false, only Dart's `dismiss` does.
+        let dismissible: Bool
         /// Position in the stack, bottom is 0.
         let depth: Int
         /// Height of the "fit" detent: what Dart measured for the content.
@@ -41,9 +44,10 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         /// The window a nested sheet is presented from. Nil for the bottom
         /// sheet, which the page presents.
         var window: UIWindow?
-        init(controller: FlutterViewController, detents: String, depth: Int) {
+        init(controller: FlutterViewController, detents: String, dismissible: Bool, depth: Int) {
             self.controller = controller
             self.detents = detents
+            self.dismissible = dismissible
             self.depth = depth
         }
     }
@@ -137,7 +141,12 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         if pool.count <= depth {
             pool.append(FlutterViewController(engine: engine, nibName: nil, bundle: nil))
         }
-        let level = Level(controller: pool[depth], detents: args["detents"] as? String ?? "fit", depth: depth)
+        let level = Level(
+            controller: pool[depth],
+            detents: args["detents"] as? String ?? "fit",
+            dismissible: args["dismissible"] as? Bool ?? true,
+            depth: depth
+        )
         level.fitHeight = CGFloat((args["height"] as? NSNumber)?.doubleValue ?? 320)
 
         originalHost = host
@@ -182,7 +191,9 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         }
         controller.modalPresentationStyle = .pageSheet
         controller.modalPresentationCapturesStatusBarAppearance = false
-        controller.isModalInPresentation = false
+        // UIKit cannot stop a tap outside without also stopping the drag, so a
+        // sheet that is not dismissible keeps still and drops its grabber.
+        controller.isModalInPresentation = !level.dismissible
         if let sheet = controller.sheetPresentationController {
             switch level.detents {
             case "full":
@@ -216,7 +227,7 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
             default:
                 sheet.detents = [.medium(), .large()]
             }
-            sheet.prefersGrabberVisible = true
+            sheet.prefersGrabberVisible = level.dismissible
             sheet.prefersScrollingExpandsWhenScrolledToEdge = true
         }
         controller.presentationController?.delegate = self

@@ -22,6 +22,7 @@ Future<WatchlistFilter?> showWatchlistFilterSheet(
   );
   return AdaptiveNativeSheet.show<WatchlistFilter>(
     context: context,
+    isDismissible: false,
     builder: (_) => WatchlistFilterContent(draft: draft, more: more),
   ).whenComplete(() {
     draft.dispose();
@@ -44,9 +45,7 @@ class WatchlistFilterContent extends StatelessWidget {
     valueListenable: draft,
     builder: (context, filter, _) => SheetFrame(
       count: assets.where(filter.allows).length,
-      onReset: filter == const WatchlistFilter()
-          ? null
-          : () => draft.value = const WatchlistFilter(),
+      onClose: () => AdaptiveNativeSheet.pop<WatchlistFilter>(context),
       onApply: () => AdaptiveNativeSheet.pop(context, draft.value),
       children: [
         ChipGroup<MarketMovement>(
