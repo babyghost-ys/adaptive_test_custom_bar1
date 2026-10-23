@@ -60,6 +60,26 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
     init(channel: FlutterMethodChannel, hostProvider: @escaping () -> UIViewController?) {
         self.channel = channel
         self.hostProvider = hostProvider
+        super.init()
+        for name in [UIApplication.didBecomeActiveNotification, UIScene.didActivateNotification] {
+            NotificationCenter.default.addObserver(
+                self, selector: #selector(becameActive), name: name, object: nil
+            )
+        }
+    }
+
+    /// Every FlutterViewController on the engine claims the engine's native
+    /// views when the app becomes active, whether or not it is the one on
+    /// screen, and the last to hear of it wins. Once a nested sheet has been
+    /// opened, that is a pooled controller that is not showing, and the
+    /// native views of the sheet on screen vanish into it. After they have
+    /// all run, hand the native views back to the engine's own controller.
+    @objc private func becameActive() {
+        guard !pool.isEmpty else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let current = self?.engine?.viewController else { return }
+            Self.surfaceUpdated(current)
+        }
     }
 
     func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -265,15 +285,20 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         }
     }
 
+    /// Makes [target] the engine's surface and the home of its native views,
+    /// through FlutterViewController's private `surfaceUpdated:`.
+    private static func surfaceUpdated(_ target: FlutterViewController) {
+        let selector = NSSelectorFromString("surfaceUpdated:")
+        guard target.responds(to: selector) else { return }
+        typealias Call = @convention(c) (AnyObject, Selector, Bool) -> Void
+        let call = unsafeBitCast(target.method(for: selector), to: Call.self)
+        call(target, selector, true)
+    }
+
     /// Re-attaches a view controller's rendering surface. FlutterViewController
     /// does this when it appears; it did not go away, so ask for it directly.
     private func reattach(_ target: FlutterViewController) {
-        let selector = NSSelectorFromString("surfaceUpdated:")
-        if target.responds(to: selector) {
-            typealias Call = @convention(c) (AnyObject, Selector, Bool) -> Void
-            let call = unsafeBitCast(target.method(for: selector), to: Call.self)
-            call(target, selector, true)
-        }
+        Self.surfaceUpdated(target)
         target.viewWillAppear(false)
         target.viewDidAppear(false)
         target.view.setNeedsLayout()

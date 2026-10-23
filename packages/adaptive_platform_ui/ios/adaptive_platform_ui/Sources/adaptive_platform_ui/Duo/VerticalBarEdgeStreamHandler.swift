@@ -88,9 +88,15 @@ final class VerticalBarEdgeStreamHandler: NSObject, FlutterStreamHandler {
     }
 
     private func send(_ edge: String, view: UIView? = nil) {
+        // The size is part of the payload so a rotation always ends with an
+        // event once the view reaches its final size. Dart measures the title
+        // band on each event, and the trait change that flips the edge can
+        // arrive while the view still has the previous orientation's size.
         let payload: NSDictionary = [
             "edge": edge,
-            "regions": view.map(Self.occlusions) ?? []
+            "regions": view.map(Self.occlusions) ?? [],
+            "width": Double(view?.bounds.width ?? 0),
+            "height": Double(view?.bounds.height ?? 0),
         ]
         guard lastSent == nil || !payload.isEqual(lastSent!) else { return }
         lastSent = payload
