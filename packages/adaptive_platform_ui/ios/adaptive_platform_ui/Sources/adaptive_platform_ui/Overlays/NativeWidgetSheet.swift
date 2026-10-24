@@ -1,4 +1,5 @@
 import Flutter
+import IOSurface
 import UIKit
 
 /// Real UIKit sheets (`UISheetPresentationController`) whose content is the
@@ -10,16 +11,18 @@ import UIKit
 /// When the window changes size (a rotation) while a sheet is up, the top
 /// sheet keeps the engine through the turn, so its content and its native
 /// views follow it like any other Flutter view. The layers behind it keep
-/// the last frame they drew, which UIKit stretches to the new size. Once the
-/// turn has finished animating and every view has its final frame (the top
-/// sheet's transition coordinator says when), the engine is lent to the page
-/// and to each covered sheet in turn, so Dart draws each at its new size,
-/// and is then handed back to the top sheet. Dart keeps the top sheet's
-/// widget mounted and laid out at the sheet's own size meanwhile, so its
-/// native views are the same views, in the same places, when the engine
+/// the last frame they drew, which UIKit stretches to the new size, so the
+/// engine is lent to the page as soon as UIKit has given every view its
+/// final frame, at the very start of the turn, and Dart draws the page at
+/// its new size; it then goes straight back to the top sheet. The covered
+/// sheets are drawn again the same way once the turn has finished animating
+/// (the top sheet's transition coordinator says when). Dart keeps the top
+/// sheet's widget mounted and laid out at the sheet's own size meanwhile, so
+/// its native views are the same views, in the same places, when the engine
 /// returns. The sheet is held under a picture of itself for the few frames
 /// the engine is away, so nothing in it flickers and no touch reaches the
-/// wrong layer.
+/// wrong layer; at the start of a turn the picture is taken before UIKit
+/// moves the sheet, and turns with it.
 ///
 /// A nested sheet is not presented by the sheet below it. When one sheet
 /// presents another, UIKit tucks the lower one behind the top one and shrinks
@@ -83,6 +86,13 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
     private var drawnPageSize: CGSize?
     private var redrawing = false
     private var redrawAgain = false
+
+    /// Size transitions of the top sheet that have started and not ended.
+    private var transitionsInFlight = 0
+
+    /// Whether the sheets under the top one still hold a frame of the size
+    /// they had before a turn: the page alone is drawn as a turn starts.
+    private var coveredSheetsStale = false
 
     /// Bumped when a sheet opens or closes, so a redraw in progress stops.
     private var stackGeneration = 0
@@ -276,6 +286,12 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
     /// Invalidating the top sheet's detent would also resize the sheets under
     /// it, stretching their last frame. Swapping in a new detent of the new
     /// height, with a new name, moves only the top sheet.
+    ///
+    /// During a turn the new height is taken at once instead, as part of the
+    /// turn: content measured at the new width (with its new safe area)
+    /// reports a new height part way through it, and an animation of its own
+    /// would still be resizing the sheet once the turn has ended, when the
+    /// covered layers are drawn again under a picture of it.
     private func setHeight(_ args: [String: Any], result: @escaping FlutterResult) {
         defer { result(nil) }
         let depth = (args["depth"] as? NSNumber)?.intValue
@@ -288,11 +304,16 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         level.revision += 1
         let fit = UISheetPresentationController.Detent.Identifier("fit\(level.depth)_\(level.revision)")
         let target = CGFloat(height)
-        sheet.animateChanges {
+        let resize = {
             sheet.detents = [
                 .custom(identifier: fit) { context in min(context.maximumDetentValue, target) },
             ]
             sheet.selectedDetentIdentifier = fit
+        }
+        if transitionsInFlight > 0 {
+            resize()
+        } else {
+            sheet.animateChanges(resize)
         }
     }
 
@@ -329,7 +350,10 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
             level.window?.isHidden = true
             level.window = nil
         }
-        if levels.isEmpty { drawnPageSize = nil }
+        if levels.isEmpty {
+            drawnPageSize = nil
+            coveredSheetsStale = false
+        }
         (levels.last?.window ?? originalHost?.view.window)?.makeKey()
         guard let engine, let host = originalHost else { return }
 
@@ -365,10 +389,20 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
 
     /// Removes [controller]'s snapshot once the engine has drawn into it
     /// again, so it never flashes empty in between.
-    private func thaw(_ controller: FlutterViewController) {
+    private func thaw(_ controller: FlutterViewController, after delay: TimeInterval = 0.15) {
         guard let still = stills.removeValue(forKey: ObjectIdentifier(controller)) else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
             still.removeFromSuperview()
+        }
+    }
+
+    /// Moves every picture to where its layer is going, inside the turn's
+    /// animation, so it turns with it. A picture taken once the turn has
+    /// started would stand still at the size its layer is heading for.
+    private func followTurn() {
+        for controller in [originalHost] + levels.map(\.controller) {
+            guard let controller, let still = stills[ObjectIdentifier(controller)] else { continue }
+            still.frame = controller.view.frame
         }
     }
 
@@ -376,27 +410,63 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
 
     /// A sheet's size is changing with the window's: a rotation, or the
     /// resize of a multitasking window. UIKit gives every view its final
-    /// frame as the transition starts and animates towards it for a while;
-    /// the covered layers are drawn again once that animation has ended,
-    /// which the coordinator reports. (Drawn from a timer instead, they were
-    /// caught mid-animation.) Only the top sheet speaks for the stack: the
-    /// sheets under it go through the same transition. A sheet whose detent
-    /// changes passes through here too, with the page the same size as
-    /// before, and nothing is drawn.
+    /// frame as the transition starts and animates towards it, so a UIKit
+    /// page is laid out at its new size for the whole turn. In a rotation the
+    /// page is drawn again at that point too: the top sheet is pictured
+    /// before UIKit starts to move it, the picture turns with it, and the
+    /// engine goes to the page and back. Otherwise, and for the covered
+    /// sheets (and the page under a full-screen sheet), the layers are drawn
+    /// again once the transition has ended, which the coordinator reports.
+    /// Only the top sheet speaks for the stack: the sheets under it go
+    /// through the same transition.
     private func transition(
         of controller: SheetViewController, with coordinator: UIViewControllerTransitionCoordinator
     ) {
         guard levels.last?.controller === controller else { return }
-        let registered = coordinator.animate(alongsideTransition: nil) { [weak self] _ in
+        transitionsInFlight += 1
+        let turning = !coordinator.targetTransform.isIdentity && !redrawing
+            && originalHost.map { stills[ObjectIdentifier($0)] == nil } == true
+        if turning { freeze(controller) }
+        let registered = coordinator.animate(alongsideTransition: { [weak self] _ in
+            guard let self, turning else { return }
+            self.followTurn()
+            // Once every view has its new frame.
+            DispatchQueue.main.async { self.redrawPageAsTurnStarts(controller) }
+        }, completion: { [weak self] _ in
             self?.transitionEnded()
+        })
+        if !registered {
+            if turning { thaw(controller, after: 0) }
+            transitionEnded()
         }
-        if !registered { transitionEnded() }
     }
 
+    /// Draws the page at its new size while the turn has only just begun.
+    private func redrawPageAsTurnStarts(_ controller: FlutterViewController) {
+        guard levels.last?.controller === controller, pageIsStale else {
+            return thaw(controller, after: 0)
+        }
+        redrawCovered(pageOnly: true)
+    }
+
+    /// Draws the covered layers again once no transition of the top sheet is
+    /// still animating: a detent change that ends part way through a turn
+    /// would otherwise picture the sheet while it is still moving.
     private func transitionEnded() {
-        guard let host = originalHost, !levels.isEmpty,
-              let drawnPageSize, host.view.bounds.size != drawnPageSize else { return }
+        transitionsInFlight = max(0, transitionsInFlight - 1)
+        guard transitionsInFlight == 0 else { return }
+        redrawIfStale()
+    }
+
+    private func redrawIfStale() {
+        guard pageIsStale || coveredSheetsStale else { return }
         redrawCovered()
+    }
+
+    /// Whether the page was last drawn at another size than it has now.
+    private var pageIsStale: Bool {
+        guard let host = originalHost, !levels.isEmpty, let drawnPageSize else { return false }
+        return host.view.bounds.size != drawnPageSize
     }
 
     /// Lends the engine to the page and to each sheet below the top one, so
@@ -404,7 +474,11 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
     /// sheet. The top sheet is held still meanwhile: its widget stays mounted
     /// and laid out at its own size on the Dart side, so when the engine
     /// returns its native views are the same views in the same places.
-    private func redrawCovered() {
+    ///
+    /// With [pageOnly], as a turn starts, only the page is drawn; the top
+    /// sheet is already pictured, and its picture goes as soon as the sheet
+    /// has drawn again, its new layout under it.
+    private func redrawCovered(pageOnly: Bool = false) {
         guard let host = originalHost, let top = levels.last else { return }
         if redrawing {
             redrawAgain = true
@@ -414,14 +488,16 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         let generation = stackGeneration
         // The page, then each covered sheet, bottom first.
         let covered: [(index: Int, controller: FlutterViewController)] =
-            [(-1, host)] + levels.dropLast().map { ($0.depth, $0.controller) }
-        freeze(top.controller)
+            [(-1, host)] + (pageOnly ? [] : levels.dropLast().map { ($0.depth, $0.controller) })
+        coveredSheetsStale = pageOnly && levels.count > 1
+        if !pageOnly { freeze(top.controller) }
 
         func finish() {
             redrawing = false
             if redrawAgain {
                 redrawAgain = false
-                redrawCovered()
+                // Only if this pass left the page behind the window's size.
+                redrawIfStale()
             }
         }
         // A sheet opened or closed meanwhile: that already moved the engine.
@@ -436,10 +512,10 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         func step(_ i: Int) {
             guard generation == stackGeneration else { return abandon() }
             guard i < covered.count else {
-                lend(top.controller, index: top.depth) { [weak self] in
+                lend(top.controller, index: top.depth, untilShown: pageOnly) { [weak self] in
                     guard let self else { return }
                     guard generation == self.stackGeneration else { return abandon() }
-                    self.thaw(top.controller)
+                    self.thaw(top.controller, after: pageOnly ? 0 : 0.15)
                     finish()
                 }
                 return
@@ -451,7 +527,7 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
             // that was not covered stays bare: its own view now shows the
             // new frame.
             let pictured = stills[ObjectIdentifier(controller)] != nil
-            lend(controller, index: index) { [weak self] in
+            lend(controller, index: index, untilShown: pageOnly) { [weak self] in
                 guard let self else { return }
                 guard generation == self.stackGeneration else { return abandon() }
                 if index < 0 { self.drawnPageSize = host.view.bounds.size }
@@ -465,14 +541,57 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
     /// Gives the engine to [controller] and has Dart draw layer [index] into
     /// it: -1 for the page, otherwise the sheet at that depth. Dart answers
     /// once that layer's frame is drawn and its native views are composited.
+    ///
+    /// With [untilShown], during a turn, it goes on as soon as the layer
+    /// shows a frame of its own size, which is well before Dart answers:
+    /// every frame spent waiting is one more of the turn with a layer at its
+    /// old size. The first frame to reach the layer can be the one the engine
+    /// was still drawing for the layer it came from, which is of that layer's
+    /// size; the layer is covered by its last frame until its own arrives.
     private func lend(
-        _ controller: FlutterViewController, index: Int, then: @escaping () -> Void
+        _ controller: FlutterViewController, index: Int, untilShown: Bool = false,
+        then: @escaping () -> Void
     ) {
+        let view = controller.view!
+        let covered = untilShown && stills[ObjectIdentifier(controller)] == nil
+        if covered { cover(controller) }
         engine?.viewController = controller
+        // In the first half of a turn the controller would keep its new size
+        // from the engine, and the layer would be drawn at its old one.
+        Self.releaseMetricsHold(controller)
         reattach(controller)
-        channel.invokeMethod("drawLayer", arguments: ["index": index]) { _ in
-            DispatchQueue.main.async(execute: then)
+        var done = false
+        let goOn = { [weak self] in
+            guard !done else { return }
+            done = true
+            if covered { self?.thaw(controller, after: 0) }
+            then()
         }
+        if untilShown {
+            FrameWatcher.watch(view, then: goOn)
+        }
+        channel.invokeMethod("drawLayer", arguments: ["index": index]) { _ in
+            DispatchQueue.main.async(execute: goOn)
+        }
+    }
+
+    /// Covers [controller]'s view with the frame it shows now, as [freeze]
+    /// does, but by showing the same surface rather than drawing a picture of
+    /// it: a picture of a Flutter view can come out as the engine's last
+    /// frame for whichever view it last drew. The engine never draws into
+    /// that surface again once the view has changed size, as it has in a
+    /// turn.
+    private func cover(_ controller: FlutterViewController) {
+        let view = controller.view!
+        guard let container = view.superview, let frame = view.layer.contents else { return }
+        let still = UIView(frame: view.frame)
+        still.layer.contents = frame
+        still.layer.contentsGravity = view.layer.contentsGravity
+        still.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        still.isUserInteractionEnabled = true
+        container.insertSubview(still, aboveSubview: view)
+        stills.removeValue(forKey: ObjectIdentifier(controller))?.removeFromSuperview()
+        stills[ObjectIdentifier(controller)] = still
     }
 
     /// Makes [target] the engine's surface and the home of its native views,
@@ -485,6 +604,18 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         call(target, selector, true)
     }
 
+    /// Lets [target] send the engine its size during a turn.
+    /// FlutterViewController holds it back for the first half of every turn,
+    /// through its private `shouldIgnoreViewportMetricsUpdatesDuringRotation`,
+    /// and lets it go itself half way through.
+    private static func releaseMetricsHold(_ target: FlutterViewController) {
+        let selector = NSSelectorFromString("setShouldIgnoreViewportMetricsUpdatesDuringRotation:")
+        guard target.responds(to: selector) else { return }
+        typealias Call = @convention(c) (AnyObject, Selector, Bool) -> Void
+        let call = unsafeBitCast(target.method(for: selector), to: Call.self)
+        call(target, selector, false)
+    }
+
     /// Re-attaches a view controller's rendering surface. FlutterViewController
     /// does this when it appears; it did not go away, so ask for it directly.
     /// The layout pass sends the engine this view's metrics, so Dart lays
@@ -495,6 +626,54 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         target.viewDidAppear(false)
         target.view.setNeedsLayout()
         target.view.layoutIfNeeded()
+    }
+}
+
+/// Calls back on the first display frame at which a Flutter view shows a
+/// frame drawn for its own size: the engine presents a frame by setting the
+/// view layer's contents to a surface of the frame's size, native views
+/// included. A frame of another size is one the engine drew for another view
+/// before it moved. Gives up after a second.
+private final class FrameWatcher: NSObject {
+    private weak var view: UIView?
+    private let shown: AnyObject?
+    private let then: () -> Void
+    private var link: CADisplayLink?
+    private let deadline = CACurrentMediaTime() + 1
+
+    static func watch(_ view: UIView, then: @escaping () -> Void) {
+        let watcher = FrameWatcher(view: view, then: then)
+        let link = CADisplayLink(target: watcher, selector: #selector(tick))
+        link.add(to: .main, forMode: .common)
+        watcher.link = link
+    }
+
+    private init(view: UIView, then: @escaping () -> Void) {
+        self.view = view
+        self.shown = view.layer.contents as AnyObject?
+        self.then = then
+    }
+
+    /// The display link holds the watcher until it stops.
+    @objc private func tick() {
+        guard let view, CACurrentMediaTime() < deadline else {
+            link?.invalidate()
+            return
+        }
+        let contents = view.layer.contents as AnyObject?
+        guard contents !== shown, let contents, Self.fits(contents, view) else { return }
+        link?.invalidate()
+        then()
+    }
+
+    /// Whether [contents] is a frame drawn for [view] as it is now. Contents
+    /// that are not a surface are taken as it.
+    private static func fits(_ contents: AnyObject, _ view: UIView) -> Bool {
+        guard CFGetTypeID(contents) == IOSurfaceGetTypeID() else { return true }
+        let surface = unsafeBitCast(contents, to: IOSurfaceRef.self)
+        let scale = view.layer.contentsScale
+        return abs(CGFloat(IOSurfaceGetWidth(surface)) - view.bounds.width * scale) <= 1
+            && abs(CGFloat(IOSurfaceGetHeight(surface)) - view.bounds.height * scale) <= 1
     }
 }
 

@@ -75,7 +75,7 @@ class iOS26SegmentedControlView: NSObject, FlutterPlatformView {
     }
 
     private func createNativeSegmentedControl(with args: Any?) {
-        segmentedControl = UISegmentedControl()
+        segmentedControl = FlutterSizedSegmentedControl()
         segmentedControl.translatesAutoresizingMaskIntoConstraints = false
         segmentedControl.isUserInteractionEnabled = true
         _view.isUserInteractionEnabled = true
@@ -241,5 +241,23 @@ class iOS26SegmentedControlView: NSObject, FlutterPlatformView {
         default:
             result(FlutterMethodNotImplemented)
         }
+    }
+}
+
+/// A segmented control that takes a new size at once. Resized, its Liquid
+/// Glass selection springs to its new place over about a third of a second.
+/// In UIKit a resize happens inside the animation that caused it, such as a
+/// rotation, and the spring ends with it; Flutter resizes its native views
+/// in a frame of its own, half way through a rotation, so the selection was
+/// still sliding once everything around it had come to rest. A tap that
+/// moves the selection leaves the size alone, and still slides.
+private final class FlutterSizedSegmentedControl: UISegmentedControl {
+    private var laidOutSize: CGSize?
+
+    override func layoutSubviews() {
+        let resized = laidOutSize != nil && laidOutSize != bounds.size
+        laidOutSize = bounds.size
+        guard resized else { return super.layoutSubviews() }
+        UIView.performWithoutAnimation { super.layoutSubviews() }
     }
 }
