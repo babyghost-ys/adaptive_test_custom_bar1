@@ -1,0 +1,8 @@
+{
+  // Flutter manages these Swift packages and supplies FlutterFramework at build time.
+  "swift.searchSubfoldersForPackages": false,
+  "swift.excludePathsFromActivation": {
+    "**/packages/adaptive_platform_ui/ios/**": true,
+    "**/ios/Flutter/ephemeral/**": true
+  }
+}

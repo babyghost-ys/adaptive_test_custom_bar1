@@ -91,7 +91,7 @@ final class NativeDrawerCover: UIView {
             layer.path = path.cgPath
             layer.fillRule = .evenOdd
             target.view.layer.mask = layer
-
+        }
     }
 
     /// A rotation with the panel open resizes the window and the bars, but

@@ -72,10 +72,15 @@ into only one `FlutterViewController` at a time. So:
    height of the sheet it presents.
 5. **Close.** The top sheet is dismissed, the engine goes back to whatever is now on top
    (the sheet below, or the page), and that one's bitmap is removed once it has drawn.
-6. **Resize.** If the window changes size while a sheet is up (rotating the iPhone Duo),
-   everything under the top sheet is a stale frame. Once the size settles, Swift lends the
-   engine to the page and to each covered sheet in turn, Dart draws each at the new size
-   (`drawLayer`), Swift snapshots each, and the top sheet gets the engine back.
+6. **Resize.** If the window changes size while a sheet is up (a rotation), everything
+   under the top sheet is a stale frame, stretched to the new size. The top sheet keeps the
+   engine through the turn. When its transition coordinator reports the turn's animation
+   finished, Swift lends the engine to the page and to each covered sheet in turn, Dart
+   draws each at its new size (`drawLayer`), and the top sheet gets the engine back. The
+   top sheet's widget stays mounted and laid out at its own size meanwhile, held under a
+   bitmap of itself, so its native controls are the same views in the same places when the
+   engine returns. A covered sheet that had a bitmap gets a new one of its new frame; the
+   page under a plain sheet keeps its own view, which now holds the right frame.
 
 ```
 page
@@ -95,7 +100,8 @@ AdaptiveNativeSheet (Dart)  -- stack of entries, active = top
   |               <-- drawLayer {index}        (after a resize: draw the page, -1,
   |                                               or the sheet at index, then answer)
   |   active.value = entry  -->  AdaptiveNativeSheetLayer (in AdaptiveToolbarHost)
-  |                              draws that widget over the whole window
+  |   drawn.value = entry        keeps the top sheet's widget mounted and paints
+  |                              the one the engine draws over the whole window
   '-- other ---> showModalBottomSheet(builder)  (Flutter, same widget)
 ```
 
@@ -127,10 +133,19 @@ import UIKit
 /// sliders, segmented controls) follow it there, so a lower sheet is covered
 /// by a snapshot of itself until the engine comes back.
 ///
-/// When the window changes size (a rotation) while a sheet is up, those
-/// snapshots, and the page's last frame, would be stretched. Once the size
-/// settles, the engine is lent to the page and to each covered sheet in turn,
-/// so Dart draws each again at the new size, and each is snapshotted afresh.
+/// When the window changes size (a rotation) while a sheet is up, the top
+/// sheet keeps the engine through the turn, so its content and its native
+/// views follow it like any other Flutter view. The layers behind it keep
+/// the last frame they drew, which UIKit stretches to the new size. Once the
+/// turn has finished animating and every view has its final frame (the top
+/// sheet's transition coordinator says when), the engine is lent to the page
+/// and to each covered sheet in turn, so Dart draws each at its new size,
+/// and is then handed back to the top sheet. Dart keeps the top sheet's
+/// widget mounted and laid out at the sheet's own size meanwhile, so its
+/// native views are the same views, in the same places, when the engine
+/// returns. The sheet is held under a picture of itself for the few frames
+/// the engine is away, so nothing in it flickers and no touch reaches the
+/// wrong layer.
 ///
 /// A nested sheet is not presented by the sheet below it. When one sheet
 /// presents another, UIKit tucks the lower one behind the top one and shrinks
@@ -149,7 +164,8 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
     /// One open sheet.
     private final class Level {
         let controller: FlutterViewController
-        /// How this sheet rests: `fit`, `full`, `short` or `halfAndFull`.
+        /// How this sheet rests: `fit`, `full`, `short`, `halfAndFull`, or
+        /// `fullScreen`, which covers the screen and cannot be dragged away.
         let detents: String
         /// Whether tapping outside or dragging the sheet down closes it. When
         /// false, only Dart's `dismiss` does.
@@ -187,10 +203,10 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
     /// by controller.
     private var stills: [ObjectIdentifier: UIView] = [:]
 
-    /// Watches the page's size, to draw the covered layers again after it
-    /// changes.
-    private var resizeObserver: ResizeObserverView?
-    private var pendingRedraw: DispatchWorkItem?
+    /// The page's size when the engine last drew it: as the first sheet
+    /// opened, or when the covered layers were last drawn again. A size
+    /// transition that ends with the page at another size calls for a redraw.
+    private var drawnPageSize: CGSize?
     private var redrawing = false
     private var redrawAgain = false
 
@@ -200,7 +216,7 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
     /// Controllers by depth. When a FlutterViewController is released, Flutter
     /// destroys an engine that may not run headless, so each is created once
     /// and kept for the life of the app, and reused.
-    private var pool: [FlutterViewController] = []
+    private var pool: [SheetViewController] = []
 
     init(channel: FlutterMethodChannel, hostProvider: @escaping () -> UIViewController?) {
         self.channel = channel
@@ -258,7 +274,11 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         let engine: FlutterEngine = host.engine
         let depth = levels.count
         if pool.count <= depth {
-            pool.append(FlutterViewController(engine: engine, nibName: nil, bundle: nil))
+            let controller = SheetViewController(engine: engine, nibName: nil, bundle: nil)
+            controller.onTransition = { [weak self] controller, coordinator in
+                self?.transition(of: controller, with: coordinator)
+            }
+            pool.append(controller)
         }
         let level = Level(
             controller: pool[depth],
@@ -270,11 +290,20 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
 
         originalHost = host
         self.engine = engine
-        observeSize(of: host)
         stackGeneration += 1
+        if levels.isEmpty {
+            // The page was live until now, so it is drawn at this size.
+            drawnPageSize = host.view.bounds.size
+        }
         if let below = levels.last {
             freeze(below.controller)
             level.window = overlayWindow(over: below.controller.view.window ?? host.view.window)
+        } else if level.detents == "fullScreen" {
+            // A full-screen sheet slides over the page undimmed, so the page
+            // must keep looking as it did: once the engine leaves, the
+            // Flutter layers drawn above its native views (a drawer's dim
+            // over the bars, say) go with it.
+            freeze(host)
         }
         levels.append(level)
         // The new sheet's controller takes the engine.
@@ -290,7 +319,20 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
     private func presentLevel(_ level: Level, over host: FlutterViewController) {
         guard let presenter = level.window?.rootViewController ?? topPresenter(from: host) else { return }
         let controller = level.controller
+        if level.detents == "fullScreen" {
+            // No grabber, no drag-to-dismiss: Dart closes it with `dismiss`.
+            // Over, not instead of, the page: `.fullScreen` takes the page's
+            // views out of the window and puts them back on top of anything
+            // laid over it there, such as a drawer's dimmed backdrop.
+            controller.modalPresentationStyle = .overFullScreen
+            controller.modalPresentationCapturesStatusBarAppearance = true
+            controller.isModalInPresentation = true
+            controller.view.backgroundColor = .systemBackground
+            presenter.present(controller, animated: true)
+            return
+        }
         controller.modalPresentationStyle = .pageSheet
+        controller.modalPresentationCapturesStatusBarAppearance = false
         // UIKit cannot stop a tap outside without also stopping the drag, so a
         // sheet that is not dismissible keeps still and drops its grabber.
         controller.isModalInPresentation = !level.dismissible
@@ -329,6 +371,11 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
             }
             sheet.prefersGrabberVisible = level.dismissible
             sheet.prefersScrollingExpandsWhenScrolledToEdge = true
+            // In landscape on an iPhone a sheet would otherwise span the
+            // whole screen, leaving nothing outside it to tap and no grabber.
+            // Attached to the bottom edge it keeps its portrait width, with
+            // the dimmed page on either side.
+            sheet.prefersEdgeAttachedInCompactHeight = true
         }
         controller.presentationController?.delegate = self
         controller.view.backgroundColor = .systemBackground
@@ -397,14 +444,18 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
     /// controllers stay alive in [pool]; releasing one would destroy the engine.
     private func closed(_ controller: UIViewController) {
         guard let index = levels.firstIndex(where: { $0.controller === controller }) else { return }
+        stackGeneration += 1
         let gone = levels[index...]
         levels.removeSubrange(index...)
-        stackGeneration += 1
-        // Windows that held nested sheets go too, top first.
+        // Windows that held nested sheets go too, top first. So does a
+        // picture left over a closed sheet, which would otherwise cover
+        // whatever its pooled controller shows next.
         for level in gone.reversed() {
+            stills.removeValue(forKey: ObjectIdentifier(level.controller))?.removeFromSuperview()
             level.window?.isHidden = true
             level.window = nil
         }
+        if levels.isEmpty { drawnPageSize = nil }
         (levels.last?.window ?? originalHost?.view.window)?.makeKey()
         guard let engine, let host = originalHost else { return }
 
@@ -421,7 +472,8 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
     /// engine and its native views move elsewhere. The picture sits over the
     /// Flutter view, not inside it: while handing over, the engine can still
     /// add its layers to the old view, on top of anything there. It takes the
-    /// touches, which would otherwise reach the engine's current layer.
+    /// touches, which would otherwise reach the engine's current layer. A
+    /// picture already there is replaced in the same frame.
     private func freeze(_ controller: FlutterViewController) {
         let view = controller.view!
         guard let container = view.superview else { return }
@@ -446,31 +498,38 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         }
     }
 
-    /// Starts watching the page's size, once.
-    private func observeSize(of host: FlutterViewController) {
-        guard resizeObserver == nil else { return }
-        let view = ResizeObserverView(frame: host.view.bounds)
-        view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        view.isUserInteractionEnabled = false
-        view.accessibilityElementsHidden = true
-        view.onResize = { [weak self] in self?.sizeChanged() }
-        host.view.insertSubview(view, at: 0)
-        resizeObserver = view
+    // MARK: - Drawing the covered layers again after a resize
+
+    /// A sheet's size is changing with the window's: a rotation, or the
+    /// resize of a multitasking window. UIKit gives every view its final
+    /// frame as the transition starts and animates towards it for a while;
+    /// the covered layers are drawn again once that animation has ended,
+    /// which the coordinator reports. (Drawn from a timer instead, they were
+    /// caught mid-animation.) Only the top sheet speaks for the stack: the
+    /// sheets under it go through the same transition. A sheet whose detent
+    /// changes passes through here too, with the page the same size as
+    /// before, and nothing is drawn.
+    private func transition(
+        of controller: SheetViewController, with coordinator: UIViewControllerTransitionCoordinator
+    ) {
+        guard levels.last?.controller === controller else { return }
+        let registered = coordinator.animate(alongsideTransition: nil) { [weak self] _ in
+            self?.transitionEnded()
+        }
+        if !registered { transitionEnded() }
     }
 
-    /// Draws the covered layers again once the size has settled: a rotation
-    /// resizes the window at its start and animates for a while after.
-    private func sizeChanged() {
-        pendingRedraw?.cancel()
-        guard !levels.isEmpty else { return }
-        let work = DispatchWorkItem { [weak self] in self?.redrawCovered() }
-        pendingRedraw = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
+    private func transitionEnded() {
+        guard let host = originalHost, !levels.isEmpty,
+              let drawnPageSize, host.view.bounds.size != drawnPageSize else { return }
+        redrawCovered()
     }
 
     /// Lends the engine to the page and to each sheet below the top one, so
-    /// Dart draws each at the window's current size, and snapshots each.
-    /// The top sheet is held still meanwhile, then gets the engine back.
+    /// Dart draws each at its current size, then gives it back to the top
+    /// sheet. The top sheet is held still meanwhile: its widget stays mounted
+    /// and laid out at its own size on the Dart side, so when the engine
+    /// returns its native views are the same views in the same places.
     private func redrawCovered() {
         guard let host = originalHost, let top = levels.last else { return }
         if redrawing {
@@ -479,7 +538,9 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         }
         redrawing = true
         let generation = stackGeneration
-        let covered = [(-1, host)] + levels.dropLast().map { ($0.depth, $0.controller) }
+        // The page, then each covered sheet, bottom first.
+        let covered: [(index: Int, controller: FlutterViewController)] =
+            [(-1, host)] + levels.dropLast().map { ($0.depth, $0.controller) }
         freeze(top.controller)
 
         func finish() {
@@ -490,9 +551,12 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
             }
         }
         // A sheet opened or closed meanwhile: that already moved the engine.
-        // Make Dart draw whatever is now on top, and stop.
+        // Make Dart draw whatever is now on top, and stop. The picture held
+        // over the old top goes if it is still the top; a sheet opened over
+        // it replaced the picture with one of its own, which stays.
         func abandon() {
             channel.invokeMethod("drawLayer", arguments: ["index": levels.last?.depth ?? -1])
+            if levels.last?.controller === top.controller { thaw(top.controller) }
             finish()
         }
         func step(_ i: Int) {
@@ -507,11 +571,17 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
                 return
             }
             let (index, controller) = covered[i]
-            stills.removeValue(forKey: ObjectIdentifier(controller))?.removeFromSuperview()
+            // A layer covered by a picture of itself (a sheet under another,
+            // the page under a full-screen sheet) gets a new picture of its
+            // new frame, which replaces the old one in the same frame. One
+            // that was not covered stays bare: its own view now shows the
+            // new frame.
+            let pictured = stills[ObjectIdentifier(controller)] != nil
             lend(controller, index: index) { [weak self] in
                 guard let self else { return }
                 guard generation == self.stackGeneration else { return abandon() }
-                self.freeze(controller)
+                if index < 0 { self.drawnPageSize = host.view.bounds.size }
+                if pictured { self.freeze(controller) }
                 step(i + 1)
             }
         }
@@ -519,14 +589,15 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
     }
 
     /// Gives the engine to [controller] and has Dart draw layer [index] into
-    /// it: -1 for the page, otherwise the sheet at that depth.
+    /// it: -1 for the page, otherwise the sheet at that depth. Dart answers
+    /// once that layer's frame is drawn and its native views are composited.
     private func lend(
         _ controller: FlutterViewController, index: Int, then: @escaping () -> Void
     ) {
         engine?.viewController = controller
         reattach(controller)
         channel.invokeMethod("drawLayer", arguments: ["index": index]) { _ in
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: then)
+            DispatchQueue.main.async(execute: then)
         }
     }
 
@@ -542,6 +613,8 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
 
     /// Re-attaches a view controller's rendering surface. FlutterViewController
     /// does this when it appears; it did not go away, so ask for it directly.
+    /// The layout pass sends the engine this view's metrics, so Dart lays
+    /// out at its size.
     private func reattach(_ target: FlutterViewController) {
         Self.surfaceUpdated(target)
         target.viewWillAppear(false)
@@ -551,18 +624,16 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
     }
 }
 
-/// Draws nothing and takes no touches; reports when the view it fills changes
-/// size.
-private final class ResizeObserverView: UIView {
-    var onResize: (() -> Void)?
-    private var lastSize: CGSize = .zero
+/// A sheet's view controller: reports a size transition it takes part in (a
+/// rotation), with the coordinator that says when it has finished animating.
+private final class SheetViewController: FlutterViewController {
+    var onTransition: ((SheetViewController, UIViewControllerTransitionCoordinator) -> Void)?
 
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        guard bounds.size != lastSize else { return }
-        let first = lastSize == .zero
-        lastSize = bounds.size
-        if !first { onResize?() }
+    override func viewWillTransition(
+        to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator
+    ) {
+        super.viewWillTransition(to: size, with: coordinator)
+        onTransition?(self, coordinator)
     }
 }
 ```
@@ -747,7 +818,8 @@ type, the layer that draws the top sheet's widget, and the widget that measures 
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show showModalBottomSheet;
+import 'package:flutter/material.dart'
+    show MaterialPageRoute, PopScope, showModalBottomSheet;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
@@ -788,10 +860,17 @@ class AdaptiveNativeSheet {
   AdaptiveNativeSheet._();
   static const _channel = MethodChannel('adaptive_platform_ui/widget_sheet');
 
-  /// The topmost native sheet's widget, or null. `AdaptiveToolbarHost` draws it
-  /// over the whole window, which on iOS is that sheet: the engine renders
-  /// into the topmost sheet while any is up.
+  /// The topmost native sheet, or null.
   static final ValueNotifier<AdaptiveNativeSheetEntry?> active =
+      ValueNotifier<AdaptiveNativeSheetEntry?>(null);
+
+  /// The sheet the engine draws into right now, or null while it draws the
+  /// page. On iOS the engine renders into one view at a time: the topmost
+  /// sheet while any is up, so this is [active], except while the native
+  /// side has the engine draw a covered layer again after the window changed
+  /// size (`drawLayer`). `AdaptiveToolbarHost` paints that sheet's widget
+  /// over the whole window, which is then that sheet.
+  static final ValueNotifier<AdaptiveNativeSheetEntry?> drawn =
       ValueNotifier<AdaptiveNativeSheetEntry?>(null);
 
   /// Open native sheets, bottom first. A sheet can open another on top of
@@ -805,11 +884,12 @@ class AdaptiveNativeSheet {
   /// `dismissedByUser`: the user dragged the top sheet away, so it is already
   /// gone.
   ///
-  /// `drawLayer`: after the window changes size, the native side lends the
-  /// engine to each covered layer in turn (the page at index -1, then each
-  /// sheet below the top one) so it can be drawn again at the new size, and
-  /// finally gives it back to the top sheet. Answers once that layer's frame,
-  /// native views included, is on screen.
+  /// `drawLayer`: the window changed size while a sheet was up, so what the
+  /// engine was not drawing (the page, any sheet under the top one) is a
+  /// stale frame. The native side lends the engine to each such layer in
+  /// turn (the page at index -1, then each covered sheet by index) and
+  /// finally gives it back to the top sheet, which stays mounted throughout.
+  /// Answers once that layer's frame, native views included, is on screen.
   static void _installHandler() {
     if (_handlerInstalled) return;
     _handlerInstalled = true;
@@ -819,21 +899,24 @@ class AdaptiveNativeSheet {
           if (_stack.isNotEmpty) _finish(_stack.last, null);
         case 'drawLayer':
           final index = (call.arguments as Map?)?['index'] as int? ?? -1;
-          active.value = index >= 0 && index < _stack.length
+          drawn.value = index < 0
+              ? null
+              : index < _stack.length
               ? _stack[index]
-              : null;
+              : _stack.lastOrNull;
           await _settled();
       }
       return null;
     });
   }
 
-  /// Completes once the current layer has been drawn and its native views,
-  /// which are created and sized over a few more frames, have caught up.
+  /// Completes once the engine has drawn the current layer and composited
+  /// its native views: a frame, a pause for the raster thread and the
+  /// platform views to catch up, then one more frame.
   static Future<void> _settled() async {
     SchedulerBinding.instance.ensureVisualUpdate();
     await SchedulerBinding.instance.endOfFrame;
-    await Future<void>.delayed(const Duration(milliseconds: 150));
+    await Future<void>.delayed(const Duration(milliseconds: 50));
     SchedulerBinding.instance.ensureVisualUpdate();
     await SchedulerBinding.instance.endOfFrame;
   }
@@ -842,16 +925,24 @@ class AdaptiveNativeSheet {
   /// if any, becomes the one drawn.
   static void _finish(AdaptiveNativeSheetEntry entry, Object? value) {
     _stack.remove(entry);
-    active.value = _stack.isEmpty ? null : _stack.last;
+    active.value = _stack.lastOrNull;
+    drawn.value = _stack.lastOrNull;
     entry.complete(value);
   }
 
-  /// True while a native sheet is showing. Chrome the app paints over its
-  /// pages (such as the Duo bar strip) must not draw over the sheet.
-  static bool get isShowingNow => active.value != null;
+  /// True while the engine draws a native sheet. Chrome the app paints over
+  /// its pages (such as the Duo bar strip) must not draw then: the window the
+  /// engine draws into is the sheet.
+  static bool get isShowingNow => drawn.value != null;
 
   /// Shows [builder]'s widget in the sheet. Returns the value passed to [pop],
   /// or null when the sheet is dragged away.
+  ///
+  /// With [fullScreen], the sheet covers the whole screen (UIKit's
+  /// `.overFullScreen` presentation) and cannot be dragged away: only [pop]
+  /// closes it, so the widget must offer its own close control. [detents]
+  /// is then ignored. Off iOS it is a full-screen dialog route that the
+  /// system back gesture does not close.
   ///
   /// With [isDismissible] false, tapping outside the sheet does not close it,
   /// so the widget must offer its own close control. On iOS the sheet cannot
@@ -861,9 +952,26 @@ class AdaptiveNativeSheet {
     required BuildContext context,
     required WidgetBuilder builder,
     AdaptiveFilterDetents detents = AdaptiveFilterDetents.fit,
+    bool fullScreen = false,
     bool isDismissible = true,
     Color? backgroundColor,
   }) async {
+    if (AdaptiveStyle.of(context) != AdaptiveStyle.native && fullScreen) {
+      return Navigator.of(context, rootNavigator: true).push<T>(
+        MaterialPageRoute<T>(
+          fullscreenDialog: true,
+          builder: (context) => PopScope(
+            canPop: false,
+            child: ColoredBox(
+              color:
+                  backgroundColor ??
+                  CupertinoColors.systemBackground.resolveFrom(context),
+              child: builder(context),
+            ),
+          ),
+        ),
+      );
+    }
     if (AdaptiveStyle.of(context) != AdaptiveStyle.native) {
       if (detents == AdaptiveFilterDetents.fit) {
         return showModalBottomSheet<T>(
@@ -903,14 +1011,15 @@ class AdaptiveNativeSheet {
     final entry = AdaptiveNativeSheetEntry._(
       builder: builder,
       backgroundColor: backgroundColor,
-      fits: detents == AdaptiveFilterDetents.fit,
+      fits: !fullScreen && detents == AdaptiveFilterDetents.fit,
+      fullScreen: fullScreen,
       complete: (value) {
         if (!done.isCompleted) done.complete(value as T?);
       },
     );
     try {
       await _channel.invokeMethod<void>('present', {
-        'detents': detents.name,
+        'detents': fullScreen ? 'fullScreen' : detents.name,
         'dismissible': isDismissible,
         // Until the widget has been measured, open at the height the last
         // sheet measured, so a repeat open does not visibly resize.
@@ -921,24 +1030,26 @@ class AdaptiveNativeSheet {
     }
     _stack.add(entry);
     active.value = entry;
+    drawn.value = entry;
     return done.future;
   }
 
-  static Timer? _heightTimer;
-  static double _lastHeight = 0;
   static double _lastOpenHeight = 0;
 
   /// Tells UIKit the content's height, so the "fit" detent follows it. Debounced:
   /// an animating widget changes size every frame.
   ///
   /// [entry] says which sheet: a covered sheet drawn again after a rotation
-  /// can measure differently at its new width.
+  /// can measure differently at its new width. Only the sheet the engine
+  /// draws is laid out at its own size, so a measurement of any other sheet
+  /// is dropped.
   static void _reportHeight(AdaptiveNativeSheetEntry entry, double height) {
-    if ((height - _lastHeight).abs() < 0.5) return;
-    _lastHeight = height;
-    _lastOpenHeight = height;
-    _heightTimer?.cancel();
-    _heightTimer = Timer(const Duration(milliseconds: 40), () {
+    if (drawn.value != entry) return;
+    if ((height - entry._lastHeight).abs() < 0.5) return;
+    entry._lastHeight = height;
+    if (entry == _stack.lastOrNull) _lastOpenHeight = height;
+    entry._heightTimer?.cancel();
+    entry._heightTimer = Timer(const Duration(milliseconds: 40), () {
       final depth = _stack.indexOf(entry);
       if (depth < 0) return;
       _channel
@@ -974,69 +1085,145 @@ class AdaptiveNativeSheetEntry {
     required this.builder,
     required this.backgroundColor,
     required this.fits,
+    required this.fullScreen,
     required this.complete,
   });
 
   /// Whether the sheet's height follows [builder]'s widget.
   final bool fits;
+
+  /// Whether the sheet covers the whole screen.
+  final bool fullScreen;
   final WidgetBuilder builder;
   final Color? backgroundColor;
   final void Function(Object? value) complete;
+
+  /// The content height last reported for this sheet, and the debounce of
+  /// the next report.
+  double _lastHeight = 0;
+  Timer? _heightTimer;
 }
 
 /// Fills the window, which on iOS is the sheet, with the caller's widget.
 ///
-/// Placed above the app by `AdaptiveToolbarHost`. It has its own [Overlay], so
-/// widgets that need one (tooltips, menus) work inside it. Where the window
-/// has a vertical bar (iPhone Duo), it drops that bar's side inset, since the
-/// sheet floats inside the window and is not part of the strip the system
-/// reserves for it. Every other inset stays, such as the camera housing's on
-/// either side of an iPhone in landscape, where the sheet fills the screen.
+/// Placed above the app by `AdaptiveToolbarHost`. The topmost sheet's widget
+/// stays mounted while any sheet is up, and is painted while the engine draws
+/// that sheet ([AdaptiveNativeSheet.drawn]). While the engine draws another
+/// layer (the page or a covered sheet, after the window changed size) it is
+/// kept offstage at the size it last had, so nothing in it is laid out again
+/// and its native views are where they were when the engine returns; the
+/// covered sheet being drawn is mounted for that alone, over the page.
+///
+/// Each sheet has its own [Overlay], so widgets that need one (tooltips,
+/// menus) work inside it. Where the window has a vertical bar (iPhone Duo),
+/// it drops that bar's side inset, since the sheet floats inside the window
+/// and is not part of the strip the system reserves for it. Every other inset
+/// stays, such as the camera housing's on either side of an iPhone in
+/// landscape, where the sheet fills the screen.
 class AdaptiveNativeSheetLayer extends StatelessWidget {
   const AdaptiveNativeSheetLayer({super.key});
 
   @override
-  Widget build(BuildContext context) =>
-      ValueListenableBuilder<AdaptiveNativeSheetEntry?>(
-        valueListenable: AdaptiveNativeSheet.active,
-        builder: (context, entry, _) {
-          if (entry == null) return const SizedBox.shrink();
-          final mq = MediaQuery.of(context);
-          final pose = DuoPoseScope.of(context);
-          EdgeInsets withoutStrip(EdgeInsets insets) => pose == null
-              ? insets
-              : pose.onLeft
-              ? insets.copyWith(left: 0)
-              : insets.copyWith(right: 0);
-          return Positioned.fill(
-            child: MediaQuery(
-              data: mq.copyWith(
-                padding: withoutStrip(mq.padding),
-                viewPadding: withoutStrip(mq.viewPadding),
-              ),
-              child: ColoredBox(
-                color:
-                    entry.backgroundColor ??
-                    CupertinoColors.systemBackground.resolveFrom(context),
-                child: Overlay(
-                  // A different sheet on top gets a fresh overlay.
-                  key: ObjectKey(entry),
-                  initialEntries: [
-                    OverlayEntry(
-                      builder: (context) => entry.fits
-                          ? _FitContent(
-                              entry: entry,
-                              child: entry.builder(context),
-                            )
-                          : entry.builder(context),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: Listenable.merge([
+      AdaptiveNativeSheet.active,
+      AdaptiveNativeSheet.drawn,
+    ]),
+    builder: (context, _) {
+      final top = AdaptiveNativeSheet.active.value;
+      if (top == null) return const SizedBox.shrink();
+      final drawn = AdaptiveNativeSheet.drawn.value;
+      return Positioned.fill(
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // A covered sheet the engine draws again, mounted for that alone.
+            if (drawn != null && drawn != top)
+              _SheetSlot(key: ObjectKey(drawn), entry: drawn, painted: true),
+            // The top sheet, mounted throughout.
+            _SheetSlot(key: ObjectKey(top), entry: top, painted: drawn == top),
+          ],
+        ),
       );
+    },
+  );
+}
+
+/// One sheet's widget in [AdaptiveNativeSheetLayer].
+///
+/// While [painted], it fills the window, which is its sheet, and remembers
+/// the window's metrics. While not, it stays mounted but offstage, laid out
+/// with those metrics, so the engine can draw another layer at that layer's
+/// size without this sheet's widgets being measured at it: the sheet's
+/// native views would move and come back, and a fit sheet would report a
+/// height it does not have.
+class _SheetSlot extends StatefulWidget {
+  const _SheetSlot({super.key, required this.entry, required this.painted});
+
+  final AdaptiveNativeSheetEntry entry;
+  final bool painted;
+
+  @override
+  State<_SheetSlot> createState() => _SheetSlotState();
+}
+
+class _SheetSlotState extends State<_SheetSlot> {
+  /// The window's metrics when this sheet was last painted.
+  MediaQueryData? _painted;
+
+  @override
+  Widget build(BuildContext context) {
+    final entry = widget.entry;
+    var mq = MediaQuery.of(context);
+    if (widget.painted) {
+      _painted = mq;
+    } else {
+      mq = _painted ?? mq;
+    }
+    final pose = DuoPoseScope.of(context);
+    // A full-screen sheet fills the window like a page, so it keeps the
+    // strip's inset.
+    EdgeInsets withoutStrip(EdgeInsets insets) =>
+        pose == null || entry.fullScreen
+        ? insets
+        : pose.onLeft
+        ? insets.copyWith(left: 0)
+        : insets.copyWith(right: 0);
+    // Always present, with no bounds of its own while painted, so that
+    // toggling [painted] never moves the sheet's widget in the element tree.
+    final size = widget.painted ? null : mq.size;
+    return Visibility(
+      visible: widget.painted,
+      maintainState: true,
+      child: OverflowBox(
+        alignment: Alignment.topLeft,
+        minWidth: size?.width,
+        maxWidth: size?.width,
+        minHeight: size?.height,
+        maxHeight: size?.height,
+        child: MediaQuery(
+          data: mq.copyWith(
+            padding: withoutStrip(mq.padding),
+            viewPadding: withoutStrip(mq.viewPadding),
+          ),
+          child: ColoredBox(
+            color:
+                entry.backgroundColor ??
+                CupertinoColors.systemBackground.resolveFrom(context),
+            child: Overlay(
+              initialEntries: [
+                OverlayEntry(
+                  builder: (context) => entry.fits
+                      ? _FitContent(entry: entry, child: entry.builder(context))
+                      : entry.builder(context),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// Lays [child] out at its natural height and reports it, so the native sheet
@@ -1065,7 +1252,6 @@ class _FitContentState extends State<_FitContent> {
   @override
   void initState() {
     super.initState();
-    AdaptiveNativeSheet._lastHeight = 0;
     _measure();
   }
 
@@ -1083,12 +1269,6 @@ class _FitContentState extends State<_FitContent> {
         ),
       );
 }
-````
-
-Export it in `packages/adaptive_platform_ui/lib/adaptive_platform_ui.dart`:
-
-```dart
-export 'src/overlays/native_sheet/adaptive_native_sheet.dart';
 ```
 
 ## Step 5: the detent enum
@@ -1203,10 +1383,10 @@ class _AdaptiveToolbarHostState extends State<AdaptiveToolbarHost>
     super.dispose();
   }
 
-  /// The app's bar colour where it asks for the Duo strip to be filled.
-  Color? _stripColor(BuildContext context) {
+  /// The app's bar style where it asks for the Duo strip to be filled.
+  AdaptiveBarStyle? _stripStyle(BuildContext context) {
     final bar = AdaptiveTheme.of(context).barStyle;
-    return bar.fillsDuoStrip ? bar.color : null;
+    return bar.fillsDuoStrip && bar.color != null ? bar : null;
   }
 
   @override
@@ -1245,11 +1425,12 @@ class _AdaptiveToolbarHostState extends State<AdaptiveToolbarHost>
               // the element tree as the pose changes.
               Positioned.fill(
                 child: ValueListenableBuilder<AdaptiveNativeSheetEntry?>(
-                  valueListenable: AdaptiveNativeSheet.active,
+                  valueListenable: AdaptiveNativeSheet.drawn,
                   builder: (context, sheet, _) => _BarStrip(
                     pose: pose,
-                    // The engine renders into a native sheet while one is up.
-                    color: sheet != null ? null : _stripColor(context),
+                    // The window the engine renders into is a native sheet
+                    // while it draws one; the strip belongs to the page.
+                    style: sheet != null ? null : _stripStyle(context),
                   ),
                 ),
               ),
@@ -1297,26 +1478,53 @@ class _BarInset extends StatelessWidget {
 }
 
 /// Fills the strip the system reserves for the iPhone Duo vertical bar with
-/// the app's bar colour, so the bar reads as one band down that edge. Draws
-/// nothing without a pose or a colour, and never takes a touch.
+/// the app's bar colour, so the bar reads as one band down that edge. A strip
+/// gradient starts where the title band ends, so the bar runs into it without
+/// a step; above that the strip keeps the bar colour. Draws nothing without a
+/// pose or a style, and never takes a touch.
 class _BarStrip extends StatelessWidget {
-  const _BarStrip({required this.pose, required this.color});
+  const _BarStrip({required this.pose, required this.style});
 
   final DuoPose? pose;
-  final Color? color;
+  final AdaptiveBarStyle? style;
 
   @override
   Widget build(BuildContext context) {
     final pose = this.pose;
-    final color = this.color;
-    if (pose == null || color == null) return const SizedBox.shrink();
+    final style = this.style;
+    final color = style?.color;
+    if (pose == null || style == null || color == null) {
+      return const SizedBox.shrink();
+    }
+    final gradient = style.duoStripGradient;
     return IgnorePointer(
       child: Align(
         alignment: pose.onLeft ? Alignment.centerLeft : Alignment.centerRight,
         child: SizedBox(
           width: pose.stripWidth,
           height: double.infinity,
-          child: ColoredBox(color: color),
+          child: gradient == null
+              ? ColoredBox(color: color)
+              : ValueListenableBuilder<DuoTitleBandMetrics?>(
+                  valueListenable: SystemVerticalBar.titleBand,
+                  builder: (context, _, _) => Column(
+                    children: [
+                      SizedBox(
+                        height: DuoTitleBand.of(context).contentTop,
+                        width: double.infinity,
+                        child: ColoredBox(color: color),
+                      ),
+                      Expanded(
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(gradient: gradient),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
         ),
       ),
     );
@@ -2193,10 +2401,13 @@ Add the page to the router and a tab for it, as for any other page.
   own detent identifier, and change the height by swapping in a new detent with a new
   identifier inside `animateChanges`, never by invalidating detents (that resizes the
   sheets below too).
-* Watch the page's size. When it changes while a sheet is up, wait for it to settle, then
-  lend the engine to the page and to each covered sheet in turn, have Dart draw each
-  (`drawLayer`), snapshot each, and give the engine back to the top sheet. Stop and resync
-  if a sheet opens or closes meanwhile.
+* Redraw after a resize from the top sheet's transition coordinator, never from a timer.
+  The pooled controllers are `SheetViewController`s that report `viewWillTransition`; when
+  the top one's coordinator reports the animation finished and the page's size differs
+  from when the page was last drawn, lend the engine to the page and to each covered sheet
+  in turn, have Dart draw each (`drawLayer`), give a new bitmap only to a layer that had
+  one, and give the engine back to the top sheet. Hold the top sheet under a bitmap
+  meanwhile. Stop and resync if a sheet opens or closes meanwhile.
 * Anything that measures the page (the Duo title band) uses the page's controller
   (`pageController`), not `registrar.viewController`.
 * For a sheet presented with `dismissible: false`, set `isModalInPresentation = true` and
@@ -2210,8 +2421,14 @@ Add the page to the router and a tab for it, as for any other page.
 * The widget is not a route. If it is pushed as one, the page behind stops being the
   current route and the package hides its navigation bar. Draw it as a layer in the
   toolbar host.
-* Keep a stack of entries; `active` is the top one, or the one `drawLayer` asks for while
-  Swift redraws covered layers. `pop` closes the top of the stack.
+* Keep a stack of entries; `active` is the top one and `drawn` the one the engine draws:
+  the same, except while `drawLayer` has it draw the page (null) or a covered sheet. `pop`
+  closes the top of the stack.
+* Keep the top sheet's widget mounted while `drawLayer` draws another layer: offstage, laid
+  out with the metrics it last had (`OverflowBox` and `MediaQuery` in `_SheetSlot`), its
+  tickers off. Unmounting it would dispose its native views and create them again on
+  return, which shows as controls jumping; laying it out at the page's size would move
+  them and make a fit sheet report a height it does not have.
 * Install the channel handler once, for the whole stack.
 * The layer has its own `Overlay` keyed by the entry, so tooltips and menus work and a
   different sheet gets a fresh overlay. It drops only the Duo vertical bar's side inset;
@@ -2219,11 +2436,13 @@ Add the page to the router and a tab for it, as for any other page.
 * Measure the content with a `GlobalKey` and `SizeChangedLayoutNotifier`, wrapped in a
   `SingleChildScrollView`. Report the height after the frame, debounced, with the sheet's
   depth, so a covered sheet redrawn at a new width resizes itself and not the top one.
+  Drop a measurement of any sheet the engine is not drawing.
 * Open at the last measured height so a repeat open does not visibly resize.
 * `pop` waits for UIKit to finish dismissing before it completes the result.
 * Off iOS, show `showModalBottomSheet` with `useRootNavigator: true`, and make `pop` call
   `Navigator.pop`. Nested sheets then stack as ordinary routes.
-* While a native sheet is up, do not paint chrome over the window (the Duo strip).
+* While the engine draws a native sheet (`drawn`), do not paint chrome over the window
+  (the Duo strip); while it draws the page again, do.
 * Pass `isDismissible` through on every path: `dismissible` in the `present` arguments,
   and `isDismissible`, `enableDrag` and `showDragHandle` off iOS.
 
@@ -2261,11 +2480,17 @@ fix. If you see one, check that part of your copy.
 * **Native controls in a sheet vanish after locking and unlocking the phone**, once a
   nested sheet has been opened. A pooled, off-screen controller claimed the native views
   on becoming active. Keep `becameActive()`.
-* **iPhone Duo: after rotating with a sheet open, the page behind (and any covered sheet)
-  is squeezed or stretched.** It is the previous orientation's frame, scaled. The redraw
-  after a resize (`observeSize`, `redrawCovered`, `lend`, and Dart's `drawLayer`) fixes
-  it about half a second after the rotation settles. Check that `observeSize` runs in
-  `present`, and that Dart answers `drawLayer` only after its frame is drawn.
+* **After rotating with a sheet open, the page behind (and any covered sheet) is squeezed
+  or stretched.** It is the previous orientation's frame, scaled: only the top sheet draws
+  live. The redraw (`transition(of:with:)`, `redrawCovered`, `lend`, and Dart's
+  `drawLayer`) runs when the top sheet's transition coordinator reports the rotation
+  finished. Check that `present` gives each pooled `SheetViewController` its
+  `onTransition`, that `drawnPageSize` is recorded when the first sheet opens, and that
+  Dart answers `drawLayer` only after its frame is drawn.
+* **Native controls in the top sheet jump after a rotation.** The top sheet's widget was
+  unmounted while the engine drew the covered layers, so its native views were destroyed
+  and created again. Keep it mounted and offstage at its own size (`_SheetSlot`); only
+  `drawn` changes during a redraw, `active` stays the top.
 * **iPhone Duo: after rotating, a gap appears between the title band and the page
   content**, in the page behind a sheet or on the page itself. The title band was measured
   in the wrong place or at the wrong time. It must be measured in the page's controller
@@ -2296,9 +2521,10 @@ Run on real runtimes and check:
 * a sheet opened with `isDismissible: false` stays open on a tap outside and a drag down,
   shows no grabber, and closes with its close icon, returning `null`;
 * with a nested sheet opened once, locking and unlocking keeps every sheet's controls;
-* on the iPhone Duo, rotating with one sheet and with two sheets open ends with the page
-  and every covered sheet drawn correctly at the new size, the title band without a gap,
-  and the page live after the sheets close;
+* on an iPhone and on the iPhone Duo, rotating with one sheet and with two sheets open
+  ends with the page and every covered sheet drawn correctly at the new size as soon as
+  the turn's animation ends, the top sheet's controls where they were, the title band
+  without a gap, and the page live after the sheets close;
 * on an iPhone in landscape, the sheet's content clears the Dynamic Island.
 
 iOS: build and run with XcodeBuildMCP on an iPhone simulator, on the iPhone Duo, and on

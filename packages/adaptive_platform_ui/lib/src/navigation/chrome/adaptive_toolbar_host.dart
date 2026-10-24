@@ -117,10 +117,11 @@ class _AdaptiveToolbarHostState extends State<AdaptiveToolbarHost>
               // the element tree as the pose changes.
               Positioned.fill(
                 child: ValueListenableBuilder<AdaptiveNativeSheetEntry?>(
-                  valueListenable: AdaptiveNativeSheet.active,
+                  valueListenable: AdaptiveNativeSheet.drawn,
                   builder: (context, sheet, _) => _BarStrip(
                     pose: pose,
-                    // The engine renders into a native sheet while one is up.
+                    // The window the engine renders into is a native sheet
+                    // while it draws one; the strip belongs to the page.
                     style: sheet != null ? null : _stripStyle(context),
                   ),
                 ),

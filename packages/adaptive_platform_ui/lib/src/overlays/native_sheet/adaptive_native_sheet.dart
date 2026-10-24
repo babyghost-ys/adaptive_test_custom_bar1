@@ -43,10 +43,17 @@ class AdaptiveNativeSheet {
   AdaptiveNativeSheet._();
   static const _channel = MethodChannel('adaptive_platform_ui/widget_sheet');
 
-  /// The topmost native sheet's widget, or null. `AdaptiveToolbarHost` draws it
-  /// over the whole window, which on iOS is that sheet: the engine renders
-  /// into the topmost sheet while any is up.
+  /// The topmost native sheet, or null.
   static final ValueNotifier<AdaptiveNativeSheetEntry?> active =
+      ValueNotifier<AdaptiveNativeSheetEntry?>(null);
+
+  /// The sheet the engine draws into right now, or null while it draws the
+  /// page. On iOS the engine renders into one view at a time: the topmost
+  /// sheet while any is up, so this is [active], except while the native
+  /// side has the engine draw a covered layer again after the window changed
+  /// size (`drawLayer`). `AdaptiveToolbarHost` paints that sheet's widget
+  /// over the whole window, which is then that sheet.
+  static final ValueNotifier<AdaptiveNativeSheetEntry?> drawn =
       ValueNotifier<AdaptiveNativeSheetEntry?>(null);
 
   /// Open native sheets, bottom first. A sheet can open another on top of
@@ -59,6 +66,13 @@ class AdaptiveNativeSheet {
   ///
   /// `dismissedByUser`: the user dragged the top sheet away, so it is already
   /// gone.
+  ///
+  /// `drawLayer`: the window changed size while a sheet was up, so what the
+  /// engine was not drawing (the page, any sheet under the top one) is a
+  /// stale frame. The native side lends the engine to each such layer in
+  /// turn (the page at index -1, then each covered sheet by index) and
+  /// finally gives it back to the top sheet, which stays mounted throughout.
+  /// Answers once that layer's frame, native views included, is on screen.
   static void _installHandler() {
     if (_handlerInstalled) return;
     _handlerInstalled = true;
@@ -66,22 +80,43 @@ class AdaptiveNativeSheet {
       switch (call.method) {
         case 'dismissedByUser':
           if (_stack.isNotEmpty) _finish(_stack.last, null);
+        case 'drawLayer':
+          final index = (call.arguments as Map?)?['index'] as int? ?? -1;
+          drawn.value = index < 0
+              ? null
+              : index < _stack.length
+              ? _stack[index]
+              : _stack.lastOrNull;
+          await _settled();
       }
       return null;
     });
+  }
+
+  /// Completes once the engine has drawn the current layer and composited
+  /// its native views: a frame, a pause for the raster thread and the
+  /// platform views to catch up, then one more frame.
+  static Future<void> _settled() async {
+    SchedulerBinding.instance.ensureVisualUpdate();
+    await SchedulerBinding.instance.endOfFrame;
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    SchedulerBinding.instance.ensureVisualUpdate();
+    await SchedulerBinding.instance.endOfFrame;
   }
 
   /// Removes [entry] from the stack and completes its result. The sheet below,
   /// if any, becomes the one drawn.
   static void _finish(AdaptiveNativeSheetEntry entry, Object? value) {
     _stack.remove(entry);
-    active.value = _stack.isEmpty ? null : _stack.last;
+    active.value = _stack.lastOrNull;
+    drawn.value = _stack.lastOrNull;
     entry.complete(value);
   }
 
-  /// True while a native sheet is showing. Chrome the app paints over its
-  /// pages (such as the Duo bar strip) must not draw over the sheet.
-  static bool get isShowingNow => active.value != null;
+  /// True while the engine draws a native sheet. Chrome the app paints over
+  /// its pages (such as the Duo bar strip) must not draw then: the window the
+  /// engine draws into is the sheet.
+  static bool get isShowingNow => drawn.value != null;
 
   /// Shows [builder]'s widget in the sheet. Returns the value passed to [pop],
   /// or null when the sheet is dragged away.
@@ -178,24 +213,26 @@ class AdaptiveNativeSheet {
     }
     _stack.add(entry);
     active.value = entry;
+    drawn.value = entry;
     return done.future;
   }
 
-  static Timer? _heightTimer;
-  static double _lastHeight = 0;
   static double _lastOpenHeight = 0;
 
   /// Tells UIKit the content's height, so the "fit" detent follows it. Debounced:
   /// an animating widget changes size every frame.
   ///
   /// [entry] says which sheet: a covered sheet drawn again after a rotation
-  /// can measure differently at its new width.
+  /// can measure differently at its new width. Only the sheet the engine
+  /// draws is laid out at its own size, so a measurement of any other sheet
+  /// is dropped.
   static void _reportHeight(AdaptiveNativeSheetEntry entry, double height) {
-    if ((height - _lastHeight).abs() < 0.5) return;
-    _lastHeight = height;
-    _lastOpenHeight = height;
-    _heightTimer?.cancel();
-    _heightTimer = Timer(const Duration(milliseconds: 40), () {
+    if (drawn.value != entry) return;
+    if ((height - entry._lastHeight).abs() < 0.5) return;
+    entry._lastHeight = height;
+    if (entry == _stack.lastOrNull) _lastOpenHeight = height;
+    entry._heightTimer?.cancel();
+    entry._heightTimer = Timer(const Duration(milliseconds: 40), () {
       final depth = _stack.indexOf(entry);
       if (depth < 0) return;
       _channel
@@ -243,64 +280,133 @@ class AdaptiveNativeSheetEntry {
   final WidgetBuilder builder;
   final Color? backgroundColor;
   final void Function(Object? value) complete;
+
+  /// The content height last reported for this sheet, and the debounce of
+  /// the next report.
+  double _lastHeight = 0;
+  Timer? _heightTimer;
 }
 
 /// Fills the window, which on iOS is the sheet, with the caller's widget.
 ///
-/// Placed above the app by `AdaptiveToolbarHost`. It has its own [Overlay], so
-/// widgets that need one (tooltips, menus) work inside it. Where the window
-/// has a vertical bar (iPhone Duo), it drops that bar's side inset, since the
-/// sheet floats inside the window and is not part of the strip the system
-/// reserves for it. Every other inset stays, such as the camera housing's on
-/// either side of an iPhone in landscape, where the sheet fills the screen.
+/// Placed above the app by `AdaptiveToolbarHost`. The topmost sheet's widget
+/// stays mounted while any sheet is up, and is painted while the engine draws
+/// that sheet ([AdaptiveNativeSheet.drawn]). While the engine draws another
+/// layer (the page or a covered sheet, after the window changed size) it is
+/// kept offstage at the size it last had, so nothing in it is laid out again
+/// and its native views are where they were when the engine returns; the
+/// covered sheet being drawn is mounted for that alone, over the page.
+///
+/// Each sheet has its own [Overlay], so widgets that need one (tooltips,
+/// menus) work inside it. Where the window has a vertical bar (iPhone Duo),
+/// it drops that bar's side inset, since the sheet floats inside the window
+/// and is not part of the strip the system reserves for it. Every other inset
+/// stays, such as the camera housing's on either side of an iPhone in
+/// landscape, where the sheet fills the screen.
 class AdaptiveNativeSheetLayer extends StatelessWidget {
   const AdaptiveNativeSheetLayer({super.key});
 
   @override
-  Widget build(BuildContext context) =>
-      ValueListenableBuilder<AdaptiveNativeSheetEntry?>(
-        valueListenable: AdaptiveNativeSheet.active,
-        builder: (context, entry, _) {
-          if (entry == null) return const SizedBox.shrink();
-          final mq = MediaQuery.of(context);
-          final pose = DuoPoseScope.of(context);
-          // A full-screen sheet fills the window like a page, so it keeps
-          // the strip's inset.
-          EdgeInsets withoutStrip(EdgeInsets insets) =>
-              pose == null || entry.fullScreen
-              ? insets
-              : pose.onLeft
-              ? insets.copyWith(left: 0)
-              : insets.copyWith(right: 0);
-          return Positioned.fill(
-            child: MediaQuery(
-              data: mq.copyWith(
-                padding: withoutStrip(mq.padding),
-                viewPadding: withoutStrip(mq.viewPadding),
-              ),
-              child: ColoredBox(
-                color:
-                    entry.backgroundColor ??
-                    CupertinoColors.systemBackground.resolveFrom(context),
-                child: Overlay(
-                  // A different sheet on top gets a fresh overlay.
-                  key: ObjectKey(entry),
-                  initialEntries: [
-                    OverlayEntry(
-                      builder: (context) => entry.fits
-                          ? _FitContent(
-                              entry: entry,
-                              child: entry.builder(context),
-                            )
-                          : entry.builder(context),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: Listenable.merge([
+      AdaptiveNativeSheet.active,
+      AdaptiveNativeSheet.drawn,
+    ]),
+    builder: (context, _) {
+      final top = AdaptiveNativeSheet.active.value;
+      if (top == null) return const SizedBox.shrink();
+      final drawn = AdaptiveNativeSheet.drawn.value;
+      return Positioned.fill(
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // A covered sheet the engine draws again, mounted for that alone.
+            if (drawn != null && drawn != top)
+              _SheetSlot(key: ObjectKey(drawn), entry: drawn, painted: true),
+            // The top sheet, mounted throughout.
+            _SheetSlot(key: ObjectKey(top), entry: top, painted: drawn == top),
+          ],
+        ),
       );
+    },
+  );
+}
+
+/// One sheet's widget in [AdaptiveNativeSheetLayer].
+///
+/// While [painted], it fills the window, which is its sheet, and remembers
+/// the window's metrics. While not, it stays mounted but offstage, laid out
+/// with those metrics, so the engine can draw another layer at that layer's
+/// size without this sheet's widgets being measured at it: the sheet's
+/// native views would move and come back, and a fit sheet would report a
+/// height it does not have.
+class _SheetSlot extends StatefulWidget {
+  const _SheetSlot({super.key, required this.entry, required this.painted});
+
+  final AdaptiveNativeSheetEntry entry;
+  final bool painted;
+
+  @override
+  State<_SheetSlot> createState() => _SheetSlotState();
+}
+
+class _SheetSlotState extends State<_SheetSlot> {
+  /// The window's metrics when this sheet was last painted.
+  MediaQueryData? _painted;
+
+  @override
+  Widget build(BuildContext context) {
+    final entry = widget.entry;
+    var mq = MediaQuery.of(context);
+    if (widget.painted) {
+      _painted = mq;
+    } else {
+      mq = _painted ?? mq;
+    }
+    final pose = DuoPoseScope.of(context);
+    // A full-screen sheet fills the window like a page, so it keeps the
+    // strip's inset.
+    EdgeInsets withoutStrip(EdgeInsets insets) =>
+        pose == null || entry.fullScreen
+        ? insets
+        : pose.onLeft
+        ? insets.copyWith(left: 0)
+        : insets.copyWith(right: 0);
+    // Always present, with no bounds of its own while painted, so that
+    // toggling [painted] never moves the sheet's widget in the element tree.
+    final size = widget.painted ? null : mq.size;
+    return Visibility(
+      visible: widget.painted,
+      maintainState: true,
+      child: OverflowBox(
+        alignment: Alignment.topLeft,
+        minWidth: size?.width,
+        maxWidth: size?.width,
+        minHeight: size?.height,
+        maxHeight: size?.height,
+        child: MediaQuery(
+          data: mq.copyWith(
+            padding: withoutStrip(mq.padding),
+            viewPadding: withoutStrip(mq.viewPadding),
+          ),
+          child: ColoredBox(
+            color:
+                entry.backgroundColor ??
+                CupertinoColors.systemBackground.resolveFrom(context),
+            child: Overlay(
+              initialEntries: [
+                OverlayEntry(
+                  builder: (context) => entry.fits
+                      ? _FitContent(entry: entry, child: entry.builder(context))
+                      : entry.builder(context),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// Lays [child] out at its natural height and reports it, so the native sheet
@@ -329,7 +435,6 @@ class _FitContentState extends State<_FitContent> {
   @override
   void initState() {
     super.initState();
-    AdaptiveNativeSheet._lastHeight = 0;
     _measure();
   }
 
