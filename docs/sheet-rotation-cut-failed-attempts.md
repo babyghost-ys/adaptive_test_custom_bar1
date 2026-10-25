@@ -263,3 +263,93 @@ Following the user's choice, `AdaptiveNativeSheet` no longer uses UIKit sheets:
 - `NativeWidgetSheet.swift` is deleted along with its `adaptive_platform_ui/widget_sheet` channel.
   `AdaptiveNativeSheet.drawn`, `isShowingNow` and `AdaptiveNativeSheetLayer` are removed, and the
   Duo strip always draws.
+
+## Attempt 8: `UIRequiresFullScreen` (discrete scene resizing)
+
+**Status: FAILED. Confirmed on the phone: the cut is unchanged.**
+
+Apple's TN3192 (revised 2026-08-13) and WWDC26 session 278 say that from iOS 27, an app
+built with the iOS 27 SDK that sets `UIRequiresFullScreen` to `YES` is resized
+*discretely* instead of live, the mode meant for apps that render into one surface. The
+idea: if an iPhone rotation is a live resize of the window scene, this would take it off
+that path and no old-screen picture would be taken. The key was added to
+`ios/Runner/Info.plist`, built with Xcode 27.1 (iPhoneOS 27.1 SDK; the built bundle carried
+`UIRequiresFullScreen = true`) and installed as a Release build on the iPhone 18 Pro,
+iOS 27.0.1. No Swift or Dart changed.
+
+**What its failure shows.** Either an iPhone rotation on the device is not governed by the
+scene's user resizability (the key may only matter where a person drags the window: iPad,
+iPhone Mirroring), or the picture is not the live-resize one. The key is removed again:
+on iPadOS 26 it still means full-screen compatibility mode, and on iPadOS 27 and the
+iPhone Duo it would make split-view resizes discrete.
+
+## Attempt 9: pin the covers at their own size while the picture is up
+
+**Status: FAILED. Confirmed on the phone: the cut looks the same.**
+
+Geometry of the picture, from the recording (`GJMZ8480.MP4`): in both directions it is the
+top-left 402 by 402 square of the window's *new* coordinate space, it shows the old screen
+at its natural size from the window's origin, and it turns with the window like everything
+else. So it is a layer the size of the new window at the window's origin, holding the old
+screen's pixels unscaled. Under it, the committed code showed the page's and the sheet's
+new-size frames squeezed into bounds that were still nearly the old shape (frames 87 and
+170 of the recording), and a plain Flutter view would show its old frame stretched. Neither
+matches the picture, so its bottom edge reads as a cut.
+
+The change: as the turn starts the page and the top sheet are each covered by the frame
+their layer shows (`layer.contents`, no `drawHierarchy`), with `contentMode = .topLeft`, so
+the old frame stays at its own size from the view's top-left corner instead of stretching
+with the view. Under the picture that is pixel for pixel what the picture shows. The engine
+hand-over proceeds under the covers as before (page drawn at its new size, then the sheet),
+and both covers go together once both are drawn and the picture has had time to fade
+(0.2 s after the first display refresh of the turn: UIKit's 0.1 s fade plus the frames
+before it starts). The strip of a view beyond its old frame, which grows as the bounds
+animate, shows the view's own layer underneath.
+
+**What its failure shows.** If the covers were in place from the first frame, the page under
+the picture showed the old frame unscaled from the window's origin, which is what the
+picture was taken to be, and the picture's edge should have vanished over the page. It did
+not. So either the picture is not an unscaled old-screen layer at the window's origin, or
+the covers were not what was on screen under it. The next step is to read the phone's own
+UIKitCore (iOS 27.0.1, from Xcode's device support symbols) rather than the simulator's,
+to find where the picture is made and inserted on the device.
+
+## Attempt 10: fill the scene's picture slot
+
+**Status: FAILED. Confirmed on the phone: the cut is unchanged.**
+
+From the phone's own UIKitCore (iOS 27.0.1, Xcode's device support symbols, full symbol
+table), not the simulator's:
+
+- `-[UIWindowScene _computeMetricsAndCrossFadeInLiveResize:withTransitionContext:]` takes
+  the picture only when `_effectiveUISettings.inLiveResize` is set, when
+  `_UISceneLiveResizeSnapshotsEnabled()` is true (the `live_scene_resize` feature flag and,
+  read on every call, `snapshottingEnabled` on `[_UISceneLiveResizePrototypeSettingsDomain
+  rootSettings]`), **and when the scene's `_liveResizeSnapshot` ivar (offset 408 on this
+  build) is nil**. It then calls `_makeUISceneViewForLiveResize` on the top scene-sized
+  window with a root view controller (`+[UIWindow _topVisibleWindowPassingTest:]`, all
+  windows, internal ones included) and `-[UIWindow _insertLiveResizeSnapshot:]` as a direct
+  call, which `addSubview:`s the picture to that window and keeps it in
+  `UIWindow._lowestLiveResizeSnapshot` (offset 720).
+- `-[UIWindowScene _scheduleResizeFinishedActionAndFadeOutSnapshot]` runs right after the
+  metrics are computed: it empties the scene's slot, then animates the picture's `alpha` to
+  0 over `LiveResizeCrossFadeDuration` and, on completion, calls
+  `[[picture window] _removeLiveResizeSnapshot:picture]`, which returns at once for a nil
+  window.
+
+The change (`LiveResizePicture` in `NativeWidgetSheet.swift`): while a sheet is up the
+scene's `_liveResizeSnapshot` slot holds an empty hidden view that is in no window, so UIKit
+takes no picture; the slot is filled again after each turn (UIKit empties it at the fade),
+and the prototype setting `snapshottingEnabled` is turned off as well. Both are undone when
+the last sheet closes. The hand-over code is back to `ac8b4fc` (attempt 9's covers removed).
+`UIRequiresFullScreen` is not in the plist.
+
+**What its failure shows.** With the scene's `_liveResizeSnapshot` slot filled and
+`snapshottingEnabled` off, `_computeMetricsAndCrossFadeInLiveResize:withTransitionContext:`
+cannot take the picture, yet the cut is the same. So either that method is not where the
+device's picture comes from (a rotation on the phone may not run through the live-resize
+path at all, and the picture is made elsewhere), or the slot and setting were not what UIKit
+read at the time. Ten attempts have now been made against this picture: hiding it five ways,
+holding old frames, moving the sheet into Flutter, discrete resizing, pinned covers, and
+filling UIKit's own slot. None changed what the phone shows. The code is reverted to
+`ac8b4fc`; only these notes remain.
