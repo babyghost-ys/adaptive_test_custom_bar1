@@ -4,6 +4,11 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<!-- Use system CAMetalLayer for the page, sheets and platform-view overlays.
+	     Avoid FlutterMetalLayer's IOSurface-to-CALayer.contents presentation path
+	     while investigating the physical-device rotation cut (attempt 12). -->
+	<key>FLTUseFlutterMetalLayer</key>
+	<false/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

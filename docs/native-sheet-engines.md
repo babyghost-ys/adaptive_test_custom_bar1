@@ -8,6 +8,14 @@ it must not be treated as a successful rotation fix. See
 [attempt 11](sheet-rotation-cut-failed-attempts.md#attempt-11-independent-flutter-engine-for-each-uikit-sheet)
 and the ten earlier failed attempts.
 
+On 2026-10-26 the user authorized another approach. Attempt 12 retains this
+ownership design but sets `FLTUseFlutterMetalLayer=false` in the main app's
+Info.plist, selecting system `CAMetalLayer` for every Flutter engine and overlay.
+**Attempt 12 also FAILED:** after the signed Release build was installed on the
+iPhone 18 Pro, the user reported "still not working" and requested documentation
+only, with no retry. See the attempt log for details. The setting and independent
+engines remain in place; neither attempt is a verified rotation fix.
+
 ## Ownership
 
 - The page engine stays attached to its original `FlutterViewController`.

@@ -1,6 +1,6 @@
 # Sheet rotation cut on a real phone: failed attempts
 
-**Attempts 1–11: FAILED.** None of those attempts removed the cut. Each was installed as a Release
+**Attempts 1–12: FAILED.** None of those attempts removed the cut. Each was installed as a Release
 build on an iPhone 18 Pro running iOS 27.0.1, and the user confirmed on the phone that the cut is
 still there.
 
@@ -8,6 +8,11 @@ still there.
 described below and in [native-sheet-engines.md](native-sheet-engines.md).
 The user confirmed that the problem remains on the phone and requested
 documentation only, with no retry. No further implementation changes were made.
+
+**Attempt 12 (2026-10-26): system `CAMetalLayer` presentation — FAILED.** After
+installation, the user confirmed that the problem remains on the phone and
+requested documenting the failure with no retry. Only documentation was updated
+after that report.
 
 ## The bug
 
@@ -401,3 +406,68 @@ severity, stretching or background appearance are not established.
 in place; it was not reverted. The user explicitly requested documenting this
 failure and no retry. Only documentation was updated after that instruction;
 no further build, install, simulator run, test or device inspection was performed.
+
+## Attempt 12: use system CAMetalLayer instead of FlutterMetalLayer
+
+**Status: FAILED.** The signed Release build compiled and installed on the iPhone
+18 Pro on 2026-10-26. The user subsequently reported: "still not working."
+The sheet-cut problem remains unresolved. The packaged Info.plist was
+read before installation and contains Boolean `FLTUseFlutterMetalLayer=false`.
+`devicectl` reported successful installation of `com.peterleung.meridian`.
+The agent did not launch the app, run simulators or tests, or collect device
+screenshots or logs. Build and install success do not establish a rotation fix.
+
+All eleven previous attempts were read first. This changes the engine's surface
+presentation backend, not sheet geometry, snapshots, rotation timing or engine
+ownership. The independent engines from attempt 11 remain in place.
+
+### Evidence for a distinct path
+
+The installed Flutter 3.47.8 SDK uses engine revision
+`cf636b1dfb818dd6a3ff16e390e93b1a036969c8`. Its source and the bundled Release
+framework both contain `FLTUseFlutterMetalLayer`:
+
+- `FlutterMetalLayer.mm`, `+enabled`, reads the main bundle's Info.plist once.
+  Missing key defaults to true; an explicit Boolean false disables that layer.
+- `rendering_api_selection.mm`, `GetCoreAnimationLayerClassForRenderingAPI`,
+  selects Apple's `CAMetalLayer` when that setting is false.
+- `FlutterOverlayView.mm`, `+layerClass`, uses `FlutterView.layerClass` too, so
+  Flutter drawing around native platform controls takes the same path.
+- The custom `FlutterMetalLayer` presents by assigning an IOSurface to
+  `CALayer.contents`; the system layer uses Metal drawables. Impeller remains
+  enabled, and this is not software rendering or a switch to Skia.
+- The app/package's current iOS code has no remaining `layer.contents` access
+  dependent on the old IOSurface representation. The drawer uses masks instead.
+
+The Flutter maintainer also recommends this option for investigating other
+device presentation problems in
+[flutter/flutter#175790](https://github.com/flutter/flutter/issues/175790).
+That issue is not proof that it fixes this rotation defect.
+
+### Change and limits
+
+`ios/Runner/Info.plist` now sets `FLTUseFlutterMetalLayer` to Boolean false.
+The setting applies from process startup to the page engine, all sheet engines
+and their Flutter overlays. UIKit sheets, native controls, filter state, detents,
+safe areas, window topology and normal rotation lifecycle are unchanged in code.
+No snapshot hooks, forced viewport timing, frozen background, stretch cover or
+replacement controls are introduced.
+
+The hypothesis was that bypassing the custom surface-presentation path might
+remove the cut that persisted across engine ownership changes.
+
+**What its failure shows.** Installing the build configured with
+`FLTUseFlutterMetalLayer=false`, while retaining the independent sheet engines,
+did not solve the reported phone defect. This configuration change is not a
+proven fix and must not be repeated as an untried approach. The packaged setting
+and source selection logic were checked; the active layer classes were not
+inspected on the phone. This result does not identify the root cause or establish
+that the cut is unavoidable. No new recording or runtime evidence was collected
+after the report, so changes in timing, severity, stretching or background
+appearance are not established.
+
+**State left in the working tree:** `FLTUseFlutterMetalLayer=false` remains in
+`ios/Runner/Info.plist`, and the independent-engine implementation remains in
+place. Neither was reverted. The user explicitly requested documentation only
+and no retry. Only documentation was changed after that instruction; no further
+build, install, simulator run, test or device inspection was performed.
