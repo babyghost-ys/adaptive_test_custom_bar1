@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 
+import 'package:native_widgets_on_duo/app/native_sheet_codec.dart';
 import 'package:native_widgets_on_duo/app/theme/palette.dart';
 import 'package:native_widgets_on_duo/core/formatting/money.dart';
 import 'package:native_widgets_on_duo/core/widgets/label.dart';
@@ -19,6 +20,9 @@ Future<MarketFilter?> showMarketFilterSheet(
   final draft = ValueNotifier(current);
   return AdaptiveNativeSheet.show<MarketFilter>(
     context: context,
+    route: 'markets',
+    arguments: NativeSheetCodec.encode(current),
+    decodeResult: NativeSheetCodec.markets,
     builder: (_) => MarketFilterContent(draft: draft),
   ).whenComplete(draft.dispose);
 }

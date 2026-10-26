@@ -1,5 +1,14 @@
 # Building the native filter sheet, nested sheets included
 
+> Historical guide: the widget-sheet engine handoff implementation below was
+> replaced on 2026-10-25. Do not restore its single-engine controller pool,
+> snapshots, `drawLayer`, or private Flutter lifecycle calls. The current
+> implementation and integration contract are in
+> [Independent sheet engines](native-sheet-engines.md), which also failed to fix
+> the phone rotation cut (attempt 11, confirmed by the user). Neither architecture
+> is a verified fix for that defect. The native UIKit-only
+> `AdaptiveFilterSheet` API is unaffected.
+
 Instructions for an AI agent adding a native filter sheet to a Flutter app that uses
 `adaptive_platform_ui`, the way this repository does. Assume the package has no native
 sheet support yet: you add all of it here. The app passes one plain Flutter `Widget`; the

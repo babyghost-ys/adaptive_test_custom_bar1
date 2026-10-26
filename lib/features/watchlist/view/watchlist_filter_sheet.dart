@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 
+import 'package:native_widgets_on_duo/app/native_sheet_codec.dart';
 import 'package:native_widgets_on_duo/core/formatting/money.dart';
 import 'package:native_widgets_on_duo/core/widgets/label.dart';
 import 'package:native_widgets_on_duo/core/widgets/sheet_frame.dart';
@@ -22,6 +23,9 @@ Future<WatchlistFilter?> showWatchlistFilterSheet(
   );
   return AdaptiveNativeSheet.show<WatchlistFilter>(
     context: context,
+    route: 'watchlist',
+    arguments: NativeSheetCodec.encode(current),
+    decodeResult: NativeSheetCodec.watchlist,
     isDismissible: false,
     builder: (_) => WatchlistFilterContent(draft: draft, more: more),
   ).whenComplete(() {

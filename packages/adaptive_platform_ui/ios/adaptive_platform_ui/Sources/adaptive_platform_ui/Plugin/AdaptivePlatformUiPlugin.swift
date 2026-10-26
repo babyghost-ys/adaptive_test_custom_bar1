@@ -6,7 +6,19 @@ import UIKit
 public class AdaptivePlatformUiPlugin: NSObject, FlutterPlugin {
 
     public static func register(with registrar: FlutterPluginRegistrar) {
-        NativeNavigationHost.registerNavigation(messenger: registrar.messenger())
+        register(with: registrar, ownsNavigation: true)
+    }
+
+    /// Sheet engines own their controls but must not replace the page's
+    /// process-wide native navigation and drawer channels.
+    static func registerSheetContent(with registrar: FlutterPluginRegistrar) {
+        register(with: registrar, ownsNavigation: false)
+    }
+
+    private static func register(with registrar: FlutterPluginRegistrar, ownsNavigation: Bool) {
+        if ownsNavigation {
+            NativeNavigationHost.registerNavigation(messenger: registrar.messenger())
+        }
         AdaptiveNativeFonts.register(messenger: registrar.messenger())
         // The search tab view covers the whole screen, and Flutter only routes
         // touches on the tab bar and search field to it. With the default
@@ -17,11 +29,13 @@ public class AdaptivePlatformUiPlugin: NSObject, FlutterPlugin {
         // be dismissed by tapping elsewhere. Hit testing already decides which
         // touches reach this view, so no arena-based blocking is needed.
         // Requires Flutter 3.47 or later.
-        registrar.register(SearchTabFactory(messenger: registrar.messenger()),
-                           withId: "adaptive_platform_ui/search_tabs",
-                           gestureRecognizersBlockingPolicy: FlutterPlatformViewGestureRecognizersBlockingPolicyDoNotBlockGesture)
-        registrar.register(NavigationSearchFactory(messenger: registrar.messenger()),
-                           withId: "adaptive_platform_ui/navigation_search")
+        if ownsNavigation {
+            registrar.register(SearchTabFactory(messenger: registrar.messenger()),
+                               withId: "adaptive_platform_ui/search_tabs",
+                               gestureRecognizersBlockingPolicy: FlutterPlatformViewGestureRecognizersBlockingPolicyDoNotBlockGesture)
+            registrar.register(NavigationSearchFactory(messenger: registrar.messenger()),
+                               withId: "adaptive_platform_ui/navigation_search")
+        }
         registrar.register(NativeTextFieldViewFactory(messenger: registrar.messenger()),
                            withId: "adaptive_platform_ui/text_field")
         let actionSheets = AnchoredActionSheet(hostProvider: { registrar.viewController })
@@ -39,12 +53,20 @@ public class AdaptivePlatformUiPlugin: NSObject, FlutterPlugin {
             filterSheets.handle(call, result: result)
         }
 
-        let widgetSheetChannel = FlutterMethodChannel(
-            name: "adaptive_platform_ui/widget_sheet", binaryMessenger: registrar.messenger())
-        let widgetSheets = NativeWidgetSheet(
-            channel: widgetSheetChannel, hostProvider: { registrar.viewController })
-        widgetSheetChannel.setMethodCallHandler { call, result in
-            widgetSheets.handle(call, result: result)
+        let widgetSheets: NativeWidgetSheet?
+        if ownsNavigation {
+            let widgetSheetChannel = FlutterMethodChannel(
+                name: "adaptive_platform_ui/widget_sheet", binaryMessenger: registrar.messenger())
+            let manager = NativeWidgetSheet(
+                channel: widgetSheetChannel, hostProvider: { registrar.viewController })
+            widgetSheetChannel.setMethodCallHandler { call, result in
+                manager.handle(call, result: result)
+            }
+            widgetSheets = manager
+        } else {
+            // The owning sheet manager installs this engine's channel, so
+            // nested presentation returns to the correct parent isolate.
+            widgetSheets = nil
         }
 
 
@@ -103,18 +125,20 @@ public class AdaptivePlatformUiPlugin: NSObject, FlutterPlugin {
         )
 
         // Register iOS 26 TabBar platform view factory
-        let ios26TabBarFactory = iOS26TabBarViewFactory(messenger: registrar.messenger())
-        registrar.register(
-            ios26TabBarFactory,
-            withId: "adaptive_platform_ui/ios26_tab_bar"
-        )
+        if ownsNavigation {
+            let ios26TabBarFactory = iOS26TabBarViewFactory(messenger: registrar.messenger())
+            registrar.register(
+                ios26TabBarFactory,
+                withId: "adaptive_platform_ui/ios26_tab_bar"
+            )
 
-        // Register iOS 26 Toolbar platform view factory
-        let ios26ToolbarFactory = iOS26ToolbarFactory(messenger: registrar.messenger())
-        registrar.register(
-            ios26ToolbarFactory,
-            withId: "adaptive_platform_ui/ios26_toolbar"
-        )
+            // Register iOS 26 Toolbar platform view factory
+            let ios26ToolbarFactory = iOS26ToolbarFactory(messenger: registrar.messenger())
+            registrar.register(
+                ios26ToolbarFactory,
+                withId: "adaptive_platform_ui/ios26_toolbar"
+            )
+        }
 
         // Register iOS 26 Blur View platform view factory
         let ios26BlurViewFactory = iOS26BlurViewFactory(messenger: registrar.messenger())
@@ -134,7 +158,7 @@ public class AdaptivePlatformUiPlugin: NSObject, FlutterPlugin {
         // Measured in the page's view controller: while a native sheet is up,
         // the engine's own is the sheet.
         let titleBand = DuoTitleBand(
-            hostProvider: { widgetSheets.pageController ?? registrar.viewController })
+            hostProvider: { widgetSheets?.pageController ?? registrar.viewController })
         let titleBandChannel = FlutterMethodChannel(
             name: "adaptive_platform_ui/duo_title_band",
             binaryMessenger: registrar.messenger()

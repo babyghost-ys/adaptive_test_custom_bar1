@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 
+import 'package:native_widgets_on_duo/app/native_sheet_codec.dart';
 import 'package:native_widgets_on_duo/app/theme/palette.dart';
 import 'package:native_widgets_on_duo/core/formatting/money.dart';
 import 'package:native_widgets_on_duo/core/widgets/label.dart';
@@ -23,6 +24,9 @@ Future<ActivityFilter?> showActivityFilterSheet(
   );
   return AdaptiveNativeSheet.show<ActivityFilter>(
     context: context,
+    route: 'activity',
+    arguments: NativeSheetCodec.encode(current),
+    decodeResult: NativeSheetCodec.activity,
     builder: (_) => ActivityFilterContent(draft: draft, more: more),
   ).whenComplete(() {
     draft.dispose();
@@ -154,8 +158,7 @@ class _DateLine extends StatelessWidget {
     'Dec',
   ];
 
-  // No ink: the sheet opening is the feedback, and a ripple would be
-  // caught mid-animation in the still frame this sheet shows underneath.
+  // Opening the native sheet supplies the interaction feedback.
   @override
   Widget build(BuildContext context) => GestureDetector(
     onTap: onTap,
@@ -195,6 +198,9 @@ Future<DateTime?> showDateSheet(BuildContext context, DateTime initial) {
   final chosen = ValueNotifier(initial);
   return AdaptiveNativeSheet.show<DateTime>(
     context: context,
+    route: 'date',
+    arguments: NativeSheetCodec.encode(initial),
+    decodeResult: NativeSheetCodec.date,
     builder: (_) => DateSheetContent(chosen: chosen),
   ).whenComplete(chosen.dispose);
 }

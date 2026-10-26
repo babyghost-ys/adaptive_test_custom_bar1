@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 
+import 'package:native_widgets_on_duo/app/native_sheet_codec.dart';
 import 'package:native_widgets_on_duo/app/theme/palette.dart';
 import 'package:native_widgets_on_duo/core/formatting/money.dart';
 import 'package:native_widgets_on_duo/core/widgets/label.dart';
@@ -19,6 +20,9 @@ Future<OrdersFilter?> showOrdersFilterSheet(
   final draft = ValueNotifier(current);
   return AdaptiveNativeSheet.show<OrdersFilter>(
     context: context,
+    route: 'orders',
+    arguments: NativeSheetCodec.encode(current),
+    decodeResult: NativeSheetCodec.orders,
     builder: (_) => OrdersFilterContent(draft: draft),
   ).whenComplete(draft.dispose);
 }
@@ -148,8 +152,7 @@ class _AccountsLine extends StatelessWidget {
   final Set<Account> accounts;
   final VoidCallback onTap;
 
-  // No ink: the sheet opening is the feedback, and a ripple would be
-  // caught mid-animation in the still frame this sheet shows underneath.
+  // Opening the native sheet supplies the interaction feedback.
   @override
   Widget build(BuildContext context) => GestureDetector(
     onTap: onTap,
@@ -193,6 +196,9 @@ Future<Set<Account>?> showAccountsSheet(
   );
   return AdaptiveNativeSheet.show<Set<Account>>(
     context: context,
+    route: 'accounts',
+    arguments: NativeSheetCodec.encode(initial),
+    decodeResult: NativeSheetCodec.accounts,
     builder: (_) => AccountsSheetContent(chosen: chosen),
   ).whenComplete(chosen.dispose);
 }

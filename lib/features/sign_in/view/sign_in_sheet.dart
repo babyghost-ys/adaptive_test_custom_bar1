@@ -11,6 +11,8 @@ import 'package:native_widgets_on_duo/app/theme/typography.dart';
 Future<String?> showSignInSheet(BuildContext context) =>
     AdaptiveNativeSheet.show<String>(
       context: context,
+      route: 'signIn',
+      decodeResult: (value) => value as String,
       fullScreen: true,
       backgroundColor: paper,
       builder: (_) => const SignInContent(),

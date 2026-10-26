@@ -1,8 +1,13 @@
 # Sheet rotation cut on a real phone: failed attempts
 
-**Status: FAILED.** None of the attempts below removed the cut. Each was installed as a Release
+**Attempts 1–11: FAILED.** None of those attempts removed the cut. Each was installed as a Release
 build on an iPhone 18 Pro running iOS 27.0.1, and the user confirmed on the phone that the cut is
 still there.
+
+**Attempt 11 (2026-10-25): independent sheet engines — FAILED.** Implementation
+described below and in [native-sheet-engines.md](native-sheet-engines.md).
+The user confirmed that the problem remains on the phone and requested
+documentation only, with no retry. No further implementation changes were made.
 
 ## The bug
 
@@ -353,3 +358,46 @@ read at the time. Ten attempts have now been made against this picture: hiding i
 holding old frames, moving the sheet into Flutter, discrete resizing, pinned covers, and
 filling UIKit's own slot. None changed what the phone shows. The code is reverted to
 `ac8b4fc`; only these notes remain.
+
+## Attempt 11: independent Flutter engine for each UIKit sheet
+
+**Status: FAILED.** After installing the signed Release build on the iPhone 18 Pro
+on 2026-10-25, the user reported: "still not working." The sheet-cut problem
+remains unresolved. No simulator run or test
+suite was used. The first install connection reset; reconnecting and retrying
+installed `com.peterleung.meridian` successfully. The app was not launched by the
+agent and no physical-device UI or logs were collected.
+
+Read all ten prior attempts before making this change. The new recording,
+`NYAQ7106.MP4` (1206 × 2622, 218 frames), shows the same split across the entire
+composed screen. At approximately 2.458 s, the old landscape sheet and native
+navigation bar stay crisp above the boundary while the new portrait content
+stretches underneath. The old composition fades across both the page and sheet.
+That observation does not identify the producer of the old image and does not
+justify another attempt at suppressing UIKit's private snapshots.
+
+The change removes the app's engine handoff architecture instead:
+
+- Each sheet gets an engine from `FlutterEngineGroup` and keeps its own
+  `FlutterViewController`, platform views, metrics and rendering surface.
+- The original page engine never detaches. Covered sheets keep rendering too.
+- All page/sheet freezing, surface copying, frame watchers, manual lifecycle
+  calls, `drawLayer`, and private rotation metric manipulation are removed.
+- Named routes and codec-safe inputs/results bridge the engines' separate
+  isolates. Existing content widgets, controls, filters and nested flows remain.
+- Sheet engines register the native controls without replacing the main
+  engine's global navigation or drawer channels.
+- UIKit still owns the real sheet, grabber, dimming, detents and drag dismissal.
+
+**What its failure shows.** Replacing the shared-engine handoff with separate
+engines, removing the app's snapshot covers and private rotation calls, and
+keeping each visible view attached to its own engine did not solve the reported
+phone defect. Independent engines alone are not a proven fix. The failure does
+not identify the cause or establish that the cut is unavoidable. No new recording
+or runtime evidence was collected after this report, so differences in timing,
+severity, stretching or background appearance are not established.
+
+**State left in the working tree:** the independent-engine implementation remains
+in place; it was not reverted. The user explicitly requested documenting this
+failure and no retry. Only documentation was updated after that instruction;
+no further build, install, simulator run, test or device inspection was performed.

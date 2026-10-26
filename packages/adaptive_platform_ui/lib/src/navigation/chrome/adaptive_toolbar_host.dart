@@ -1,5 +1,4 @@
 import '../../core/theme/adaptive_theme.dart';
-import '../../overlays/native_sheet/adaptive_native_sheet.dart';
 import '../../core/adaptive_style.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
@@ -116,18 +115,8 @@ class _AdaptiveToolbarHostState extends State<AdaptiveToolbarHost>
               // Always present, so the toolbar after it keeps its position in
               // the element tree as the pose changes.
               Positioned.fill(
-                child: ValueListenableBuilder<AdaptiveNativeSheetEntry?>(
-                  valueListenable: AdaptiveNativeSheet.drawn,
-                  builder: (context, sheet, _) => _BarStrip(
-                    pose: pose,
-                    // The window the engine renders into is a native sheet
-                    // while it draws one; the strip belongs to the page.
-                    style: sheet != null ? null : _stripStyle(context),
-                  ),
-                ),
+                child: _BarStrip(pose: pose, style: _stripStyle(context)),
               ),
-              // The widget of an open native sheet, over everything.
-              const AdaptiveNativeSheetLayer(),
               if (hostsToolbar)
                 HostedTopToolbar(blend: _blend, titleOnly: pose != null),
             ],
