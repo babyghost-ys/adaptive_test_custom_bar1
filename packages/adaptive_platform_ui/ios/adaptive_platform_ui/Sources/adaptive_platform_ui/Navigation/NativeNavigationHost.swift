@@ -135,6 +135,18 @@ final class NativeNavigationHost {
                         let name = String(describing: type(of: $0))
                         return !name.contains("Overlay") && !name.contains("EdgeObserver")
                     }
+                    // A navigation bar hidden while a full-screen Flutter
+                    // route covered the page is out of the hierarchy, with
+                    // its status bar backdrop, and both come back as the
+                    // page returns to the front.
+                    for navigation in [host.navigation, host.regularNavigation, host.externalNavigation] {
+                        guard let navigation else { continue }
+                        let views = [navigation.navigationBar,
+                                     (navigation as? NativeNavigationController)?.safeAreaBackground]
+                        for view in views.compactMap({ $0 }) where !bars.contains(where: { $0 === view }) {
+                            bars.append(view)
+                        }
+                    }
                     cover.mask(bars)
                     host.drawerCover = cover
                     if window.safeAreaInsets.top > 0 {

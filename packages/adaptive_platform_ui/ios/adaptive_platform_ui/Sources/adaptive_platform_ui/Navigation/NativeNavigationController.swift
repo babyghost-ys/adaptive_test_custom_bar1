@@ -10,6 +10,9 @@ final class NativeNavigationController: UINavigationController, UINavigationCont
     }()
     private let stripShadowMask = CAShapeLayer()
     private weak var maskedShadow: UIView?
+    /// The bar colour continued behind the status bar, out of the hierarchy
+    /// while the bar is hidden.
+    var safeAreaBackground: UIView { navigationSafeAreaBackground }
 
     var completedLayout: (() -> Void)?
     /// Background of the appearance applied to the bar itself, shared by

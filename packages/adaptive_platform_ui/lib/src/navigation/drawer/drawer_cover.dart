@@ -125,10 +125,13 @@ class _DrawerCoverReporterState extends State<DrawerCoverReporter> {
     final x = box.localToGlobal(Offset.zero).dx;
     final width = box.size.width;
     final open = widget.isOpen();
-    // Closing from a tap that also pushes a page: once the push covers this
-    // page its animations pause, so the panel may never get out of sight.
+    // A route over this page, such as a sheet opened from the open panel, is
+    // drawn by Flutter beneath UIKit's views, so the cut-open bars and the
+    // backdrop step aside until the page is in front again. (A push as the
+    // panel closes also pauses its animations, so the panel may never get
+    // out of sight.)
     final covered = ModalRoute.isCurrentOf(context) == false;
-    if ((x <= -width + 0.5 || covered) && !open) {
+    if (covered || (x <= -width + 0.5 && !open)) {
       if (_covering) AdaptiveDrawer.clearCover();
       _covering = false;
       _lastX = null;

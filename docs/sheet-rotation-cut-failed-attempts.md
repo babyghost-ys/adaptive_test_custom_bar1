@@ -1,8 +1,8 @@
 # Sheet rotation cut on a real phone: failed attempts
 
-**Attempts 1–12: FAILED.** None of those attempts removed the cut. Each was installed as a Release
-build on an iPhone 18 Pro running iOS 27.0.1, and the user confirmed on the phone that the cut is
-still there.
+**Attempts 1–14: FAILED.** None of those attempts resolved the reported rotation problem. Each was
+installed as a Release build on the iPhone 18 Pro, and the user reported that attempt 14 was
+"way worse."
 
 **Attempt 11 (2026-10-25): independent sheet engines — FAILED.** Implementation
 described below and in [native-sheet-engines.md](native-sheet-engines.md).
@@ -471,3 +471,92 @@ appearance are not established.
 place. Neither was reverted. The user explicitly requested documentation only
 and no retry. Only documentation was changed after that instruction; no further
 build, install, simulator run, test or device inspection was performed.
+
+## Attempt 13: defer fit-height changes during native transitions
+
+**Status: FAILED.** The signed Release build compiled and installed on the
+iPhone 18 Pro on 2026-10-26. The user subsequently reported: "still no" and
+requested documentation only, with no further attempts. The sheet-cut problem
+remains unresolved. The agent did not launch the app, run a simulator or tests,
+or collect device UI or logs. Compilation and installation did not establish
+the visual result.
+
+The fit sheet previously replaced its selected custom detent immediately when
+Flutter reported a new measured content height, even while a rotation
+coordinator was active. That could introduce a second sheet geometry change
+during the rotation. The native-only filter sheet has fixed detents and does not
+perform that same mid-transition replacement; this difference alone does not
+prove it causes the recorded cut across the composed screen.
+
+The sheet now keeps its committed height through presentation and active
+transitions, coalesces new measurements, and applies the latest height after
+the transition completion, outside its animation transaction. It checks the page
+and sheet coordinators and retains normal UIKit and Flutter lifecycle handling.
+On cancellation or closure, pending changes are handled against the remaining
+live sheets. Existing per-level detent replacement is retained: the earlier
+implementation documented that `invalidateDetents()` could also resize a
+covered sheet. No frozen images, fake controls, forced viewport timing, or
+changes to the page's rendering are introduced.
+
+Research in the internal browser included Apple's
+[transition coordinator documentation](https://developer.apple.com/documentation/uikit/uiviewcontrollertransitioncoordinator/animate(alongsidetransition:completion:)),
+which says its completion runs after a transition and may still run even if
+animation registration returns false, and
+[custom detent invalidation documentation](https://developer.apple.com/documentation/uikit/uisheetpresentationcontroller/invalidatedetents()).
+The latter is a supported API, but was not substituted here because of the
+previously documented lower-sheet regression. Flutter's earlier
+[rotation issue](https://github.com/flutter/flutter/issues/16322) was also
+reviewed; its delayed viewport-size change is already present in the installed
+engine and is not repeated as a new fix.
+
+**What its failure shows.** Deferring measured fit-height changes until after
+native transitions, while retaining attempt 11's separate sheet engines and
+attempt 12's `CAMetalLayer` setting, did not solve the reported phone defect.
+The result does not identify the cause or establish that the cut is unavoidable.
+No new recording or runtime evidence was collected after the report, so changes
+in timing, severity, stretching or background appearance are not established.
+
+**State left in the working tree:** the attempt 13 code remains in place, along
+with the settings and architecture from attempts 11 and 12; none were reverted.
+After the user's request to stop, only this documentation was updated. No
+further retry, build, installation, simulator run, test or device inspection was
+performed.
+
+## Attempt 14: UIKit sheet container in the page's window
+
+**Status: FAILED; reported worse.** The signed Release build compiled and
+installed on the iPhone 18 Pro on 2026-10-27. The user subsequently reported
+"way worse" and requested documentation only, with no further attempts today.
+The agent did not launch it, run a simulator or tests, or collect device UI or
+logs. After attempt 13 failed, the user requested another attempt. The documented
+observation that the native-content filter sheet rotates without the cut
+motivated this change in presentation hierarchy; it did not establish the cause
+of the artifact or guarantee a fix.
+
+The first widget sheet is presented from the page's existing window, like the
+native filter sheet. UIKit presents a plain container view controller as the
+real sheet, with a dedicated-engine Flutter view controller contained as its
+child. Flutter still renders the actual supplied widgets; UIKit owns the sheet,
+detents, gestures, and dismissal. Nested sheets retain separate presentation
+windows to avoid the previously documented shrinking of a covered sheet.
+The independent engines and deferred fit-height handling remain in place.
+
+The first sheet was previously presented in the page window when the app lent
+one engine among controllers, and attempt 7 put a Flutter-drawn route in the
+page itself; both failed. This combination of original-window presentation,
+UIKit container, and independent sheet engines has not been reported as tried.
+No screenshot overlays, fake controls, or private rotation hooks were added.
+
+**What its failure shows.** The original-window presentation, UIKit container,
+and independent sheet engines did not resolve the problem; the user reported the
+result was worse. The report did not specify which visual details worsened, and
+no new recording or runtime evidence was collected to establish the mechanism,
+timing, stretching, or background behavior. Compilation and installation did
+not establish visual success.
+
+**State left in the working tree:** after the user requested a revert, attempt
+14's UIKit container and original-window presentation were removed. The code
+was restored to the attempt 13 state; earlier attempt changes remain. A signed
+Release build of that restored state was installed on the iPhone on 2026-10-27.
+This was a rollback, not another fix attempt. No simulator run, test, or device
+inspection was performed.

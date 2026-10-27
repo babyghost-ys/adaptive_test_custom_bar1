@@ -163,11 +163,12 @@ class _NativeSwitchState extends State<NativeSwitch> {
           },
           creationParams: _buildCreationParams(),
           creationParamsCodec: const StandardMessageCodec(),
+          // UIKit needs the entire touch sequence for the switch's glass
+          // thumb. Handed over only once a drag above it (a sheet, a scroll
+          // view) gives up, the touch arrives replayed and the first tap is
+          // lost. A UIKit control keeps a touch that starts on it, too.
           gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
-            Factory<HorizontalDragGestureRecognizer>(
-              () => HorizontalDragGestureRecognizer(),
-            ),
-            Factory<TapGestureRecognizer>(() => TapGestureRecognizer()),
+            Factory<EagerGestureRecognizer>(() => EagerGestureRecognizer()),
           },
         ),
       );

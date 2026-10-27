@@ -16,12 +16,13 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         let dismissible: Bool
         var window: UIWindow?
         var fitHeight: CGFloat
+        var pendingFitHeight: CGFloat?
         var revision = 0
         var presented = false
+        var presenting = false
         var ready = false
         var dismissing = false
         var closed = false
-        var transitionsInFlight = 0
         var startupTimeout: DispatchWorkItem?
 
         init(engine: FlutterEngine, arguments: [String: Any], depth: Int,
@@ -44,6 +45,8 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
     private let engineGroup = FlutterEngineGroup(name: "adaptive.native.sheets", project: nil)
     private var levels: [Level] = []
     private var measuredHeights: [String: CGFloat] = [:]
+    private var heightTransitions: Set<ObjectIdentifier> = []
+    private var unqueuedHeightTransitions: Set<ObjectIdentifier> = []
 
     var pageController: FlutterViewController? {
         originalHost ?? hostProvider() as? FlutterViewController
@@ -150,14 +153,11 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         case "light": controller.overrideUserInterfaceStyle = .light
         default: controller.overrideUserInterfaceStyle = .unspecified
         }
-        controller.onTransition = { [weak level] coordinator in
-            guard let level else { return }
-            level.transitionsInFlight += 1
-            let registered = coordinator.animate(alongsideTransition: nil) { [weak level] _ in
-                guard let level else { return }
-                level.transitionsInFlight = max(0, level.transitionsInFlight - 1)
-            }
-            if !registered { level.transitionsInFlight = max(0, level.transitionsInFlight - 1) }
+        controller.onTransition = { [weak self] coordinator in
+            self?.observeHeightTransition(coordinator)
+        }
+        controller.onLayout = { [weak self] in
+            self?.flushPendingHeights()
         }
         let timeout = DispatchWorkItem { [weak self, weak level] in
             guard let self, let level, !level.ready, !level.closed, !level.dismissing else { return }
@@ -207,8 +207,13 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         }
         controller.presentationController?.delegate = self
         level.presented = true
+        level.presenting = true
         window.makeKeyAndVisible()
-        presenter.present(controller, animated: true)
+        presenter.present(controller, animated: true) { [weak self, weak level] in
+            guard let self, let level else { return }
+            level.presenting = false
+            self.flushPendingHeights()
+        }
     }
 
     @available(iOS 16.0, *)
@@ -223,18 +228,62 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
 
     private func setHeight(_ args: [String: Any], for level: Level) {
         guard let value = (args["height"] as? NSNumber)?.doubleValue,
-              value.isFinite, value > 0, !level.closed,
-              abs(CGFloat(value) - level.fitHeight) > 0.5 else { return }
-        level.fitHeight = CGFloat(value)
-        if let route = level.arguments["route"] as? String { measuredHeights[route] = level.fitHeight }
-        guard #available(iOS 16.0, *), level.detents == "fit", level.presented,
-              let sheet = level.controller.sheetPresentationController else { return }
-        level.revision += 1
-        let resize = { self.setFitDetent(level, sheet: sheet) }
-        if level.transitionsInFlight > 0 || level.controller.transitionCoordinator != nil {
-            resize()
-        } else {
-            sheet.animateChanges(resize)
+              value.isFinite, value > 0, !level.closed, !level.dismissing else { return }
+        let height = CGFloat(value)
+        // A later measurement may return to the committed height during a
+        // transition; discard any older pending measurement in that case.
+        level.pendingFitHeight = abs(height - level.fitHeight) > 0.5 ? height : nil
+        flushPendingHeights()
+    }
+
+    private func observeHeightTransition(_ coordinator: UIViewControllerTransitionCoordinator) {
+        let identifier = ObjectIdentifier(coordinator as AnyObject)
+        guard heightTransitions.insert(identifier).inserted else { return }
+        let queued = coordinator.animate(alongsideTransition: { _ in }) { [weak self] _ in
+            // Leave UIKit's transition transaction before changing detents.
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.heightTransitions.remove(identifier)
+                self.unqueuedHeightTransitions.remove(identifier)
+                self.flushPendingHeights()
+            }
+        }
+        // Apple notes the completion can still run when this returns false.
+        // Keep the transition blocked until it is no longer active instead of
+        // treating the return value as proof that it has finished.
+        if !queued { unqueuedHeightTransitions.insert(identifier) }
+    }
+
+    private func flushPendingHeights() {
+        guard levels.contains(where: { $0.pendingFitHeight != nil }) else { return }
+        var coordinators: [UIViewControllerTransitionCoordinator] = []
+        if let coordinator = pageController?.transitionCoordinator { coordinators.append(coordinator) }
+        for level in levels {
+            if let coordinator = level.controller.transitionCoordinator { coordinators.append(coordinator) }
+            if let coordinator = level.window?.rootViewController?.transitionCoordinator {
+                coordinators.append(coordinator)
+            }
+        }
+        let active = Set(coordinators.map { ObjectIdentifier($0 as AnyObject) })
+        // A completion may not be queued if we discover a coordinator late.
+        // A later layout can release only those already absent from UIKit.
+        let inactive = unqueuedHeightTransitions.subtracting(active)
+        heightTransitions.subtract(inactive)
+        unqueuedHeightTransitions.subtract(inactive)
+        coordinators.forEach { observeHeightTransition($0) }
+        guard heightTransitions.isEmpty, !levels.contains(where: { $0.presenting }) else { return }
+
+        for level in levels where !level.closed && !level.dismissing {
+            guard let height = level.pendingFitHeight else { continue }
+            level.pendingFitHeight = nil
+            level.fitHeight = height
+            if let route = level.arguments["route"] as? String { measuredHeights[route] = height }
+            guard #available(iOS 16.0, *), level.detents == "fit", level.presented,
+                  let sheet = level.controller.sheetPresentationController else { continue }
+            level.revision += 1
+            // Keep the established per-level replacement: invalidating detents
+            // previously resized the covered sheet as well.
+            sheet.animateChanges { self.setFitDetent(level, sheet: sheet) }
         }
     }
 
@@ -281,6 +330,7 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         level.startupTimeout?.cancel()
         level.startupTimeout = nil
         levels.removeLast()
+        flushPendingHeights()
         level.window?.isHidden = true
         (levels.last?.window ?? originalHost?.view.window)?.makeKey()
         level.completion(value)
@@ -289,6 +339,7 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         DispatchQueue.main.async {
             level.channel.setMethodCallHandler(nil)
             level.controller.onTransition = nil
+            level.controller.onLayout = nil
             level.window?.rootViewController = nil
             level.window = nil
             level.engine.viewController = nil
@@ -299,11 +350,17 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
 
 private final class SheetViewController: FlutterViewController {
     var onTransition: ((UIViewControllerTransitionCoordinator) -> Void)?
+    var onLayout: (() -> Void)?
 
     override func viewWillTransition(to size: CGSize,
                                      with coordinator: UIViewControllerTransitionCoordinator) {
-        super.viewWillTransition(to: size, with: coordinator)
         onTransition?(coordinator)
+        super.viewWillTransition(to: size, with: coordinator)
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        onLayout?()
     }
 }
 
