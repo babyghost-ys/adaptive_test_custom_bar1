@@ -1,8 +1,81 @@
 # Sheet rotation cut on a real phone: failed attempts
 
-**Attempts 1–14: FAILED.** None of those attempts resolved the reported rotation problem. Each was
-installed as a Release build on the iPhone 18 Pro, and the user reported that attempt 14 was
-"way worse."
+## Current lead (2026-10-28): adaptive controls inside the sheet content
+
+**Not resolved. Investigate adaptive platform UI components inside the sheet content first.**
+The new phone comparisons point toward the controls and their composition inside the sheet,
+particularly the segmented control. They do not yet prove that one particular widget or rendering
+mechanism is the cause: the first failing comparison changed both the segmented control and the
+Apply button, and the later attempts also changed how the segmented control was hosted.
+
+The comparisons below were made on the iPhone 18 Pro using separate Release builds. The user
+opened and rotated the apps and reported the results; no recordings or frame-by-frame measurements
+were supplied for these POC runs.
+
+1. A small standalone adaptive POC with a short sheet showed **no reported split**. It already
+   contained an adaptive native button inside the sheet, so a native button by itself is not shown
+   to be sufficient to cause the problem in every layout. A separate plain Flutter POC was also
+   created, but no phone rotation result for it was reported.
+2. The adaptive POC was changed to closely match the original Activity page and its short,
+   collapsed filter sheet, including the native toolbar and tab bar. The sheet retained the
+   original Flutter Material chips and Apply button. The user reported **no problem**.
+3. In that Activity sheet, the All/Bought/Dividends chip row was replaced with an
+   `AdaptiveSegmentedControl`, and the Apply button was also changed to `AdaptiveButton`. Both
+   use native iOS views in this configuration. The user reported the **cut appeared** and
+   identified the segmented control as a suspected cause. Since both controls changed at once,
+   that comparison does not isolate the segmented control alone.
+4. The POC kept the native Apply button but replaced the segmented control's Flutter `UiKitView`
+   embedding with a real `UISegmentedControl` hosted directly in a UIKit window and positioned
+   from Flutter. The user reported **the cut remained**. This did not establish whether the
+   window-hosted control stayed aligned throughout the turn, or whether the segmented control,
+   the Apply button, or their surrounding composition caused the cut.
+5. The POC kept that window-hosted native segmented control and restored the original Flutter
+   Material Apply button. The user again reported **the cut remained**. This makes the Apply
+   button's sheet `UiKitView` unnecessary for reproducing the latest result, but does not by
+   itself prove that the segmented control is the sole cause.
+
+The current POC is at `poc_adaptive/` in this workspace and as the **Adaptive Sheet Rotation
+POC** folder on the Desktop. Its copied adaptive package is independent of the original project;
+the window-hosted control experiment is POC-only. The POC is a changing working copy, not a
+preserved snapshot of every version above. The original project's working-tree sheet code also
+contains changes beyond commit `3cc3a20`; the POC copied that working-tree package.
+
+The agent did not launch or inspect these builds on the physical phone; the reports above are
+the user's observations. A simulator run of the Activity POC showed a blank page with the native
+tab bar, including when started through Flutter; its cause was not resolved, so the sheet and
+rotation could not be checked there. Build and installation success do not establish a fix.
+
+## Previous state (2026-10-27): not resolved
+
+**Not resolved.** The code at that point was attempt 15 (commit `3cc3a20`). The user tested it on
+the iPhone 18 Pro and said it is better than the earlier attempts but still not good enough, so it
+is not the fix. Attempts 16 and 17 were built on it and the user judged both failed. Their code
+is reverted; only these notes remain.
+
+Attempt 15 stops putting Flutter content in UIKit sheets for now. On iOS, `AdaptiveNativeSheet`
+shows each sheet as a Flutter route on the root navigator:
+
+- The native tab bar steps aside while a sheet is up.
+- The sheet's top stays below the native navigation bar, and longer content scrolls inside it.
+- The full-screen sign-in is an opaque page route, and the navigation bar hides once it covers
+  the screen.
+
+The UIKit sheet code (`NativeWidgetSheet.swift`, `nativeSheetMain`) is still in the project but
+not used.
+
+What remains on the phone was described by the user after attempt 16, which differed from
+attempt 15 only in how the sheet follows the native bar during a turn, and is recorded in
+`HVYU3067.MP4` (see attempt 16):
+
+- "a slight cut off in the middle": during each turn a picture of the old screen fades out over
+  about 11 to 14 frames, and its straight edge crosses the new layout;
+- "the background content seems not behaving correctly when turning": the old page shows
+  through that picture over the new sheet, and in the first frames of a turn Flutter draws the
+  page in a layout that matches neither orientation.
+
+**Attempts 1–14, 16 and 17: FAILED.** None of those attempts resolved the reported rotation
+problem, and neither does attempt 15. Each was installed as a Release build on the iPhone 18 Pro.
+The user reported that attempt 14 was "way worse."
 
 **Attempt 11 (2026-10-25): independent sheet engines — FAILED.** Implementation
 described below and in [native-sheet-engines.md](native-sheet-engines.md).
@@ -560,3 +633,109 @@ was restored to the attempt 13 state; earlier attempt changes remain. A signed
 Release build of that restored state was installed on the iPhone on 2026-10-27.
 This was a rollback, not another fix attempt. No simulator run, test, or device
 inspection was performed.
+
+## Attempt 15 (2026-10-27): Flutter-drawn sheet below the native bars — NOT A FIX
+
+Commit `3cc3a20`, the code in the project, described under "Current state" above. The user found
+it better on the phone than attempts 1–14, but "still not good enough". Attempts 16 and 17 were
+built on it.
+
+## Attempt 16 (2026-10-27): the sheet follows the bar only at the size it is drawn at — FAILED
+
+**Status: FAILED.** The signed Release build was installed on the iPhone 18 Pro (iOS 27.2) on
+2026-10-27. The user recorded `HVYU3067.MP4` and reported: "still has a slight cut off in the
+middle, and the background content seems not behaving correctly when turning". The code is
+reverted.
+
+The user's request: attempt 15 is better but not good enough; use Flutter's original sheet, which
+renders best when the screen turns, or find a better way.
+
+Checked before the change:
+
+- `CupertinoSheetRoute` / `showCupertinoSheet` in Flutter 3.47.8
+  (`packages/flutter/lib/src/cupertino/sheet.dart`). It is always nearly full height (`topGap`
+  is a fixed ratio of the screen height, 0.08 by default) and scales the page behind it down. It
+  has no fit-to-content detent, so the filter sheets would lose their designed height, and the
+  native navigation bar, a UIKit view above Flutter, cannot scale down with the page. Not used.
+- github.com/szymdzie/iphone_duo_ui_pro, for a fix. It uses Flutter's stock
+  `showModalBottomSheet(useSafeArea: true)` and `showCupertinoModalPopup`, has no native controls
+  inside its sheets and no rotation handling, and has only been tried on simulators, where the
+  cut never shows. Nothing for this problem.
+
+What was found: as a turn starts, UIKit lays the bars out for the new size and
+`NativeNavigationHost.layout()` sends the bar's bottom edge (`onNavigationMetrics`) straight away,
+while Flutter may still be drawing the old size. `_FloatingSheet` caps its height with that
+value, so the sheet could be laid out again mid-turn against the wrong bar, and once more when
+Flutter drew the new size.
+
+The change:
+
+- Every `onNavigationMetrics` message carried the size of the Flutter view the bar was measured
+  at (`NativeNavigationPage.nativeNavigationLayout(contentInset:barBottom:viewSize:)`).
+- Dart filed the readings under that size (`NavigationBarBottoms` in `native_toolbar.dart`: one
+  set for the window, one per `AdaptiveNavigationScrollController`).
+- `_FloatingSheet` read the reading for the size it was drawn at (`MediaQueryData.fromView`) and
+  was rebuilt only when that value changed.
+- On the window's root, `NativeNavigationController.viewWillTransition(to:with:)` registered an
+  `animate(alongsideTransition:)` block that laid the window out and sent the bar's bottom for the
+  new size (`onNavigationBarBottom`) while a sheet covered the page.
+
+What the recording shows (`HVYU3067.MP4`: 1206 × 2622, 60 fps, 242 frames; Activity filter sheet
+up, portrait to landscape at about 1.47 s, back to portrait at about 3.0 s):
+
+- Portrait to landscape starts at about frame 88. From frame 89 a crisp picture of the old screen
+  lies over the live content and fades out over about 11 frames (0.18 s, gone by frame 100).
+- Frames 89 to 92, under that picture, show a Flutter frame laid out like neither orientation: the
+  page has moved up into the navigation bar, and the first row's title, "Dividend · VOO", wraps
+  onto two lines.
+- From frame 93 the live content is the landscape layout. The picture's straight edge crosses
+  the new sheet, and the old page rows show through it over the white sheet.
+- Landscape to portrait: the straight line at 402 pt is already in frame 180, before the turn
+  can be seen. The content above and below it is offset by a few pixels, and the offset grows
+  each frame. Frames 183 to 186 show a second, displaced copy of the sheet's chips. From about
+  frame 186 the portrait layout lies under a fading picture of the old landscape sheet, gone by
+  about frame 194.
+- The earlier notes measured the crisp phase at 6 to 8 frames. Here the picture is visible for
+  11 to 14 frames.
+- The landscape layout appears about 5 frames into a turn that takes about 13 frames. That
+  suggests Flutter's half-way metrics hold did not apply to this turn; not verified.
+- No vertical-bar strip appears in any frame, so the iPhone Duo pose
+  (`DuoLayout.resolvePose`) did not switch mid-turn.
+
+**What its failure shows.** Keeping the sheet's own layout steady through a turn did not remove
+the cut. The page behind the sheet still changed mid-turn, and the old-screen picture was still
+drawn over everything for 11 to 14 frames.
+
+## Attempt 17 (2026-10-27): every bar metric and the safe area at the size Flutter draws — FAILED
+
+**Status: FAILED.** The signed Release build was installed on the iPhone 18 Pro (iOS 27.2) on
+2026-10-27; the agent did not launch it. The user then judged attempts 16 and 17 failed ("I would
+consider all these are failed attempt") and asked for the code to be reverted. No recording of
+this build was provided.
+
+Built on attempt 16. It aimed at the page's mid-turn layout. The page body's top inset is
+`contentTopInset - padding.top` (`native_scaffold.dart`), and UIKit's `contentTopInset` for the
+new size could reach Dart while Flutter still laid out the old size. That fits the page moving
+up into the bar in frames 89 to 92.
+
+The change:
+
+- `_NativeToolbarState` became a `WidgetsBindingObserver`. It held an `onNavigationMetrics`
+  reading measured for a size Flutter was not drawing yet and applied it in `didChangeMetrics`,
+  in the same frame as the new size. Readings for the size Flutter was drawing at applied as
+  before.
+- `NativeNavigationHost.settleForSizeTransition()` replaced attempt 16's bar report and ran from
+  the root's `animate(alongsideTransition:)` block for every page, not only while covered. It
+  laid the window out, called `synchronizeFlutterSafeArea(window)`, then sent the page's metrics
+  for the new size, with the resting inset cached for that geometry (`geometryKey`, the key
+  `layout()` uses). With no cached inset it sent only the bar's bottom, and only while a sheet
+  covered the page.
+
+**What its failure shows.** Nothing was measured: there is no recording of this build. It does
+not show whether the in-between Flutter frames went away. The old-screen picture was not touched
+by either attempt, and no attempt so far has been able to remove it.
+
+**State left in the working tree:** the code of attempts 16 and 17 is reverted to commit
+`3cc3a20` (attempt 15). Only this documentation changed. A signed Release build of the reverted
+state was installed on the iPhone on 2026-10-27, without launching it. This was a rollback, not
+another fix attempt.

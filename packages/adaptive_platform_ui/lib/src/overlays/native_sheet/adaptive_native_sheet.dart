@@ -146,9 +146,8 @@ class AdaptiveNativeSheet {
       elevation: 0,
       constraints: const BoxConstraints(),
       barrierColor: nested ? const Color(0x00000000) : _scrim,
-      builder: (context) => PopScope(
-        canPop: isDismissible,
-        child: _FloatingSheet(
+      builder: (context) {
+        final panel = _FloatingSheet(
           share: switch (detents) {
             AdaptiveFilterDetents.fit => null,
             AdaptiveFilterDetents.short => 0.34,
@@ -159,8 +158,28 @@ class AdaptiveNativeSheet {
           grabber: isDismissible || resizable,
           backgroundColor: backgroundColor,
           builder: builder,
-        ),
-      ),
+        );
+        return PopScope(
+          canPop: isDismissible,
+          child: detents != AdaptiveFilterDetents.fit
+              ? panel
+              : SizedBox.expand(
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: isDismissible
+                              ? () => Navigator.maybePop(context)
+                              : null,
+                        ),
+                      ),
+                      Positioned(left: 0, right: 0, bottom: 0, child: panel),
+                    ],
+                  ),
+                ),
+        );
+      },
     );
   }
 
@@ -463,20 +482,22 @@ class _FloatingSheetState extends State<_FloatingSheet> {
     }
 
     Widget sheet = SheetSurface(
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(36),
+      child: TweenAnimationBuilder<Color?>(
         // Covered by another sheet, only the fill darkens: a layer drawn over
         // the sheet's native controls would be split around them by
         // Flutter's platform view compositing.
-        child: TweenAnimationBuilder<Color?>(
-          tween: ColorTween(
-            end: covered ? Color.alphaBlend(_scrim, fill) : fill,
-          ),
-          duration: const Duration(milliseconds: 220),
-          builder: (context, color, child) =>
-              ColoredBox(color: color ?? fill, child: child),
-          child: content,
+        tween: ColorTween(
+          end: covered ? Color.alphaBlend(_scrim, fill) : fill,
         ),
+        duration: const Duration(milliseconds: 220),
+        builder: (context, color, child) => DecoratedBox(
+          decoration: BoxDecoration(
+            color: color ?? fill,
+            borderRadius: BorderRadius.circular(36),
+          ),
+          child: child,
+        ),
+        child: content,
       ),
     );
     if (share != null) {

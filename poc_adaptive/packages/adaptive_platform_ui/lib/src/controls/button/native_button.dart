@@ -1,0 +1,479 @@
+import 'dart:io';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import '../../style/sf_symbol.dart';
+import '../../native/sheet_platform_view_guard.dart';
+import '../../style/adaptive_native_fonts.dart';
+
+/// iOS 26 native button styles (Liquid Glass design)
+enum NativeButtonStyle {
+  /// Filled button with solid background (primary action)
+  filled,
+
+  /// Tinted button with translucent background
+  tinted,
+
+  /// Gray button with subtle background
+  gray,
+
+  /// Bordered button with outline
+  bordered,
+
+  /// Plain text button without background
+  plain,
+
+  /// Glass effect button with translucent blur
+  glass,
+
+  /// Prominent glass button with enhanced blur effect
+  prominentGlass,
+}
+
+/// iOS 26 button size presets matching native design
+enum NativeButtonSize {
+  /// Small button (height: 28)
+  small,
+
+  /// Medium button (height: 36) - default
+  medium,
+
+  /// Large button (height: 44)
+  large,
+}
+
+/// Native iOS 26 button implementation using platform views
+///
+/// This button uses UIKit platform views to render native iOS 26 Liquid Glass
+/// designs. It communicates with the native iOS side via platform channels.
+///
+/// Features:
+/// - Native Liquid Glass visual effects
+/// - iOS 26 button styles and animations
+/// - Haptic feedback
+/// - Native gesture handling
+/// - Automatic light/dark mode support
+///
+/// Note: For complex layouts with custom widgets, use the AdaptiveButton.child() constructor
+/// which will overlay the widget on top of the native iOS 26 button.
+class NativeButton extends StatefulWidget {
+  /// Creates an iOS 26 style button with a text label
+  const NativeButton({
+    super.key,
+    required this.onPressed,
+    required this.label,
+    this.style = NativeButtonStyle.filled,
+    this.size = NativeButtonSize.medium,
+    this.color,
+    this.textColor,
+    this.enabled = true,
+    this.padding,
+    this.borderRadius,
+    this.minSize,
+    this.useSmoothRectangleBorder = true,
+  }) : child = null,
+       isChildMode = false,
+       sfSymbol = null;
+
+  /// Creates an iOS 26 style button with a custom child widget
+  /// The child will be overlaid on top of the native button background
+  const NativeButton.child({
+    super.key,
+    required this.onPressed,
+    required this.child,
+    this.style = NativeButtonStyle.filled,
+    this.size = NativeButtonSize.medium,
+    this.color,
+    this.enabled = true,
+    this.padding,
+    this.borderRadius,
+    this.minSize,
+    this.useSmoothRectangleBorder = true,
+  }) : label = '',
+       textColor = null,
+       isChildMode = true,
+       sfSymbol = null;
+
+  /// Creates an iOS 26 style button with a native SF Symbol icon
+  const NativeButton.sfSymbol({
+    super.key,
+    required this.onPressed,
+    required this.sfSymbol,
+    this.style = NativeButtonStyle.glass,
+    this.size = NativeButtonSize.medium,
+    this.color,
+    this.enabled = true,
+    this.padding,
+    this.borderRadius,
+    this.minSize,
+    this.useSmoothRectangleBorder = true,
+  }) : label = '',
+       textColor = null,
+       child = null,
+       isChildMode = false;
+
+  /// The callback that is called when the button is tapped
+  final VoidCallback? onPressed;
+
+  /// The text label of the button
+  final String label;
+
+  /// The custom child widget (used in .child() constructor)
+  final Widget? child;
+
+  /// The SF Symbol to display (used in .sfSymbol() constructor)
+  final SFSymbol? sfSymbol;
+
+  /// Whether this is child mode
+  final bool isChildMode;
+
+  /// The visual style of the button
+  final NativeButtonStyle style;
+
+  /// The size preset for the button
+  final NativeButtonSize size;
+
+  /// The color of the button (uses system blue if not specified)
+  final Color? color;
+
+  /// The color of the button text
+  final Color? textColor;
+
+  /// Whether the button is enabled
+  final bool enabled;
+
+  /// The amount of space to surround the child inside the button
+  final EdgeInsetsGeometry? padding;
+
+  /// The border radius of the button
+  final BorderRadius? borderRadius;
+
+  /// The minimum size of the button
+  final Size? minSize;
+
+  /// Whether to use smooth rectangle border (iOS 26+ only)
+  /// When false, uses perfectly circular/capsule shape
+  /// Default is true for smooth rectangle, set to false for circular
+  final bool useSmoothRectangleBorder;
+
+  @override
+  State<NativeButton> createState() => _NativeButtonState();
+}
+
+class _NativeButtonState extends State<NativeButton> {
+  static int _nextId = 0;
+  late final int _id;
+  late final MethodChannel _channel;
+  bool? _lastIsDark;
+  Size? _nativeSize;
+
+  @override
+  void initState() {
+    super.initState();
+    _id = _nextId++;
+    _channel = MethodChannel('adaptive_platform_ui/ios26_button_$_id');
+    _channel.setMethodCallHandler(_handleMethod);
+    AdaptiveNativeFonts.family.addListener(_readNativeSize);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncBrightnessIfNeeded();
+  }
+
+  @override
+  void dispose() {
+    AdaptiveNativeFonts.family.removeListener(_readNativeSize);
+    _channel.setMethodCallHandler(null);
+    super.dispose();
+  }
+
+  Future<void> _syncBrightnessIfNeeded() async {
+    final isDark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
+    if (_lastIsDark != isDark) {
+      try {
+        await _channel.invokeMethod('setBrightness', {'isDark': isDark});
+        _lastIsDark = isDark;
+      } catch (e) {
+        // Ignore errors if platform view is not yet ready
+      }
+    }
+  }
+
+  Future<dynamic> _handleMethod(MethodCall call) async {
+    switch (call.method) {
+      case 'pressed':
+        if (widget.enabled && widget.onPressed != null) {
+          widget.onPressed!();
+        }
+        break;
+    }
+  }
+
+  @override
+  void didUpdateWidget(NativeButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    // Update native side if properties changed
+    if (oldWidget.size != widget.size) {
+      _channel.invokeMethod('setSize', {'size': _sizeToString(widget.size)});
+    }
+    if (oldWidget.style != widget.style) {
+      _channel.invokeMethod('setStyle', {
+        'style': _styleToString(widget.style),
+      });
+    }
+
+    if (oldWidget.enabled != widget.enabled ||
+        (oldWidget.onPressed == null) != (widget.onPressed == null)) {
+      _channel.invokeMethod('setEnabled', {
+        'enabled': widget.enabled && widget.onPressed != null,
+      });
+    }
+
+    if (oldWidget.textColor != widget.textColor) {
+      _channel.invokeMethod('setTextColor', {
+        'color': widget.textColor != null
+            ? _colorToHex(widget.textColor!)
+            : null,
+      });
+    }
+
+    if (oldWidget.label != widget.label) {
+      _channel.invokeMethod('setLabel', {'label': widget.label});
+    }
+
+    if (oldWidget.color != widget.color) {
+      _channel.invokeMethod('setColor', {
+        'color': widget.color != null ? _colorToHex(widget.color!) : null,
+      });
+    }
+
+    if (oldWidget.useSmoothRectangleBorder != widget.useSmoothRectangleBorder) {
+      _channel.invokeMethod('setUseSmoothRectangleBorder', {
+        'useSmoothRectangleBorder': widget.useSmoothRectangleBorder,
+      });
+    }
+
+    // Clearing a symbol must clear it on the native button too.
+    if (oldWidget.sfSymbol != widget.sfSymbol) {
+      _channel.invokeMethod('setIcon', {
+        'iconName': widget.sfSymbol?.name,
+        'iconSize': widget.sfSymbol?.size,
+        'iconColor': widget.sfSymbol?.color != null
+            ? _colorToARGB(widget.sfSymbol!.color!)
+            : null,
+      });
+    }
+    if (oldWidget.label != widget.label ||
+        oldWidget.style != widget.style ||
+        oldWidget.size != widget.size ||
+        oldWidget.sfSymbol != widget.sfSymbol) {
+      _readNativeSize();
+    }
+  }
+
+  Map<String, dynamic> _buildCreationParams() {
+    return {
+      'id': _id,
+      'label': widget.label,
+      'style': _styleToString(widget.style),
+      'size': _sizeToString(widget.size),
+      'enabled': widget.enabled && widget.onPressed != null,
+      'color': widget.color != null ? _colorToHex(widget.color!) : null,
+      'textColor': widget.textColor != null
+          ? _colorToHex(widget.textColor!)
+          : null,
+      'isDark': MediaQuery.platformBrightnessOf(context) == Brightness.dark,
+      'useSmoothRectangleBorder': widget.useSmoothRectangleBorder,
+      if (widget.sfSymbol != null) 'iconName': widget.sfSymbol!.name,
+      if (widget.sfSymbol != null) 'iconSize': widget.sfSymbol!.size,
+      if (widget.sfSymbol?.color != null)
+        'iconColor': _colorToARGB(widget.sfSymbol!.color!),
+    };
+  }
+
+  String _styleToString(NativeButtonStyle style) {
+    switch (style) {
+      case NativeButtonStyle.filled:
+        return 'filled';
+      case NativeButtonStyle.tinted:
+        return 'tinted';
+      case NativeButtonStyle.gray:
+        return 'gray';
+      case NativeButtonStyle.bordered:
+        return 'bordered';
+      case NativeButtonStyle.plain:
+        return 'plain';
+      case NativeButtonStyle.glass:
+        return 'glass';
+      case NativeButtonStyle.prominentGlass:
+        return 'prominentGlass';
+    }
+  }
+
+  String _sizeToString(NativeButtonSize size) {
+    switch (size) {
+      case NativeButtonSize.small:
+        return 'small';
+      case NativeButtonSize.medium:
+        return 'medium';
+      case NativeButtonSize.large:
+        return 'large';
+    }
+  }
+
+  String _colorToHex(Color color) {
+    return '#${color.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}';
+  }
+
+  int _colorToARGB(Color color) {
+    return (((color.a * 255.0).round() & 0xFF) << 24) |
+        (((color.r * 255.0).round() & 0xFF) << 16) |
+        (((color.g * 255.0).round() & 0xFF) << 8) |
+        ((color.b * 255.0).round() & 0xFF);
+  }
+
+  double get _height {
+    switch (widget.size) {
+      case NativeButtonSize.small:
+        return 28.0;
+      case NativeButtonSize.medium:
+        return 36.0;
+      case NativeButtonSize.large:
+        return 44.0;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Only use native implementation on iOS
+    if (!kIsWeb && Platform.isIOS) {
+      final platformView = PlatformViewSheetGuard(
+        child: UiKitView(
+          viewType: 'adaptive_platform_ui/ios26_button',
+          onPlatformViewCreated: (_) => _readNativeSize(),
+          creationParams: _buildCreationParams(),
+          creationParamsCodec: const StandardMessageCodec(),
+        ),
+      );
+
+      // Wrap in SizedBox for height constraint. In child mode the Flutter-drawn
+      // child gives the button its intrinsic width; [padding] surrounds it so
+      // the native pill extends past the label like the native title mode does.
+      Widget buttonWidget = SizedBox(
+        height: _height,
+        child: widget.isChildMode
+            ? Stack(
+                children: [
+                  Positioned.fill(child: platformView),
+                  Center(
+                    child: IgnorePointer(
+                      child: Padding(
+                        padding:
+                            widget.padding ??
+                            const EdgeInsets.symmetric(horizontal: 16.0),
+                        child: widget.child!,
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            : platformView,
+      );
+
+      final content = buttonWidget;
+      buttonWidget = LayoutBuilder(
+        builder: (context, constraints) {
+          final preferred = _nativeSize ?? Size(44, _height);
+          final minimumWidth = widget.minSize?.width ?? 0;
+          final minimumHeight = widget.minSize?.height ?? 0;
+          final height = preferred.height > minimumHeight
+              ? preferred.height
+              : minimumHeight;
+          if (widget.isChildMode && !constraints.hasBoundedWidth) {
+            return ConstrainedBox(
+              constraints: BoxConstraints(minWidth: minimumWidth),
+              child: SizedBox(height: height, child: content),
+            );
+          }
+          final width = constraints.hasBoundedWidth
+              ? constraints.maxWidth
+              : (preferred.width > minimumWidth
+                    ? preferred.width
+                    : minimumWidth);
+          return SizedBox(width: width, height: height, child: content);
+        },
+      );
+
+      return buttonWidget;
+    }
+
+    // Fallback to CupertinoButton on other platforms
+    return _buildFallbackButton();
+  }
+
+  Future<void> _readNativeSize() async {
+    try {
+      final size = await _channel.invokeMapMethod<String, num>(
+        'getIntrinsicSize',
+      );
+      if (!mounted || size == null) return;
+      setState(
+        () => _nativeSize = Size(
+          size['width']!.toDouble(),
+          size['height']!.toDouble(),
+        ),
+      );
+    } on MissingPluginException {
+      // The platform view has not mounted yet, or has already been removed.
+    } on PlatformException {
+      // A subsequent creation callback will measure the mounted native control.
+    }
+  }
+
+  Widget _buildFallbackButton() {
+    final buttonColor = widget.color ?? CupertinoColors.systemBlue;
+    final textStyle = TextStyle(
+      color: widget.textColor ?? CupertinoColors.white,
+    );
+
+    // If child mode, use the child widget
+    final buttonChild = widget.isChildMode
+        ? widget.child!
+        : Text(widget.label, style: textStyle);
+
+    switch (widget.style) {
+      case NativeButtonStyle.filled:
+        return CupertinoButton.filled(
+          onPressed: widget.enabled ? widget.onPressed : null,
+          padding:
+              widget.padding ?? const EdgeInsets.symmetric(horizontal: 16.0),
+          child: buttonChild,
+        );
+
+      case NativeButtonStyle.plain:
+        return CupertinoButton(
+          onPressed: widget.enabled ? widget.onPressed : null,
+          padding:
+              widget.padding ?? const EdgeInsets.symmetric(horizontal: 16.0),
+          child: widget.isChildMode
+              ? widget.child!
+              : Text(
+                  widget.label,
+                  style: TextStyle(color: widget.textColor ?? buttonColor),
+                ),
+        );
+
+      default:
+        return CupertinoButton(
+          onPressed: widget.enabled ? widget.onPressed : null,
+          color: buttonColor,
+          padding:
+              widget.padding ?? const EdgeInsets.symmetric(horizontal: 16.0),
+          child: buttonChild,
+        );
+    }
+  }
+}
