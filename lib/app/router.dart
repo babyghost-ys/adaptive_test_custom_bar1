@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 
@@ -6,10 +7,14 @@ import 'package:native_widgets_on_duo/features/activity/view/activity_page.dart'
 import 'package:native_widgets_on_duo/features/asset_detail/view/asset_details_page.dart';
 import 'package:native_widgets_on_duo/features/home/view/investment_home.dart';
 import 'package:native_widgets_on_duo/features/investment/data/demo_assets.dart';
+import 'package:native_widgets_on_duo/features/investment/models/asset.dart';
+import 'package:native_widgets_on_duo/features/investment/bloc/investment_bloc.dart';
 import 'package:native_widgets_on_duo/features/learn/view/learn_result_page.dart';
 import 'package:native_widgets_on_duo/features/learn/view/question_page.dart';
 import 'package:native_widgets_on_duo/features/markets/view/markets_page.dart';
 import 'package:native_widgets_on_duo/features/portfolio/view/portfolio_page.dart';
+import 'package:native_widgets_on_duo/features/portfolio/view/portfolio_columns.dart';
+import 'package:native_widgets_on_duo/features/portfolio/portfolio_selection.dart';
 import 'package:native_widgets_on_duo/features/orders/view/orders_page.dart';
 import 'package:native_widgets_on_duo/features/preferences/view/preferences_page.dart';
 import 'package:native_widgets_on_duo/features/profile/view/profile_page.dart';
@@ -94,11 +99,63 @@ final router = GoRouter(
         final asset = assets.firstWhere(
           (a) => a.symbol == state.pathParameters['symbol'],
         );
+        final origin = state.extra;
+        if (origin is PortfolioAssetOrigin) {
+          return AdaptivePage<void>(
+            key: state.pageKey,
+            name: state.uri.path,
+            child: _PortfolioAssetPage(asset: asset, origin: origin),
+          );
+        }
         return detailPage(state, asset.symbol, AssetDetails(asset: asset));
       },
     ),
   ],
 );
+
+class _PortfolioAssetPage extends StatefulWidget {
+  const _PortfolioAssetPage({required this.asset, required this.origin});
+  final Asset asset;
+  final PortfolioAssetOrigin origin;
+
+  @override
+  State<_PortfolioAssetPage> createState() => _PortfolioAssetPageState();
+}
+
+class _PortfolioAssetPageState extends State<_PortfolioAssetPage> {
+  late Asset selected = widget.asset;
+  bool? backButtonVisible;
+
+  @override
+  Widget build(BuildContext context) => AdaptiveScaffold(
+    extendBody: true,
+    appBar: AdaptiveAppBar(title: selected.symbol, titleStyle: barTitleStyle),
+    body: LayoutBuilder(
+      builder: (context, constraints) {
+        final showBack = constraints.maxWidth < 540;
+        if (backButtonVisible != showBack) {
+          backButtonVisible = showBack;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted)
+              AdaptiveNavigator.setNativeBackButtonVisible(context, showBack);
+          });
+        }
+        if (constraints.maxWidth < 540) return AssetDetails(asset: selected);
+        return PortfolioColumns(
+          portfolio: BlocBuilder<InvestmentBloc, InvestmentState>(
+            builder: (context, state) => Portfolio(
+              state: state,
+              origin: widget.origin,
+              columnSymbol: selected.symbol,
+              onColumnSelect: (asset) => setState(() => selected = asset),
+            ),
+          ),
+          detail: AssetDetails(asset: selected),
+        );
+      },
+    ),
+  );
+}
 
 /// A pushed page whose title, Back button and swipe-back UIKit owns.
 Page<void> detailPage(GoRouterState state, String title, Widget content) =>

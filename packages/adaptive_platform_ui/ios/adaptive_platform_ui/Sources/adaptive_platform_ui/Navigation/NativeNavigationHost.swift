@@ -51,6 +51,7 @@ final class NativeNavigationHost {
     var pushCompletion: FlutterResult?
     var popCompletion: FlutterResult?
     var deferredTabSelection: (NativeNavigationContent, UINavigationController?, UINavigationController?)?
+    var selectionAfterReturnToRoot: (() -> Void)?
     var routePopPermissions: [String: Bool] = [:]
     var appliedTints: [ObjectIdentifier: UIColor?] = [:]
     var sharedAppearanceKeys: [ObjectIdentifier: String] = [:]
@@ -180,7 +181,20 @@ final class NativeNavigationHost {
                     if identifier == host.managedRoutes.last?.identifier {
                         host.managedRoutes.last?.popEnabled = enabled
                         host.managedNavigation?.routePopEnabled = enabled
-                        host.content.navigationItem.hidesBackButton = !enabled
+                        host.content.navigationItem.hidesBackButton = !enabled || !(host.managedRoutes.last?.backButtonVisible ?? true)
+                    }
+                }
+                result(nil)
+            case "setBackButtonVisible":
+                if let identifier = args["routeId"] as? String,
+                   let route = host.managedRoutes.first(where: { $0.identifier == identifier }) {
+                    route.backButtonVisible = args["visible"] as? Bool ?? true
+                    if route === host.managedRoutes.last {
+                        host.content.navigationItem.hidesBackButton = !route.popEnabled || !route.backButtonVisible
+                        if #available(iOS 18.0, *), let tabs = host.tabs, host.verticalTabs {
+                            tabs.setTabBarHidden(route.backButtonVisible, animated: false)
+                        }
+                        if let page = host.page { host.configure(page) }
                     }
                 }
                 result(nil)
@@ -463,10 +477,12 @@ final class NativeNavigationHost {
         assign(destination, \.compactScrollEdgeAppearance, nil)
         assign(destination, \.title, source.title)
         assign(destination, \.titleView, source.titleView)
-        assign(destination, \.leftBarButtonItems, source.leftBarButtonItems)
+        let showBackItem = managedRoutes.last?.content !== destinationController || (managedRoutes.last?.backButtonVisible ?? true)
+        let leftItems = showBackItem ? source.leftBarButtonItems : source.leftBarButtonItems?.filter { $0.accessibilityLabel != "Back" }
+        assign(destination, \.leftBarButtonItems, leftItems)
         assign(destination, \.rightBarButtonItems, source.rightBarButtonItems)
         assign(destination, \.hidesBackButton, managedRoutes.last?.content === destinationController
-            ? !(managedRoutes.last?.popEnabled ?? true) : false)
+            ? !(managedRoutes.last?.popEnabled ?? true) || !(managedRoutes.last?.backButtonVisible ?? true) : false)
         assign(destination, \.largeTitleDisplayMode, page.nativeLargeTitle ? .always : .never)
         if #available(iOS 27.0, *) {
             let current = destination.navigationBarMinimization.minimizationBehavior

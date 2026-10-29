@@ -4,10 +4,13 @@ import 'package:go_router/go_router.dart';
 
 import 'package:native_widgets_on_duo/app/theme/palette.dart';
 import 'package:native_widgets_on_duo/app/theme/typography.dart';
+import 'package:native_widgets_on_duo/features/activity/view/activity_filter_sheet.dart';
 import 'package:native_widgets_on_duo/features/activity/view/activity_page.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  // The package's Flutter-drawn sheet with adaptive controls inside.
+  useFlutterSheet = true;
   runApp(const ActivityRotationApp());
 }
 

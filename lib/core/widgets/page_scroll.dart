@@ -6,9 +6,11 @@ class PageScroll extends StatelessWidget {
     required this.children,
     this.storageKey,
     this.header,
+    this.controller,
   });
   final List<Widget> children;
   final String? storageKey;
+  final ScrollController? controller;
 
   /// Runs edge to edge above the padded children.
   final Widget? header;
@@ -33,6 +35,7 @@ class PageScroll extends StatelessWidget {
       return consumed(
         ListView(
           key: PageStorageKey(storageKey ?? 'page'),
+          controller: controller,
           padding: EdgeInsets.fromLTRB(left, 28, right, bottom),
           children: children,
         ),
@@ -40,6 +43,7 @@ class PageScroll extends StatelessWidget {
     }
     return ListView(
       key: PageStorageKey(storageKey ?? 'page'),
+      controller: controller,
       padding: EdgeInsets.only(bottom: bottom),
       children: [
         header!,

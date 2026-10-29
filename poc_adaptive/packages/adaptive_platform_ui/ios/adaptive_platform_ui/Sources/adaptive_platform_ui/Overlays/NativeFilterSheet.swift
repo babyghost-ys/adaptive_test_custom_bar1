@@ -14,7 +14,20 @@ enum FilterControlKind {
     case choices(options: [FilterOptionSpec], multiple: Bool, layout: String, columns: Int)
     case slider(min: Double, max: Double, prefix: String, suffix: String, decimals: Int,
                 anyLabel: String?, anyAtMin: Bool)
+    /// One day or none; the value is `yyyy-MM-dd`, or an empty string for none.
+    case date(first: Date?, last: Date?, anyLabel: String?)
+    /// Controls behind a disclosure row.
+    case section(controls: [FilterControlSpec])
 }
+
+/// Days travel as `yyyy-MM-dd` in the device's calendar.
+let filterDayFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.calendar = Calendar(identifier: .gregorian)
+    formatter.dateFormat = "yyyy-MM-dd"
+    return formatter
+}()
 
 struct FilterControlSpec {
     let id: String
@@ -57,6 +70,14 @@ private func parseControls(_ raw: [[String: Any]]) -> [FilterControlSpec] {
                 decimals: entry["decimals"] as? Int ?? 0,
                 anyLabel: entry["anyLabel"] as? String,
                 anyAtMin: entry["anyAtMin"] as? Bool ?? true))
+        case "date":
+            return FilterControlSpec(id: id, symbol: symbol, kind: .date(
+                first: (entry["first"] as? String).flatMap(filterDayFormatter.date),
+                last: (entry["last"] as? String).flatMap(filterDayFormatter.date),
+                anyLabel: entry["anyLabel"] as? String))
+        case "section":
+            return FilterControlSpec(id: id, symbol: symbol, kind: .section(
+                controls: parseControls(entry["controls"] as? [[String: Any]] ?? [])))
         default:
             return nil
         }
@@ -71,6 +92,8 @@ private func normalised(_ values: [String: Any]) -> [String: Any] {
             result[key] = list.sorted()
         } else if let number = value as? NSNumber {
             result[key] = number.doubleValue
+        } else if let text = value as? String {
+            result[key] = text
         }
     }
     return result
@@ -134,6 +157,7 @@ final class NativeFilterSheet: NSObject, UIAdaptivePresentationControllerDelegat
             cleared: normalised(args["cleared"] as? [String: Any] ?? [:]),
             accent: filterColor(args["tint"]) ?? .systemRed,
             detents: args["detents"] as? String ?? "halfAndFull",
+            dims: args["dims"] as? Bool ?? true,
             count: (args["count"] as? NSNumber)?.intValue ?? 0)
         controller.onChange = { [weak self] values, update in
             self?.channel.invokeMethod("changed", arguments: values) { reply in
@@ -169,6 +193,7 @@ final class FilterSheetController: UIViewController {
     private let cleared: [String: Any]
     private let accent: UIColor
     private let detents: String
+    private let dims: Bool
     private var values: [String: Any]
     private var count: Int
 
@@ -179,13 +204,14 @@ final class FilterSheetController: UIViewController {
     private var selectionRefreshers: [String: () -> Void] = [:]
 
     init(title: String, controls: [FilterControlSpec], values: [String: Any],
-         cleared: [String: Any], accent: UIColor, detents: String, count: Int) {
+         cleared: [String: Any], accent: UIColor, detents: String, dims: Bool, count: Int) {
         self.sheetTitle = title
         self.controls = controls
         self.values = values
         self.cleared = cleared
         self.accent = accent
         self.detents = detents
+        self.dims = dims
         self.count = count
         super.init(nibName: nil, bundle: nil)
         modalPresentationStyle = .pageSheet
@@ -208,15 +234,60 @@ final class FilterSheetController: UIViewController {
             } else {
                 sheet.detents = [.medium()]
             }
+        case "fit":
+            if #available(iOS 16.0, *) {
+                sheet.detents = [.custom(identifier: UISheetPresentationController.Detent.Identifier("fit")) {
+                    [weak self] context in
+                    self?.fitHeight(within: context.maximumDetentValue) ?? context.maximumDetentValue
+                }]
+                sheet.prefersScrollingExpandsWhenScrolledToEdge = false
+            } else {
+                sheet.detents = [.medium(), .large()]
+            }
         default:
             sheet.detents = [.medium(), .large()]
         }
         sheet.prefersGrabberVisible = true
-        sheet.prefersScrollingExpandsWhenScrolledToEdge = true
+        if detents != "fit" { sheet.prefersScrollingExpandsWhenScrolledToEdge = true }
+        // Undimmed: no UIDimmingView over the page, which stays interactive.
+        if !dims, #available(iOS 16.0, *), let largest = sheet.detents.last {
+            sheet.largestUndimmedDetentIdentifier = largest.identifier
+        }
         // In landscape on an iPhone the sheet would otherwise span the whole
         // screen, with nothing outside it to tap. Attached to the bottom edge
         // it keeps its portrait width, with the dimmed page either side.
         sheet.prefersEdgeAttachedInCompactHeight = true
+    }
+
+    /// The height the content needs at the sheet's width, for the fit detent:
+    /// the title row, the controls, and the apply button over the safe area.
+    /// UIKit asks before the first layout, so the view is laid out here at
+    /// the container's width.
+    private func fitHeight(within maximum: CGFloat) -> CGFloat {
+        loadViewIfNeeded()
+        let container = presentationController?.containerView
+        let width = view.bounds.width > 0 ? view.bounds.width : (container?.bounds.width ?? maximum)
+        if view.bounds.width != width || view.bounds.height == 0 {
+            view.bounds.size = CGSize(width: width, height: maximum)
+        }
+        view.layoutIfNeeded()
+        let bottom = container?.safeAreaInsets.bottom ?? view.safeAreaInsets.bottom
+        let height = 28 + titleLabel.bounds.height + 12 + sections.bounds.height
+            + 8 + applyButton.bounds.height + 8 + bottom
+        return min(maximum, ceil(height))
+    }
+
+    /// The content changed height: a fit sheet follows it.
+    private func invalidateFit(animated: Bool) {
+        guard detents == "fit", presentingViewController != nil,
+              let sheet = sheetPresentationController else { return }
+        if #available(iOS 16.0, *) {
+            if animated {
+                sheet.animateChanges { sheet.invalidateDetents() }
+            } else {
+                sheet.invalidateDetents()
+            }
+        }
     }
 
     override func viewDidLoad() {
@@ -292,6 +363,19 @@ final class FilterSheetController: UIViewController {
         values = cleared
         buildSections()
         notify()
+        invalidateFit(animated: true)
+    }
+
+    /// Whether any of [controls] holds a value other than its cleared one.
+    private func differs(_ controls: [FilterControlSpec]) -> Bool {
+        controls.contains { control in
+            if case .section(let children) = control.kind { return differs(children) }
+            let current = values[control.id] as AnyObject?
+            let base = cleared[control.id] as AnyObject?
+            if current == nil, base == nil { return false }
+            guard let current, let base else { return true }
+            return !current.isEqual(base)
+        }
     }
 
     private func notify() {
@@ -339,6 +423,9 @@ final class FilterSheetController: UIViewController {
     }
 
     private func makeSection(_ control: FilterControlSpec, shaded: Bool) -> UIView {
+        if case .section(let children) = control.kind {
+            return makeDisclosure(control, children: children, shaded: shaded)
+        }
         let band = UIView()
         band.backgroundColor = shaded ? .secondarySystemBackground : .clear
 
@@ -359,24 +446,169 @@ final class FilterSheetController: UIViewController {
             column.trailingAnchor.constraint(equalTo: band.trailingAnchor, constant: -insets),
         ])
 
-        if !edgeToEdge, let symbol = control.symbol {
+        for view in makeBody(control, icon: !edgeToEdge) { column.addArrangedSubview(view) }
+        return band
+    }
+
+    /// A control's icon, if it has one, and the control itself.
+    private func makeBody(_ control: FilterControlSpec, icon showIcon: Bool) -> [UIView] {
+        var views: [UIView] = []
+        if showIcon, let symbol = control.symbol {
             let icon = UIImageView(image: UIImage(systemName: symbol))
             icon.tintColor = .secondaryLabel
             icon.contentMode = .left
             icon.setContentHuggingPriority(.required, for: .vertical)
-            column.addArrangedSubview(icon)
+            views.append(icon)
         }
-
         switch control.kind {
         case .choices(let options, let multiple, let layout, let columns):
-            column.addArrangedSubview(
+            views.append(
                 makeChoices(control, options: options, multiple: multiple, layout: layout, columns: columns))
         case .slider(let min, let max, let prefix, let suffix, let decimals, let anyLabel, let anyAtMin):
-            column.addArrangedSubview(makeSlider(
+            views.append(makeSlider(
                 control, min: min, max: max, prefix: prefix, suffix: suffix,
                 decimals: decimals, anyLabel: anyLabel, anyAtMin: anyAtMin))
+        case .date(let first, let last, let anyLabel):
+            views.append(makeDate(control, first: first, last: last, anyLabel: anyLabel))
+        case .section(let children):
+            views.append(makeDisclosure(control, children: children, shaded: false))
         }
+        return views
+    }
+
+    // MARK: Disclosure section
+
+    /// A row with the section's icon and a chevron; tapping it shows or hides
+    /// the controls under it, and a fit sheet follows the height. It opens
+    /// closed unless a control inside holds a value other than its cleared one.
+    private func makeDisclosure(_ control: FilterControlSpec, children: [FilterControlSpec],
+                                shaded: Bool) -> UIView {
+        let band = UIView()
+        band.backgroundColor = shaded ? .secondarySystemBackground : .clear
+
+        let column = UIStackView()
+        column.axis = .vertical
+        column.spacing = 0
+        column.translatesAutoresizingMaskIntoConstraints = false
+        band.addSubview(column)
+        NSLayoutConstraint.activate([
+            column.topAnchor.constraint(equalTo: band.topAnchor, constant: 4),
+            column.bottomAnchor.constraint(equalTo: band.bottomAnchor, constant: -8),
+            column.leadingAnchor.constraint(equalTo: band.leadingAnchor, constant: 24),
+            column.trailingAnchor.constraint(equalTo: band.trailingAnchor, constant: -24),
+        ])
+
+        var config = UIButton.Configuration.plain()
+        config.image = control.symbol.flatMap { UIImage(systemName: $0) }
+        config.baseForegroundColor = .secondaryLabel
+        config.contentInsets = NSDirectionalEdgeInsets(top: 12, leading: 0, bottom: 12, trailing: 0)
+        let header = UIButton(configuration: config)
+        header.contentHorizontalAlignment = .leading
+        header.accessibilityLabel = "More filters"
+        let chevron = UIImageView(image: UIImage(systemName: "chevron.down"))
+        chevron.tintColor = .secondaryLabel
+        chevron.translatesAutoresizingMaskIntoConstraints = false
+        header.addSubview(chevron)
+        NSLayoutConstraint.activate([
+            chevron.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            chevron.trailingAnchor.constraint(equalTo: header.trailingAnchor),
+        ])
+
+        let body = UIStackView()
+        body.axis = .vertical
+        body.spacing = 18
+        for child in children {
+            let inner = UIStackView()
+            inner.axis = .vertical
+            inner.spacing = 14
+            for view in makeBody(child, icon: true) { inner.addArrangedSubview(view) }
+            body.addArrangedSubview(inner)
+        }
+        let spacer = UIView()
+        spacer.heightAnchor.constraint(equalToConstant: 8).isActive = true
+        body.addArrangedSubview(spacer)
+
+        let open = differs(children)
+        body.isHidden = !open
+        body.alpha = open ? 1 : 0
+        chevron.transform = open ? CGAffineTransform(rotationAngle: .pi) : .identity
+        header.addAction(UIAction { [weak self] _ in
+            let opening = body.isHidden
+            header.accessibilityValue = opening ? "expanded" : "collapsed"
+            UIView.animate(withDuration: 0.26, delay: 0, options: [.curveEaseOut]) {
+                body.isHidden = !opening
+                body.alpha = opening ? 1 : 0
+                chevron.transform = opening ? CGAffineTransform(rotationAngle: .pi) : .identity
+                self?.view.layoutIfNeeded()
+            }
+            self?.invalidateFit(animated: true)
+        }, for: .touchUpInside)
+
+        column.addArrangedSubview(header)
+        column.addArrangedSubview(body)
         return band
+    }
+
+    // MARK: Date
+
+    /// A compact `UIDatePicker` once a day is chosen, with a clear control
+    /// beside it; before that, one button that chooses the latest day.
+    private func makeDate(_ control: FilterControlSpec, first: Date?, last: Date?,
+                          anyLabel: String?) -> UIView {
+        let picker = UIDatePicker()
+        picker.datePickerMode = .date
+        picker.preferredDatePickerStyle = .compact
+        picker.tintColor = accent
+        if let first { picker.minimumDate = first }
+        if let last { picker.maximumDate = last }
+
+        var anyConfig: UIButton.Configuration
+        if #available(iOS 26.0, *) { anyConfig = .glass() } else { anyConfig = .tinted() }
+        anyConfig.image = UIImage(systemName: "calendar")
+        anyConfig.title = anyLabel
+        anyConfig.imagePadding = 6
+        anyConfig.baseForegroundColor = .label
+        anyConfig.cornerStyle = .capsule
+        let any = UIButton(configuration: anyConfig)
+        any.accessibilityLabel = "Choose a date"
+
+        var clearConfig = UIButton.Configuration.plain()
+        clearConfig.image = UIImage(systemName: "xmark.circle.fill")
+        clearConfig.baseForegroundColor = .secondaryLabel
+        clearConfig.contentInsets = NSDirectionalEdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8)
+        let clear = UIButton(configuration: clearConfig)
+        clear.accessibilityLabel = "Clear date"
+
+        let row = UIStackView(arrangedSubviews: [picker, any, clear, UIView()])
+        row.axis = .horizontal
+        row.spacing = 8
+        row.alignment = .center
+
+        let refresh = { [weak self] in
+            guard let self else { return }
+            let date = (self.values[control.id] as? String).flatMap(filterDayFormatter.date)
+            picker.isHidden = date == nil
+            clear.isHidden = date == nil
+            any.isHidden = date != nil
+            if let date { picker.date = date }
+        }
+        refresh()
+        selectionRefreshers[control.id] = refresh
+        picker.addAction(UIAction { [weak self] _ in
+            self?.values[control.id] = filterDayFormatter.string(from: picker.date)
+            self?.notify()
+        }, for: .valueChanged)
+        any.addAction(UIAction { [weak self] _ in
+            self?.values[control.id] = filterDayFormatter.string(from: last ?? Date())
+            refresh()
+            self?.notify()
+        }, for: .touchUpInside)
+        clear.addAction(UIAction { [weak self] _ in
+            self?.values[control.id] = ""
+            refresh()
+            self?.notify()
+        }, for: .touchUpInside)
+        return row
     }
 
     // MARK: Choices

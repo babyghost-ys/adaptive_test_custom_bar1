@@ -1,8 +1,39 @@
 # Sheet rotation cut on a real phone: failed attempts
 
+## Final state (2026-10-29): stock Flutter sheet, given up on the cut
+
+**Not fixed. Closed by the user as "trying too much, I gave up".** After 17 attempts in the main
+project and 19 POC builds, the user took POC build 19 as the final shape and asked for the main
+app to match it. The cut itself is not removed; it is simply the configuration the user accepted.
+
+What the main app now does (`adaptive_native_sheet.dart` in the package):
+
+- `AdaptiveNativeSheet.show` uses Flutter's stock `showModalBottomSheet` on every platform, iOS
+  included: root navigator, scroll controlled, safe area, drag handle when dismissible, 36 pt
+  top corners, fill from `backgroundColor` or the system background. Non-fit detents go to
+  `AdaptiveBottomSheet`. The full-screen path (sign-in) is unchanged.
+- The attempt 15 `_FloatingSheet` (the Flutter-drawn iOS 26 floating panel that followed the
+  native bar's bottom) is removed from the package. The dormant UIKit path (`bootstrap`,
+  `AdaptiveNativeSheetContent`, `nativeSheetMain`, `NativeWidgetSheet.swift`) is left as it was.
+- Adaptive native controls (`AdaptiveSegmentedControl`, `AdaptiveSlider`, date picker) still
+  sit inside the sheet as platform views; the Activity, Markets, Orders and Watchlist filter
+  sheets and the date and accounts sheets all go through this path. The Holdings filter keeps
+  `AdaptiveFilterSheet` (UIKit content).
+
+Checked on 2026-10-29 through XcodeBuildMCP, Debug builds: iPhone 17 Pro simulator (iOS 27.0)
+and iPhone Duo simulator (iOS 27.1). On both the Activity filter opens as the stock sheet, the
+native tab bar steps aside, the navigation bar dims over it, and the expanded section shows the
+native `UISlider` inside the sheet. On the Duo the sheet draws in the content panel beside the
+native side strip. The simulator never shows the rotation cut, so these runs only confirm the
+sheet opens and lays out; they say nothing about the cut. A signed Release build was installed
+on the iPhone 18 Pro afterwards without launching it.
+
+The original adaptive sheet guide and the README were left untouched on the user's instruction.
+
+
 ## Current lead (2026-10-28): adaptive controls inside the sheet content
 
-**Not resolved. Investigate adaptive platform UI components inside the sheet content first.**
+**Not resolved (2026-10-29, after POC build 18).** Eighteen POC builds on 2026-10-28 and 29, listed in the table under "POC builds, all failed", changed the control, its hosting, the sheet (Flutter or UIKit), dimming, the bars, the Flutter view's place in the host, the layer's stretch, the engine's rotation hold and the scene's resize mode. None removed the cut. The user judged them all huge fails.
 The new phone comparisons point toward the controls and their composition inside the sheet,
 particularly the segmented control. They do not yet prove that one particular widget or rendering
 mechanism is the cause: the first failing comparison changed both the segmented control and the
@@ -33,6 +64,171 @@ were supplied for these POC runs.
    Material Apply button. The user again reported **the cut remained**. This makes the Apply
    button's sheet `UiKitView` unnecessary for reproducing the latest result, but does not by
    itself prove that the segmented control is the sole cause.
+
+6. (2026-10-28, build 3, unverified on the phone) The window-hosted diagnostic was removed. The
+   sheet uses the package's `AdaptiveSegmentedControl` (a Flutter platform view) again, and the
+   package's `iOS26SegmentedControlView` sets opaque background and divider images through
+   `UISegmentedControl`'s public appearance API, so the control is a real `UISegmentedControl`
+   without the Liquid Glass selection backdrop. Reasoning: every configuration that showed the
+   cut held a `UISegmentedControl` with its default selection, whose backdrop
+   (`UISegmentedControlSelectedSegmentVibrancyEffect`) samples the Flutter surface beneath it;
+   the configurations without the cut held only Flutter chips or a filled native button, which
+   have no backdrop. **FAILED on the phone:** the user reported "even worse": the cut was
+   still there, and the control had collapsed to a thin 3 pt bar, since `UISegmentedControl`
+   takes its intrinsic height from its background image (the 3 by 3 pt resizable image). The
+   Liquid Glass selection backdrop is therefore not the cause, or not the only one. Build 4
+   restores the package's original `iOS26SegmentedControlView.swift` and keeps
+   `AdaptiveSegmentedControl` in the sheet. What still separates the failing from the passing
+   builds: a `UISegmentedControl` of any appearance in the sheet area fails; Flutter chips, and
+   (in a different, shorter layout) a filled native `UIButton`, pass. Whether any plain UIKit
+   view at that spot fails, or only `UISegmentedControl`, has not been tested.
+7. (2026-10-28, build 4) **FAILED.** The reverted build, with the package's
+   `AdaptiveSegmentedControl` as an ordinary Flutter platform view (default Liquid Glass
+   appearance, red tint) and the Flutter Apply button, was installed on the iPhone 18 Pro. The
+   user reported the cut is still there and asked to stop. So the smallest reproduction so far
+   is: the Activity page with native toolbar and tab bar, the Flutter-drawn fit sheet, and one
+   `AdaptiveSegmentedControl` inside it. No further attempt was made.
+8. (2026-10-28, POC build 5, unverified on the phone) Rebuilt from the top instead of patching
+   the control: the Activity filter is now `AdaptiveFilterSheet`, the UIKit sheet whose content
+   UIKit draws (`NativeFilterSheet.swift`), the one sheet design recorded above as turning
+   without the cut. The engine never leaves the page and nothing Flutter draws sits in or over
+   the sheet. The native sheet gained a content-fitting detent, an `AdaptiveFilterDate`
+   (compact `UIDatePicker`) and an `AdaptiveFilterSection` disclosure row so the Activity sheet
+   keeps its design: segmented kind, symbol chips, and date, period and amount behind the row.
+   **FAILED on the phone:** the user reported the cut is still there. A sheet with no Flutter in
+   it and no platform view cuts too, so neither Flutter content in the sheet nor the
+   platform-view hosting of the control is the cause, and the earlier note that a sheet with
+   native UIKit content turns without the cut does not hold on this build.
+9. (2026-10-28, POC build 6, unverified on the phone) Build 5 with the kind control as native
+   chips instead of a `UISegmentedControl`; nothing else changed. This is the isolation test
+   for the control itself inside a UIKit sheet. **FAILED on the phone:** the cut is still
+   there, and the user noticed it shows once the sheet is expanded (date, period and slider
+   visible) and so tall enough to cross the 402 pt line. The `UISegmentedControl` is cleared.
+   Reading of all builds so far: every clean build drew the sheet in Flutter, so it stretched
+   with the page while the engine held the old frame for the first half of the turn and matched
+   UIKit's fading old-screen picture; every cut build had a UIKit view (sheet or control) over
+   the Flutter view, which UIKit laid out at its new place at once, so the picture's edge
+   crossed it as old above, new below.
+10. (2026-10-28, POC build 7, unverified on the phone) Two comparisons in one install: the
+   filter icon opens build 6's UIKit sheet undimmed (`dims: false`, no `UIDimmingView`); the
+   toolbar's search icon opens the same filter as a Flutter-drawn sheet with Flutter chips and
+   slider only, expanded so it crosses the 402 pt line. The first tests the dimming view; the
+   second tests whether a tall sheet that stretches with the page stays clean. **FAILED on the
+   phone (2026-10-29):** both sheets cut. The user's frame of the Flutter-drawn sheet shows the
+   old picture of the sheet fading over the new layout, offset, chips doubled. So a tall sheet
+   drawn by Flutter with no UIKit view in it cuts too, and the undimmed UIKit sheet cuts. Dimming
+   is cleared, UIKit views over the page are cleared, and the "stretches with the page" reading
+   in finding 9 is wrong. What is left: every clean sheet was short enough to stay below the
+   402 pt line in portrait; every tall sheet, Flutter or UIKit, cut. The plain page is judged
+   clean, yet it crosses that line too, so sheet content (white, high contrast, straight edges)
+   may only make the same crossfade visible.
+11. (2026-10-29, POC build 8) No fix. The UIKit filter sheet is back to its design:
+   `UISegmentedControl` at the top, dimming on; the search icon no longer opens the comparison
+   sheet. Installed on the iPhone 18 Pro.
+12. (2026-10-29, POC build 9, unverified on the phone) First change to the Flutter side of the
+   collision: `RotationViewController`, a `FlutterViewController` subclass set in the storyboard,
+   sets the Flutter view's layer and its subviews' layers to `contentsGravity = .topLeft` in
+   `viewWillTransition` and restores them when the coordinator completes. The old frame stays
+   unscaled at the top-left during the turn, the same pixels as UIKit's old-screen picture,
+   instead of stretching to the animating bounds. Attempt 9 tried this with cover views; this
+   applies it to the layer itself. **FAILED on the phone:** "still really bad".
+13. (2026-10-29, POC build 10, unverified on the phone) Build 9 plus the engine's half-way hold
+   released: `RotationViewController` clears `shouldIgnoreViewportMetricsUpdatesDuringRotation`
+   right after `viewWillTransition`, so the layout pass that follows sends the new metrics at
+   once and Flutter renders the new size from the first frame, unscaled at the top-left, the way
+   a UIKit view lays out under the fading picture. **FAILED on the phone:** "still no".
+14. (2026-10-29, POC build 11, unverified on the phone) `UIRequiresFullScreen = YES` again
+   (attempt 8's key), now on the single-view app with no engine hand-over or covers of our own,
+   plus builds 9 and 10's `RotationViewController`. Per TN3192 the scene resizes discretely
+   from iOS 27, so no live resize and no old-screen picture. **FAILED on the phone:** "still
+   no"; the user saw the cut a little smaller once the sheet nearly filled the screen. The key
+   and the view-controller subclass wiring are removed again.
+15. (2026-10-29, POC build 13, unverified on the phone) The host keeps the Flutter view inside
+   `NativeFlutterScrollView`, the navigation controller's content scroll view, and re-pinned
+   its viewport to the scroll bounds only in `layoutSubviews`. During a turn UIKit changes that
+   scroll view's offset as the bars change height, so between that change and the next layout
+   pass the Flutter surface sat displaced, which fits the offset ghost in the user's build 7
+   frame and attempt 16's "offset grows each frame". The scroll view now re-pins the viewport
+   in its `bounds` and `contentOffset` setters. **FAILED on the phone:** "still really bad".
+16. (2026-10-29, POC build 14, unverified on the phone) The Flutter viewport is no longer inside
+   the host's scroll view at all: the page's view is a plain container holding the scroll view
+   and, beside it, the viewport with the Flutter view. No offset change can move the surface.
+   **FAILED on the phone:** "still no".
+17. (2026-10-29, POC build 15, unverified on the phone) Bisecting the native pieces. The toolbar
+   and the tab bar are Flutter platform views on the page (`iOS26ToolbarPlatformView`,
+   `iOS26TabBarPlatformView`), so every build so far composited the page through Flutter's
+   platform-view path. Build 15 keeps `AdaptiveScaffold`, the native host and build 14's layout,
+   and drops `appBar` and `bottomNavigationBar`. Sheet as build 8. **Still cut on the phone:**
+   the bars are cleared.
+18. (2026-10-29, POC build 16, unverified on the phone) Build 15 with the filter as a stock
+   `showModalBottomSheet` holding the Flutter-only content, opened expanded. No UIKit sheet, no
+   bars, no platform view; only the adaptive app and its native host container remain. The
+   user asked for adaptive controls in the sheet instead; no rotation result was given.
+19. (2026-10-29, POC build 17, unverified on the phone) Build 16 with the package's Flutter-drawn
+   `AdaptiveNativeSheet` holding adaptive controls: `AdaptiveSegmentedControl` at the top and
+   an `AdaptiveSlider` in the open section, both native platform views. Bars still off. The
+   user asked for the bars back before giving a rotation result.
+20. (2026-10-29, POC build 18, unverified on the phone) Build 17's sheet with the native toolbar
+   and tab bar restored: the app as designed, with the package's Flutter-drawn sheet and
+   native controls inside it. **FAILED on the phone (2026-10-29):** the user judged builds
+   9 to 18 "all huge fails".
+21. (2026-10-29, POC build 19, unverified on the phone) The user pointed out that no build had
+   shown Flutter's own stock sheet with adaptive native controls inside it: build 16 was the
+   stock sheet with Flutter-only content and no rotation result, builds 17 and 18 used the
+   package's `AdaptiveNativeSheet` route. Build 19 opens the filter with
+   `showModalBottomSheet` (root navigator, scroll controlled, white, 36 pt top corners, drag
+   handle) holding `ActivityFilterContent` with `AdaptiveSegmentedControl` and
+   `AdaptiveSlider`, opened expanded; native toolbar and tab bar on. No package sheet code is
+   involved. Installed on the iPhone 18 Pro (first install attempt hit a connection reset,
+   the retry succeeded).
+
+## POC builds, all failed (2026-10-28 to 2026-10-29)
+
+Every build was a signed Release build installed on the iPhone 18 Pro (iOS 27.2) and rotated
+by the user with the Activity filter sheet open. "Cut" is the user's report.
+
+| Build | Sheet | What changed | Result |
+| --- | --- | --- | --- |
+| chips | Flutter route, Material chips, short | baseline | clean |
+| 1 | Flutter route | `UISegmentedControl` hosted in the window, glass | cut |
+| 2 | Flutter route | window-hosted control, opaque images | not reported |
+| 3 | Flutter route | `AdaptiveSegmentedControl` platform view, opaque images (collapsed to 3 pt) | cut |
+| 4 | Flutter route | `AdaptiveSegmentedControl` platform view, default glass | cut |
+| 5 | UIKit (`AdaptiveFilterSheet`) | whole sheet rebuilt in UIKit, `UISegmentedControl`, fit detent | cut |
+| 6 | UIKit | build 5 with native chips instead of the segmented control | cut |
+| 7 | UIKit undimmed + tall Flutter route | dimming off; tall Flutter-only sheet on the search icon | both cut |
+| 8 | UIKit | segmented control and dimming restored; no fix | cut |
+| 9 | UIKit | `RotationViewController`: Flutter layer `contentsGravity = .topLeft` during the turn | cut |
+| 10 | UIKit | build 9 plus engine's half-way metrics hold released at turn start | cut |
+| 11 | UIKit | build 10 plus `UIRequiresFullScreen` (discrete resize, TN3192) | cut, a little smaller when the sheet nearly filled the screen |
+| 12 | stock Material | stock-Flutter-only comparison, dropped at the user's request, not built | |
+| 13 | UIKit | Flutter viewport re-pinned in the host scroll view's `bounds` and `contentOffset` setters | cut |
+| 14 | UIKit | Flutter viewport moved beside the host scroll view, not inside it | cut |
+| 15 | UIKit | no app bar, no tab bar (no platform view on the page) | cut |
+| 16 | stock Material | no bars, stock Flutter bottom sheet | no result; user wanted adaptive controls |
+| 17 | package Flutter route | no bars, `AdaptiveSegmentedControl` and `AdaptiveSlider` inside | no separate result |
+| 18 | package Flutter route | bars restored, build 17's sheet | cut |
+| 19 | stock Material (`showModalBottomSheet`) | bars on, `AdaptiveSegmentedControl` and `AdaptiveSlider` inside | taken as final by the user; cut not reported fixed |
+
+What the table rules out as the sole cause: the segmented control (6), the platform-view
+hosting (1, 5), Liquid Glass (3), Flutter content in the sheet (5, 6), the dimming view (7),
+the bars and their platform views (15), the Flutter view's place inside the host scroll view
+(13, 14), the layer stretch during the turn (9), the engine's half-way hold (10), and live
+resize itself if `UIRequiresFullScreen` took effect on the phone (11). The only clean
+configuration remains a short sheet that stays below the 402 pt line in portrait; every tall
+sheet, Flutter or UIKit, with or without native controls, with or without bars, cut.
+
+What was never isolated: the native host container itself (`NativeNavigationHost`,
+`NativeNavigationController`, `UITabBarController`) with nothing native visible, and a
+stock Flutter app with no package code, which the user considers known clean. The
+difference between those two is the last untested split.
+
+**State of the POC after build 18:** package sheet (`AdaptiveNativeSheet`, Flutter route)
+with `AdaptiveSegmentedControl` and `AdaptiveSlider` inside, bars on, Flutter viewport beside
+the host scroll view (build 14), scroll view re-pinning (build 13), `RotationViewController`
+present in `AppDelegate.swift` but not wired, `UIRequiresFullScreen` removed. The package
+copies in `poc_adaptive/` and on the Desktop match except a pre-existing tab bar difference.
+The main project's package is untouched by all of this.
 
 The current POC is at `poc_adaptive/` in this workspace and as the **Adaptive Sheet Rotation
 POC** folder on the Desktop. Its copied adaptive package is independent of the original project;

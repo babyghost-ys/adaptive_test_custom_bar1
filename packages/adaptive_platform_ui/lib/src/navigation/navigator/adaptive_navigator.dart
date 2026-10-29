@@ -15,6 +15,15 @@ import '../search/adaptive_navigation_search_bar.dart';
 /// Flutter keeps the page's widget state and completes its navigation result.
 /// Other platforms use [MaterialPageRoute].
 abstract final class AdaptiveNavigator {
+  /// Controls the UIKit Back button without changing the route or disabling
+  /// the native interactive back gesture.
+  static void setNativeBackButtonVisible(BuildContext context, bool visible) {
+    final route = ModalRoute.of(context);
+    if (route is! _NativePageRoute<dynamic>) return;
+    route.nativeBackButtonVisible = visible;
+    route.navigation.backButtonVisibilityChanged(route);
+  }
+
   /// Pushes [builder] and returns the value supplied to [Navigator.pop].
   ///
   /// A cancelled UIKit back swipe leaves the Flutter route and its state intact.
@@ -340,6 +349,17 @@ final class _NativeNavigation {
       'expectsNativePage': _expectsNativePage(route),
     });
     popPermissionChanged(route);
+    backButtonVisibilityChanged(route);
+  }
+
+  void backButtonVisibilityChanged(_NativePageRoute<dynamic> route) {
+    if (!route.isActive) return;
+    unawaited(
+      _channel.invokeMethod<void>('setBackButtonVisible', {
+        'routeId': route.id,
+        'visible': route.nativeBackButtonVisible,
+      }),
+    );
   }
 
   void popPermissionChanged(_NativePageRoute<dynamic> route) {
@@ -459,6 +479,7 @@ final class _NativePageRoute<T> extends PageRoute<T> {
   final _NativeNavigation navigation;
   final ToolbarRegistry? toolbarRegistry;
   bool? nativePopEnabled;
+  bool nativeBackButtonVisible = true;
 
   /// A page-based route waits for UIKit to prepare before showing content.
   bool _awaitingNative;

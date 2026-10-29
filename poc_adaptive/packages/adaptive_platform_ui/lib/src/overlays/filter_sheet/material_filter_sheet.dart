@@ -55,6 +55,20 @@ class _MaterialFilterSheet extends StatefulWidget {
 class _MaterialFilterSheetState extends State<_MaterialFilterSheet> {
   late Map<String, Object> values = {...widget.initial};
   final _scroll = ScrollController();
+  late final Set<String> _open = {
+    for (final c in widget.controls)
+      if (c is AdaptiveFilterSection && _differs(c.controls)) c.id,
+  };
+
+  bool _differs(List<AdaptiveFilterControl> controls) => controls.any((c) {
+    if (c is AdaptiveFilterSection) return _differs(c.controls);
+    final v = values[c.id];
+    final b = widget.cleared[c.id];
+    if (v is List && b is List) {
+      return v.length != b.length || !v.every(b.contains);
+    }
+    return v != b;
+  });
 
   @override
   void dispose() {
@@ -227,10 +241,16 @@ class _MaterialFilterSheetState extends State<_MaterialFilterSheet> {
     final edgeToEdge =
         control is AdaptiveFilterChoices &&
         control.layout == AdaptiveFilterLayout.stack;
-    final body = switch (control) {
-      final AdaptiveFilterChoices c => _choices(context, c),
-      final AdaptiveFilterSlider s => _slider(context, s),
-    };
+    if (control is AdaptiveFilterSection) {
+      return ColoredBox(
+        color: shaded ? scheme.surfaceContainer : Colors.transparent,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 4, 24, 8),
+          child: _section(context, control),
+        ),
+      );
+    }
+    final body = _body(context, control);
     return ColoredBox(
       color: shaded ? scheme.surfaceContainer : Colors.transparent,
       child: SizedBox(
@@ -251,6 +271,106 @@ class _MaterialFilterSheetState extends State<_MaterialFilterSheet> {
                 ),
               ),
       ),
+    );
+  }
+
+  Widget _body(BuildContext context, AdaptiveFilterControl control) =>
+      switch (control) {
+        final AdaptiveFilterChoices c => _choices(context, c),
+        final AdaptiveFilterSlider s => _slider(context, s),
+        final AdaptiveFilterDate d => _date(context, d),
+        final AdaptiveFilterSection s => _section(context, s),
+      };
+
+  Widget _section(BuildContext context, AdaptiveFilterSection s) {
+    final scheme = Theme.of(context).colorScheme;
+    final open = _open.contains(s.id);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: () => setState(() {
+            if (!_open.remove(s.id)) _open.add(s.id);
+          }),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Row(
+              children: [
+                if (s.icon != null) s.icon!.build(color: scheme.onSurfaceVariant),
+                const Spacer(),
+                AnimatedRotation(
+                  turns: open ? 0.5 : 0,
+                  duration: const Duration(milliseconds: 200),
+                  child: Icon(
+                    Icons.expand_more_rounded,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 260),
+          curve: Curves.easeOutCubic,
+          alignment: Alignment.topCenter,
+          child: open
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (final c in s.controls) ...[
+                      if (c.icon != null) ...[
+                        c.icon!.build(color: scheme.onSurfaceVariant),
+                        const SizedBox(height: 12),
+                      ],
+                      _body(context, c),
+                      const SizedBox(height: 18),
+                    ],
+                  ],
+                )
+              : const SizedBox(width: double.infinity),
+        ),
+      ],
+    );
+  }
+
+  Widget _date(BuildContext context, AdaptiveFilterDate d) {
+    final scheme = Theme.of(context).colorScheme;
+    final day = AdaptiveFilterDate.decodeDay(values[d.id]);
+    Future<void> pick() async {
+      final chosen = await showDatePicker(
+        context: context,
+        initialDate: day ?? d.lastDate ?? DateTime.now(),
+        firstDate: d.firstDate ?? DateTime(1900),
+        lastDate: d.lastDate ?? DateTime(2100),
+      );
+      if (chosen != null) _set(d.id, AdaptiveFilterDate.encodeDay(chosen));
+    }
+
+    return Row(
+      children: [
+        if (day == null)
+          ActionChip(
+            avatar: const Icon(Icons.event_rounded, size: 18),
+            label: Text(d.anyLabel ?? ''),
+            shape: const StadiumBorder(),
+            onPressed: pick,
+          )
+        else ...[
+          ActionChip(
+            avatar: Icon(Icons.event_rounded, size: 18, color: widget.tint),
+            label: Text(MaterialLocalizations.of(context).formatMediumDate(day)),
+            shape: const StadiumBorder(),
+            side: BorderSide(color: widget.tint),
+            onPressed: pick,
+          ),
+          IconButton(
+            tooltip: 'Clear date',
+            onPressed: () => _set(d.id, ''),
+            icon: Icon(Icons.close_rounded, color: scheme.onSurfaceVariant),
+          ),
+        ],
+      ],
     );
   }
 

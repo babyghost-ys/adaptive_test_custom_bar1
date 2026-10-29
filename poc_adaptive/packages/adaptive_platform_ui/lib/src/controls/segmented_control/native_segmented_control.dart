@@ -65,92 +65,102 @@ class NativeSegmentedControl extends StatefulWidget {
 }
 
 class _NativeSegmentedControlState extends State<NativeSegmentedControl> {
-  static int _nextId = 0;
-  late final int _id;
-  late final MethodChannel _channel;
-  bool? _lastIsDark;
-  int? _lastTintColor;
-  int? _lastTextColor;
-  int? _lastSelectedTextColor;
-
-  @override
-  void initState() {
-    super.initState();
-    _id = _nextId++;
-    _channel = MethodChannel(
-      'adaptive_platform_ui/ios26_segmented_control_$_id',
-    );
-    _channel.setMethodCallHandler(_handleMethod);
-  }
+  MethodChannel? _channel;
+  Map<String, dynamic>? _desiredConfiguration;
+  Map<String, dynamic>? _sentConfiguration;
+  bool _sending = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _syncThemeIfNeeded();
-  }
-
-  @override
-  void dispose() {
-    _channel.setMethodCallHandler(null);
-    super.dispose();
-  }
-
-  Brightness _effectiveBrightness() {
-    return CupertinoTheme.of(context).brightness ??
-        Theme.of(context).brightness;
-  }
-
-  Future<void> _syncThemeIfNeeded() async {
-    final isDark = _effectiveBrightness() == Brightness.dark;
-    final themeParams = _buildThemeParams();
-    final tintColor = widget.color != null ? _colorToARGB(widget.color!) : null;
-    final textColor = themeParams['textColor'] as int;
-    final selectedTextColor = themeParams['selectedTextColor'] as int;
-
-    if (_lastIsDark != isDark ||
-        _lastTintColor != tintColor ||
-        _lastTextColor != textColor ||
-        _lastSelectedTextColor != selectedTextColor) {
-      try {
-        await _channel.invokeMethod('setBrightness', {
-          'isDark': isDark,
-          if (tintColor != null) 'tintColor': tintColor,
-          ...themeParams,
-        });
-        _lastIsDark = isDark;
-        _lastTintColor = tintColor;
-        _lastTextColor = textColor;
-        _lastSelectedTextColor = selectedTextColor;
-      } catch (e) {
-        // Ignore errors if platform view is not yet ready
-      }
-    }
-  }
-
-  Future<dynamic> _handleMethod(MethodCall call) async {
-    if (call.method == 'valueChanged') {
-      final index = call.arguments['index'] as int;
-      final itemCount = (widget.icons != null && widget.icons!.isNotEmpty)
-          ? widget.icons!.length
-          : widget.labels.length;
-
-      if (index >= 0 && index < itemCount && widget.enabled) {
-        widget.onValueChanged(index);
-      }
-    }
+    _syncConfiguration();
   }
 
   @override
   void didUpdateWidget(NativeSegmentedControl oldWidget) {
     super.didUpdateWidget(oldWidget);
+    _syncConfiguration();
+  }
 
-    if (widget.selectedIndex != oldWidget.selectedIndex) {
-      _channel.invokeMethod('setSelectedIndex', {
-        'index': widget.selectedIndex,
-      });
+  @override
+  void dispose() {
+    _channel?.setMethodCallHandler(null);
+    _channel = null;
+    super.dispose();
+  }
+
+  Brightness _effectiveBrightness() =>
+      CupertinoTheme.of(context).brightness ?? Theme.of(context).brightness;
+
+  void _onPlatformViewCreated(int viewId) {
+    if (!mounted) return;
+    _channel?.setMethodCallHandler(null);
+    _channel = MethodChannel('adaptive_platform_ui/segmented_control/$viewId');
+    _channel!.setMethodCallHandler(_handleMethod);
+    _sentConfiguration = null;
+    _syncConfiguration();
+  }
+
+  Future<dynamic> _handleMethod(MethodCall call) async {
+    if (!mounted || call.method != 'valueChanged') return;
+    final arguments = call.arguments;
+    if (arguments is! Map) return;
+    final index = arguments['index'];
+    final itemCount = widget.icons?.isNotEmpty == true
+        ? widget.icons!.length
+        : widget.labels.length;
+    if (index is int && index >= 0 && index < itemCount && widget.enabled) {
+      widget.onValueChanged(index);
     }
+  }
 
-    _syncThemeIfNeeded();
+  bool _sameConfiguration(Map<String, dynamic>? a, Map<String, dynamic> b) {
+    if (a == null || a.length != b.length) return false;
+    for (final key in b.keys) {
+      final left = a[key];
+      final right = b[key];
+      if (left is List && right is List) {
+        if (!listEquals(left, right)) return false;
+      } else if (left != right) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  void _syncConfiguration() {
+    _desiredConfiguration = _buildCreationParams();
+    if (_channel != null && !_sending) _sendConfiguration();
+  }
+
+  // Keep a single native instance, identified by Flutter's platform-view ID.
+  // Coalesce model changes while a channel call is outstanding. Rotation only
+  // resizes the view; it does not resend unchanged theme/selection attributes.
+  Future<void> _sendConfiguration() async {
+    _sending = true;
+    try {
+      while (mounted && _channel != null) {
+        final channel = _channel!;
+        final desired = _desiredConfiguration!;
+        if (_sameConfiguration(_sentConfiguration, desired)) break;
+        await channel.invokeMethod<void>('update', desired);
+        if (!mounted || channel != _channel) break;
+        _sentConfiguration = desired;
+      }
+    } catch (error, stack) {
+      if (mounted) {
+        FlutterError.reportError(
+          FlutterErrorDetails(
+            exception: error,
+            stack: stack,
+            library: 'adaptive_platform_ui',
+            context: ErrorDescription('updating the native segmented control'),
+          ),
+        );
+      }
+    } finally {
+      _sending = false;
+    }
   }
 
   int _colorToARGB(Color color) {
@@ -185,40 +195,19 @@ class _NativeSegmentedControlState extends State<NativeSegmentedControl> {
     };
   }
 
-  Map<String, dynamic> _buildCreationParams() {
-    final bool isDark = _effectiveBrightness() == Brightness.dark;
-
-    final params = <String, dynamic>{
-      'id': _id,
-      'labels': widget.labels,
-      'selectedIndex': widget.selectedIndex,
-      'enabled': widget.enabled,
-      'isDark': isDark,
-      ..._buildThemeParams(),
-    };
-
-    // Add SF symbols if provided
-    if (widget.icons != null && widget.icons!.isNotEmpty) {
-      params['sfSymbols'] = widget.icons!;
-    }
-
-    // Add color if provided
-    if (widget.color != null) {
-      params['tintColor'] = _colorToARGB(widget.color!);
-    }
-
-    // Add icon size if provided
-    if (widget.iconSize != null) {
-      params['iconSize'] = widget.iconSize!;
-    }
-
-    // Add icon color if provided
-    if (widget.iconColor != null) {
-      params['iconColor'] = _colorToARGB(widget.iconColor!);
-    }
-
-    return params;
-  }
+  Map<String, dynamic> _buildCreationParams() => <String, dynamic>{
+    'labels': List<String>.of(widget.labels),
+    'sfSymbols': widget.icons == null ? null : List<dynamic>.of(widget.icons!),
+    'selectedIndex': widget.selectedIndex,
+    'enabled': widget.enabled,
+    'isDark': _effectiveBrightness() == Brightness.dark,
+    'tintColor': widget.color == null ? null : _colorToARGB(widget.color!),
+    'iconSize': widget.iconSize,
+    'iconColor': widget.iconColor == null
+        ? null
+        : _colorToARGB(widget.iconColor!),
+    ..._buildThemeParams(),
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -228,12 +217,12 @@ class _NativeSegmentedControlState extends State<NativeSegmentedControl> {
           viewType: 'adaptive_platform_ui/ios26_segmented_control',
           creationParams: _buildCreationParams(),
           creationParamsCodec: const StandardMessageCodec(),
+          onPlatformViewCreated: _onPlatformViewCreated,
           gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
             Factory<TapGestureRecognizer>(() => TapGestureRecognizer()),
             Factory<HorizontalDragGestureRecognizer>(
               () => HorizontalDragGestureRecognizer(),
             ),
-            Factory<PanGestureRecognizer>(() => PanGestureRecognizer()),
           },
         ),
       );

@@ -16,6 +16,7 @@ import '../tab_bar/native_tab_bar.dart';
 import 'body_placement.dart';
 import 'native_bottom_bar_layout.dart';
 import '../app_bar/native_toolbar.dart';
+import '../../overlays/native_sheet/adaptive_native_sheet.dart';
 
 /// Height of the iOS 26 Liquid Glass toolbar's content area (excluding the
 /// status bar), matching [NativeToolbar]'s default height. The toolbar is
@@ -106,6 +107,7 @@ class _NativeScaffoldState extends State<NativeScaffold> {
     // This page's own bar metrics, on every iOS version. A value shared by
     // all pages would hand this page the inset of whichever bar reported last.
     widget.scrollController?.contentTopInset.addListener(_onEdgeChanged);
+    AdaptiveNativeSheet.leaving.addListener(_onEdgeChanged);
   }
 
   @override
@@ -131,6 +133,7 @@ class _NativeScaffoldState extends State<NativeScaffold> {
       SystemVerticalBar.titleBand.removeListener(_onEdgeChanged);
     }
     widget.scrollController?.contentTopInset.removeListener(_onEdgeChanged);
+    AdaptiveNativeSheet.leaving.removeListener(_onEdgeChanged);
     super.dispose();
   }
 
@@ -220,12 +223,16 @@ class _NativeScaffoldState extends State<NativeScaffold> {
         route?.secondaryAnimation?.status == AnimationStatus.dismissed;
 
     // Show native view only if it's the current route OR it's popping. A
-    // sheet rises over the tab bar, so the tab bar follows this rule alone.
-    final showNativeView = isCurrentRoute || isPopping;
+    // sheet rises over the tab bar, so the tab bar follows this rule alone,
+    // and it stays away while a popped sheet is still sliding down.
+    final showNativeView =
+        (isCurrentRoute && !AdaptiveNativeSheet.leaving.value) || isPopping;
 
     // The top bar also stays while a popup covers the page, dimmed and inert
-    // like UIKit's navigation bar behind a presented sheet.
-    final showNativeToolbar = showNativeView || coveredByPopup;
+    // like UIKit's navigation bar behind a presented sheet, and while the
+    // sheet slides away.
+    final showNativeToolbar = isCurrentRoute || isPopping || coveredByPopup;
+    debugPrint('TMP2 scaffold build current=$isCurrentRoute leaving=${AdaptiveNativeSheet.leaving.value} show=$showNativeView');
 
     // Get brightness and determine text color
     final brightness = MediaQuery.platformBrightnessOf(context);

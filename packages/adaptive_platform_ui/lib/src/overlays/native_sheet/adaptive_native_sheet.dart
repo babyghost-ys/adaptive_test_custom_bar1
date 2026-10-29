@@ -2,15 +2,18 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart'
-    show MaterialPageRoute, PopScope, showModalBottomSheet;
+    show
+        MaterialPageRoute,
+        ModalBottomSheetRoute,
+        PopScope,
+        kMinInteractiveDimension;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
-import '../../core/adaptive_style.dart';
 import '../../devices/duo/duo_layout.dart';
 import '../../devices/duo/system_vertical_bar.dart';
-import '../../native/sheet_platform_view_guard.dart';
 import '../../navigation/app_bar/native_toolbar.dart';
 import '../../navigation/chrome/hosted_top_toolbar.dart';
 import '../../navigation/chrome/toolbar_registry.dart';
@@ -19,10 +22,10 @@ import '../filter_sheet/adaptive_filter_sheet.dart';
 
 /// A sheet that hosts any widget, with native platform views inside it.
 ///
-/// On iOS the sheet is, for now, drawn by Flutter in the page's own view: an
-/// iOS 26 style floating sheet on the root navigator, which keeps its top
-/// below the native navigation bar UIKit draws above every Flutter route.
-/// [builder] supplies its content on every platform, in the caller's isolate,
+/// On every platform the sheet is Flutter's own modal bottom sheet on the
+/// root navigator: the final shape after the iOS rotation cut could not be
+/// removed from any sheet UIKit took part in (see
+/// `docs/sheet-rotation-cut-failed-attempts.md`). [builder] supplies its content on every platform, in the caller's isolate,
 /// so the widget keeps its closures, notifiers and blocs.
 ///
 /// The UIKit presentation (one Flutter engine per sheet, started through the
@@ -36,6 +39,32 @@ class AdaptiveNativeSheet {
   static bool _hosted = false;
   static bool _closing = false;
   static Object? Function(Object?) _encodeResult = (value) => value;
+
+  static final Set<Route<Object?>> _leavingRoutes = <Route<Object?>>{};
+  static final ValueNotifier<bool> _leaving = ValueNotifier(false);
+
+  /// True while a sheet shown by [show] slides away after it was popped.
+  ///
+  /// The page under it is current again from the moment of the pop, so its
+  /// native tab bar would come back over the sheet as it slides down. The
+  /// scaffold keeps the tab bar away until this is false.
+  static ValueListenable<bool> get leaving => _leaving;
+
+  static void _watchLeaving(TransitionRoute<Object?> route) {
+    route.animation?.addStatusListener((status) {
+      debugPrint('TMP2 sheet status $status');
+      switch (status) {
+        case AnimationStatus.reverse:
+          _leavingRoutes.add(route);
+        case AnimationStatus.dismissed:
+          _leavingRoutes.remove(route);
+        case AnimationStatus.forward:
+        case AnimationStatus.completed:
+          return;
+      }
+      _leaving.value = _leavingRoutes.isNotEmpty;
+    });
+  }
 
   /// Called once by `nativeSheetMain`, before building the sheet app.
   ///
@@ -95,91 +124,78 @@ class AdaptiveNativeSheet {
         ),
       );
     }
-    if (AdaptiveStyle.of(context) != AdaptiveStyle.native) {
-      if (detents == AdaptiveFilterDetents.fit) {
-        return showModalBottomSheet<T>(
-          context: context,
-          isScrollControlled: true,
-          useRootNavigator: true,
-          useSafeArea: true,
-          showDragHandle: isDismissible,
-          enableDrag: isDismissible,
-          isDismissible: isDismissible,
-          backgroundColor: backgroundColor,
-          builder: (context) => SingleChildScrollView(
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.viewInsetsOf(context).bottom,
-            ),
-            child: builder(context),
-          ),
-        );
-      }
-      return AdaptiveBottomSheet.show<T>(
-        context: context,
-        builder: builder,
-        heightFactor: switch (detents) {
-          AdaptiveFilterDetents.short => 0.34,
-          AdaptiveFilterDetents.full => 0.94,
-          AdaptiveFilterDetents.halfAndFull || AdaptiveFilterDetents.fit => 0.5,
-        },
-        expandedHeightFactor: detents == AdaptiveFilterDetents.halfAndFull
-            ? 0.94
-            : null,
-        backgroundColor: backgroundColor,
+    // On every platform, iOS included, the sheet is Flutter's own modal
+    // bottom sheet on the root navigator. On iOS that covers the page that
+    // holds the native tab bar, so the tab bar steps aside, and the native
+    // navigation bar dims over it. Nothing is handed to UIKit, so a rotation
+    // redraws the sheet like any page.
+    final fill =
+        backgroundColor ??
+        CupertinoColors.systemBackground.resolveFrom(context);
+    if (detents == AdaptiveFilterDetents.fit) {
+      // `showModalBottomSheet` with its route in hand, so the tab bar can
+      // wait for the sheet to slide away (see [leaving]).
+      final navigator = Navigator.of(context, rootNavigator: true);
+      final route = ModalBottomSheetRoute<T>(
+        isScrollControlled: true,
+        useSafeArea: true,
+        showDragHandle: isDismissible,
+        enableDrag: isDismissible,
         isDismissible: isDismissible,
-      );
-    }
-    final resizable = detents == AdaptiveFilterDetents.halfAndFull;
-    // Over another sheet, a second scrim would be split around native
-    // controls by Flutter's platform view compositing. The lower sheet dims
-    // its own fill instead, as UIKit dims a sheet behind a sheet.
-    final nested = ModalRoute.of(context) is PopupRoute;
-    // On the root navigator the sheet covers the page that holds the native
-    // tab bar, so the tab bar steps aside rather than staying over the sheet.
-    return showModalBottomSheet<T>(
-      context: context,
-      useRootNavigator: true,
-      isScrollControlled: true,
-      isDismissible: isDismissible,
-      enableDrag: isDismissible,
-      backgroundColor: const Color(0x00000000),
-      elevation: 0,
-      constraints: const BoxConstraints(),
-      barrierColor: nested ? const Color(0x00000000) : _scrim,
-      builder: (context) {
-        final panel = _FloatingSheet(
-          share: switch (detents) {
-            AdaptiveFilterDetents.fit => null,
-            AdaptiveFilterDetents.short => 0.34,
-            AdaptiveFilterDetents.full => 1,
-            AdaptiveFilterDetents.halfAndFull => 0.5,
-          },
-          expandedShare: resizable ? 1 : null,
-          grabber: isDismissible || resizable,
-          backgroundColor: backgroundColor,
-          builder: builder,
-        );
-        return PopScope(
+        backgroundColor: fill,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(36)),
+        ),
+        capturedThemes: InheritedTheme.capture(
+          from: context,
+          to: navigator.context,
+        ),
+        barrierLabel: 'Dismiss',
+        builder: (context) => PopScope(
           canPop: isDismissible,
-          child: detents != AdaptiveFilterDetents.fit
-              ? panel
-              : SizedBox.expand(
-                  child: Stack(
-                    children: [
-                      Positioned.fill(
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: isDismissible
-                              ? () => Navigator.maybePop(context)
-                              : null,
-                        ),
-                      ),
-                      Positioned(left: 0, right: 0, bottom: 0, child: panel),
-                    ],
-                  ),
+          child: _BelowNativeBars(
+            handle: isDismissible,
+            child: ValueListenableBuilder<bool>(
+              valueListenable: _leaving,
+              builder: (context, leaving, child) => Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (leaving)
+                    const SizedBox(
+                      height: 40,
+                      width: double.infinity,
+                      child: ColoredBox(color: Color(0xFFFF0000)),
+                    ),
+                  Flexible(child: child!),
+                ],
+              ),
+              child: SingleChildScrollView(
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.viewInsetsOf(context).bottom,
                 ),
-        );
+                child: builder(context),
+              ),
+            ),
+          ),
+        ),
+      );
+      final result = navigator.push<T>(route);
+      _watchLeaving(route);
+      return result;
+    }
+    return AdaptiveBottomSheet.show<T>(
+      context: context,
+      builder: builder,
+      heightFactor: switch (detents) {
+        AdaptiveFilterDetents.short => 0.34,
+        AdaptiveFilterDetents.full => 0.94,
+        AdaptiveFilterDetents.halfAndFull || AdaptiveFilterDetents.fit => 0.5,
       },
+      expandedHeightFactor: detents == AdaptiveFilterDetents.halfAndFull
+          ? 0.94
+          : null,
+      backgroundColor: fill,
+      isDismissible: isDismissible,
     );
   }
 
@@ -309,70 +325,24 @@ class _AdaptiveNativeSheetContentState
   }
 }
 
-/// Dimming behind a sheet, and over a sheet another sheet covers.
-const Color _scrim = Color(0x33000000);
-
-/// Gap between a floating sheet and the screen edges, and between its top
-/// and the native bar above it.
+/// Gap between the sheet's top and the native bar above it.
 const double _inset = 8;
 
-/// A wider sheet is centred, as UIKit centres one on a wide screen.
-const double _maxSheetWidth = 640;
+/// Caps a fit sheet's content so the sheet's top stays below the native bars
+/// over the page, which UIKit draws above everything Flutter draws; taller
+/// content scrolls. UIKit moves the bars when the screen turns, and the cap
+/// follows them.
+class _BelowNativeBars extends StatelessWidget {
+  const _BelowNativeBars({required this.handle, required this.child});
 
-/// An iOS 26 floating sheet drawn by Flutter: inset from the screen edges,
-/// with continuous corners, and a grabber when it can be dragged.
-///
-/// It rests at [share] of the screen height, or fits its content when [share]
-/// is null; with [expandedShare] the grabber moves it between the two. Either
-/// way its top stays below the native bars over the page, which UIKit draws
-/// above everything Flutter draws, and content taller than the room left
-/// scrolls.
-class _FloatingSheet extends StatefulWidget {
-  const _FloatingSheet({
-    required this.share,
-    required this.expandedShare,
-    required this.grabber,
-    required this.backgroundColor,
-    required this.builder,
-  });
-
-  final double? share;
-  final double? expandedShare;
-  final bool grabber;
-  final Color? backgroundColor;
-  final WidgetBuilder builder;
-
-  @override
-  State<_FloatingSheet> createState() => _FloatingSheetState();
-}
-
-class _FloatingSheetState extends State<_FloatingSheet> {
-  static const double _flingVelocity = 300;
-  static const double _dragThreshold = 24;
-
-  bool _expanded = false;
-  double _drag = 0;
-
-  void _settle(double velocity) {
-    final up = velocity < -_flingVelocity || _drag < -_dragThreshold;
-    final down = velocity > _flingVelocity || _drag > _dragThreshold;
-    _drag = 0;
-    if (up && !_expanded) {
-      setState(() => _expanded = true);
-    } else if (down) {
-      if (_expanded) {
-        setState(() => _expanded = false);
-      } else {
-        Navigator.maybePop(context);
-      }
-    }
-  }
+  /// Whether the sheet shows Material's drag handle above [child].
+  final bool handle;
+  final Widget child;
 
   /// How far down the screen the native bars over the covered page reach:
   /// its navigation bar, with any large title, or on iPhone Duo the title
-  /// band (the controls are in the side strip, which the sheet's side insets
-  /// keep clear of). Only the status bar when the page shows no native bar.
-  double _barsBottom(TopToolbarContent bar) {
+  /// band. Only the status bar when the page shows no native bar.
+  double _barsBottom(BuildContext context, TopToolbarContent bar) {
     // The sheet's route has taken the status bar out of its padding.
     final statusBar = MediaQueryData.fromView(View.of(context)).viewPadding.top;
     if (DuoPoseScope.of(context) != null) {
@@ -393,143 +363,29 @@ class _FloatingSheetState extends State<_FloatingSheet> {
     // While a sheet covers it, the page in front keeps owning the bar.
     final bar = TopToolbarContent.of(ToolbarRegistry.maybeOf(context)?.owner);
     final barBottom = bar.scrollController?.navigationBarBottom;
-    // UIKit moves the bars when the screen turns; the sheet follows them.
     return ListenableBuilder(
       listenable: Listenable.merge([
         nativeNavigationBarBottom,
         SystemVerticalBar.titleBand,
         if (barBottom != null) barBottom,
       ]),
-      builder: (context, _) => _buildSheet(context, bar),
-    );
-  }
-
-  Widget _buildSheet(BuildContext context, TopToolbarContent bar) {
-    final media = MediaQuery.of(context);
-    // Floats clear of the home indicator, and rides on top of the keyboard
-    // while a field in the sheet has focus.
-    final lift = media.viewPadding.bottom > 0 ? _inset : 0.0;
-    final bottom = media.viewInsets.bottom + lift;
-    final room = math.max(
-      0.0,
-      media.size.height - bottom - _barsBottom(bar) - _inset,
-    );
-    final fill =
-        widget.backgroundColor ??
-        CupertinoColors.systemBackground.resolveFrom(context);
-    final covered = !(ModalRoute.of(context)?.isCurrent ?? true);
-    final share = widget.share;
-    final expandedShare = widget.expandedShare;
-
-    Widget content = Builder(builder: widget.builder);
-    if (share == null) content = SingleChildScrollView(child: content);
-    // The sheet's edges are its content's safe area: nothing at the top or
-    // the sides, and at the bottom only what of the home indicator it still
-    // overlaps.
-    content = MediaQuery(
-      data: media.copyWith(
-        padding: EdgeInsets.only(
-          bottom: math.max(0.0, media.padding.bottom - lift),
-        ),
-        viewPadding: EdgeInsets.only(
-          bottom: math.max(0.0, media.viewPadding.bottom - lift),
-        ),
-        viewInsets: EdgeInsets.zero,
-      ),
-      child: content,
-    );
-    if (widget.grabber) {
-      // UIKit's grabber floats over the top of the content.
-      Widget grabber = Padding(
-        padding: const EdgeInsets.only(top: 5),
-        child: SizedBox(
-          width: 36,
-          height: 5,
-          child: DecoratedBox(
-            decoration: ShapeDecoration(
-              color: CupertinoColors.tertiaryLabel.resolveFrom(context),
-              shape: const StadiumBorder(),
-            ),
-          ),
-        ),
-      );
-      grabber = expandedShare == null
-          ? IgnorePointer(child: grabber)
-          : GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => setState(() => _expanded = !_expanded),
-              onVerticalDragUpdate: (details) => _drag += details.delta.dy,
-              onVerticalDragEnd: (details) =>
-                  _settle(details.primaryVelocity ?? 0),
-              onVerticalDragCancel: () => _drag = 0,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(32, 0, 32, 10),
-                child: grabber,
-              ),
-            );
-      content = Stack(
-        fit: share == null ? StackFit.loose : StackFit.expand,
-        children: [
-          content,
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: Center(child: grabber),
-          ),
-        ],
-      );
-    }
-
-    Widget sheet = SheetSurface(
-      child: TweenAnimationBuilder<Color?>(
-        // Covered by another sheet, only the fill darkens: a layer drawn over
-        // the sheet's native controls would be split around them by
-        // Flutter's platform view compositing.
-        tween: ColorTween(
-          end: covered ? Color.alphaBlend(_scrim, fill) : fill,
-        ),
-        duration: const Duration(milliseconds: 220),
-        builder: (context, color, child) => DecoratedBox(
-          decoration: BoxDecoration(
-            color: color ?? fill,
-            borderRadius: BorderRadius.circular(36),
-          ),
+      builder: (context, _) {
+        final media = MediaQuery.of(context);
+        // The sheet's drag handle sits above the content and takes a row.
+        final handleHeight = handle ? kMinInteractiveDimension : 0.0;
+        final room = math.max(
+          0.0,
+          media.size.height -
+              media.viewInsets.bottom -
+              _barsBottom(context, bar) -
+              _inset -
+              handleHeight,
+        );
+        return ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: room),
           child: child,
-        ),
-        child: content,
-      ),
-    );
-    if (share != null) {
-      sheet = TweenAnimationBuilder<double>(
-        tween: Tween(end: _expanded ? expandedShare ?? share : share),
-        duration: const Duration(milliseconds: 260),
-        curve: Curves.easeOutCubic,
-        builder: (context, value, child) => SizedBox(
-          height: math.min(value * media.size.height, room),
-          child: child,
-        ),
-        child: sheet,
-      );
-    }
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        math.max(_inset, media.padding.left),
-        0,
-        math.max(_inset, media.padding.right),
-        bottom,
-      ),
-      child: Align(
-        alignment: Alignment.bottomCenter,
-        heightFactor: 1,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: _maxSheetWidth,
-            maxHeight: room,
-          ),
-          child: SizedBox(width: double.infinity, child: sheet),
-        ),
-      ),
+        );
+      },
     );
   }
 }

@@ -480,7 +480,19 @@ final class SearchTabView: NSObject, FlutterPlatformView, UITabBarControllerDele
 
     @available(iOS 18.0, *)
     func tabBarController(_ tabBarController: UITabBarController, shouldSelectTab tab: UITab) -> Bool {
-        if let target = tabs.tabs.firstIndex(where: { $0 === tab }), target == searchIndex { prepareSearchPresentation() }
+        guard let target = tabs.tabs.firstIndex(where: { $0 === tab }) else { return true }
+        if let host = NativeNavigationHost.installed, host.tabs === tabs,
+           host.managedRoutes.count > 1, host.managedRoutes.last?.backButtonVisible == false,
+           let navigation = host.managedNavigation, let root = host.managedRoutes.first?.content {
+            guard host.selectionAfterReturnToRoot == nil, navigation.transitionCoordinator == nil else { return false }
+            host.selectionAfterReturnToRoot = { [weak self] in
+                guard let self, !self.disposed else { return }
+                self.channel.invokeMethod("selected", arguments: target)
+            }
+            navigation.popToViewController(root, animated: false)
+            return false
+        }
+        if target == searchIndex { prepareSearchPresentation() }
         return true
     }
     @available(iOS 18.0, *)

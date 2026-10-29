@@ -1,9 +1,8 @@
 import Flutter
 import UIKit
 
-/// Factory for creating iOS 26 native segmented control platform views
-class iOS26SegmentedControlViewFactory: NSObject, FlutterPlatformViewFactory {
-    private var messenger: FlutterBinaryMessenger
+final class iOS26SegmentedControlViewFactory: NSObject, FlutterPlatformViewFactory {
+    private let messenger: FlutterBinaryMessenger
 
     init(messenger: FlutterBinaryMessenger) {
         self.messenger = messenger
@@ -15,29 +14,25 @@ class iOS26SegmentedControlViewFactory: NSObject, FlutterPlatformViewFactory {
         viewIdentifier viewId: Int64,
         arguments args: Any?
     ) -> FlutterPlatformView {
-        return iOS26SegmentedControlView(
+        iOS26SegmentedControlView(
             frame: frame,
             viewIdentifier: viewId,
             arguments: args,
-            binaryMessenger: messenger
-        )
+            binaryMessenger: messenger)
     }
 
     func createArgsCodec() -> FlutterMessageCodec & NSObjectProtocol {
-        return FlutterStandardMessageCodec.sharedInstance()
+        FlutterStandardMessageCodec.sharedInstance()
     }
 }
 
-/// Native iOS 26 segmented control implementation
-class iOS26SegmentedControlView: NSObject, FlutterPlatformView {
-    private var _view: UIView
-    private var segmentedControl: UISegmentedControl!
-    private var channel: FlutterMethodChannel
-    private var controlId: Int
-    private var isDark: Bool = false
-    private var tintColor: UIColor?
-    private var textColor: UIColor?
-    private var selectedTextColor: UIColor?
+/// The UIKit control itself is the platform view. Flutter owns its frame;
+/// UIKit owns its contents, native selection animation and Liquid Glass.
+/// There is no second view or layout pass trying to resize the control.
+final class iOS26SegmentedControlView: NSObject, FlutterPlatformView {
+    private let control: UISegmentedControl
+    private let channel: FlutterMethodChannel
+    private var configuration: Configuration?
 
     init(
         frame: CGRect,
@@ -45,219 +40,149 @@ class iOS26SegmentedControlView: NSObject, FlutterPlatformView {
         arguments args: Any?,
         binaryMessenger messenger: FlutterBinaryMessenger
     ) {
-        _view = UIView(frame: frame)
-
-        if let config = args as? [String: Any] {
-            controlId = config["id"] as? Int ?? 0
-            isDark = config["isDark"] as? Bool ?? false
-        } else {
-            controlId = 0
-        }
-
+        control = UISegmentedControl(frame: frame)
         channel = FlutterMethodChannel(
-            name: "adaptive_platform_ui/ios26_segmented_control_\(controlId)",
-            binaryMessenger: messenger
-        )
-
+            name: "adaptive_platform_ui/segmented_control/\(viewId)",
+            binaryMessenger: messenger)
         super.init()
 
-        createNativeSegmentedControl(with: args)
+        apply(Configuration(args as? [String: Any] ?? [:]))
+        control.addTarget(self, action: #selector(valueChanged), for: .valueChanged)
         NotificationCenter.default.addObserver(
-            self, selector: #selector(nativeFontChanged), name: AdaptiveNativeFonts.didChange, object: nil)
-
-        channel.setMethodCallHandler { [weak self] (call, result) in
-            self?.handleMethodCall(call, result: result)
+            self, selector: #selector(nativeFontChanged),
+            name: AdaptiveNativeFonts.didChange, object: nil)
+        channel.setMethodCallHandler { [weak self] call, result in
+            guard let self else {
+                result(FlutterError(code: "disposed", message: "The segmented control was disposed.", details: nil))
+                return
+            }
+            guard call.method == "update" else {
+                result(FlutterMethodNotImplemented)
+                return
+            }
+            guard let values = call.arguments as? [String: Any] else {
+                result(FlutterError(code: "bad_arguments", message: "Expected a control configuration.", details: nil))
+                return
+            }
+            self.apply(Configuration(values))
+            result(nil)
         }
     }
 
-    func view() -> UIView {
-        return _view
+    deinit {
+        channel.setMethodCallHandler(nil)
+        NotificationCenter.default.removeObserver(self)
     }
 
-    private func createNativeSegmentedControl(with args: Any?) {
-        segmentedControl = FlutterSizedSegmentedControl()
-        segmentedControl.translatesAutoresizingMaskIntoConstraints = false
-        segmentedControl.isUserInteractionEnabled = true
-        _view.isUserInteractionEnabled = true
+    func view() -> UIView { control }
 
-        if let config = args as? [String: Any] {
-            // Check for SF symbols first
-            if let sfSymbols = config["sfSymbols"] as? [String], !sfSymbols.isEmpty {
-                // Use SF symbols for segments
-                for (index, symbolName) in sfSymbols.enumerated() {
-                    if let image = UIImage(systemName: symbolName) {
-                        segmentedControl.insertSegment(with: image, at: index, animated: false)
-                    }
-                }
+    private func apply(_ next: Configuration) {
+        let previous = configuration
+        guard next != previous else { return }
+        configuration = next
 
-                // Apply icon size if provided
-                if let iconSizeNumber = config["iconSize"] as? NSNumber {
-                    let iconSize = CGFloat(iconSizeNumber.doubleValue)
-                    let configuration = UIImage.SymbolConfiguration(pointSize: iconSize)
-                    for i in 0..<segmentedControl.numberOfSegments {
-                        if let image = segmentedControl.imageForSegment(at: i) {
-                            segmentedControl.setImage(image.withConfiguration(configuration), forSegmentAt: i)
-                        }
-                    }
-                }
-
-                // Apply icon color if provided
-                if let iconColorValue = config["iconColor"] as? Int {
-                    let iconColor = colorFromARGB(iconColorValue)
-                    segmentedControl.setTitleTextAttributes([.foregroundColor: iconColor], for: .normal)
-                }
+        let itemsChanged = previous?.labels != next.labels || previous?.symbols != next.symbols
+        if itemsChanged {
+            control.removeAllSegments()
+            for index in 0..<next.itemCount {
+                // Keep an item for every input index, including invalid symbols.
+                // Otherwise native selection indices no longer match Dart.
+                control.insertSegment(withTitle: next.title(at: index), at: index, animated: false)
             }
-            // Otherwise use labels
-            else if let labels = config["labels"] as? [String] {
-                for (index, label) in labels.enumerated() {
-                    segmentedControl.insertSegment(withTitle: label, at: index, animated: false)
-                }
-            }
-
-            // Set enabled state
-            if let enabled = config["enabled"] as? Bool {
-                segmentedControl.isEnabled = enabled
-            }
-
-            // Set tint color if provided
-            if let tintColorValue = config["tintColor"] as? Int {
-                tintColor = colorFromARGB(tintColorValue)
-            }
-
-            if let textColorValue = config["textColor"] as? Int {
-                textColor = colorFromARGB(textColorValue)
-            }
-            if let selectedTextColorValue = config["selectedTextColor"] as? Int {
-                selectedTextColor = colorFromARGB(selectedTextColorValue)
-            }
-
-            // Set selected index
-            if let selectedIndex = config["selectedIndex"] as? Int, selectedIndex >= 0 {
-                segmentedControl.selectedSegmentIndex = selectedIndex
-            }
-
-            // Apply dark mode
-            if let isDark = config["isDark"] as? Bool {
-                if #available(iOS 13.0, *) {
-                    _view.overrideUserInterfaceStyle = isDark ? .dark : .light
+        }
+        if itemsChanged || previous?.iconSize != next.iconSize || previous?.iconColor != next.iconColor {
+            for index in 0..<next.itemCount where !next.symbols.isEmpty {
+                if let image = next.image(at: index) {
+                    control.setImage(image, forSegmentAt: index)
                 }
             }
         }
-
-        applyTheme()
-
-        _view.addSubview(segmentedControl)
-        NSLayoutConstraint.activate([
-            segmentedControl.leadingAnchor.constraint(equalTo: _view.leadingAnchor),
-            segmentedControl.trailingAnchor.constraint(equalTo: _view.trailingAnchor),
-            segmentedControl.centerYAnchor.constraint(equalTo: _view.centerYAnchor),
-        ])
-
-        segmentedControl.addTarget(self, action: #selector(segmentChanged), for: .valueChanged)
+        if previous?.enabled != next.enabled { control.isEnabled = next.enabled }
+        if previous?.isDark != next.isDark {
+            control.overrideUserInterfaceStyle = next.isDark ? .dark : .light
+        }
+        if previous == nil || previous?.tintColor != next.tintColor {
+            control.selectedSegmentTintColor = next.tintColor.map(Self.color)
+        }
+        if previous == nil || previous?.textColor != next.textColor || previous?.selectedTextColor != next.selectedTextColor {
+            applyTitleAttributes(next)
+        }
+        if itemsChanged || previous?.selectedIndex != next.selectedIndex {
+            let selected = (0..<next.itemCount).contains(next.selectedIndex)
+                ? next.selectedIndex : UISegmentedControl.noSegment
+            if control.selectedSegmentIndex != selected { control.selectedSegmentIndex = selected }
+        }
     }
 
-    private func colorFromARGB(_ argb: Int) -> UIColor {
-        let a = CGFloat((argb >> 24) & 0xFF) / 255.0
-        let r = CGFloat((argb >> 16) & 0xFF) / 255.0
-        let g = CGFloat((argb >> 8) & 0xFF) / 255.0
-        let b = CGFloat(argb & 0xFF) / 255.0
-        return UIColor(red: r, green: g, blue: b, alpha: a)
-    }
-
-    private func applyTheme() {
-        let normalTextColor = textColor ?? .label
-        let selectedColor = selectedTextColor ?? normalTextColor
+    private func applyTitleAttributes(_ configuration: Configuration) {
+        let normal = configuration.textColor.map(Self.color) ?? .label
+        let selected = configuration.selectedTextColor.map(Self.color) ?? normal
         let font = AdaptiveNativeFonts.font(size: 13, weight: .medium)
-        let normalAttributes: [NSAttributedString.Key: Any] = [
-            .foregroundColor: normalTextColor,
-            .font: font,
-        ]
-        let selectedAttributes: [NSAttributedString.Key: Any] = [
-            .foregroundColor: selectedColor,
-            .font: font,
-        ]
-        let disabledAttributes: [NSAttributedString.Key: Any] = [
-            .foregroundColor: normalTextColor.withAlphaComponent(0.5),
-            .font: font,
-        ]
-
-        if let tintColor = tintColor {
-            segmentedControl.selectedSegmentTintColor = tintColor
+        control.setTitleTextAttributes([.foregroundColor: normal, .font: font], for: .normal)
+        let selectedStates: [UIControl.State] = [.selected, [.selected, .highlighted], [.selected, .focused]]
+        for state in selectedStates {
+            control.setTitleTextAttributes([.foregroundColor: selected, .font: font], for: state)
         }
-        segmentedControl.setTitleTextAttributes(normalAttributes, for: .normal)
-        segmentedControl.setTitleTextAttributes(selectedAttributes, for: .selected)
-        segmentedControl.setTitleTextAttributes(selectedAttributes, for: [.selected, .highlighted])
-        segmentedControl.setTitleTextAttributes(selectedAttributes, for: [.selected, .focused])
-        segmentedControl.setTitleTextAttributes(disabledAttributes, for: .disabled)
-        segmentedControl.setNeedsLayout()
-        segmentedControl.layoutIfNeeded()
+        control.setTitleTextAttributes(
+            [.foregroundColor: normal.withAlphaComponent(0.5), .font: font], for: .disabled)
+        control.setTitleTextAttributes(
+            [.foregroundColor: selected.withAlphaComponent(0.5), .font: font], for: [.selected, .disabled])
     }
 
     @objc private func nativeFontChanged() {
-        applyTheme()
+        if let configuration { applyTitleAttributes(configuration) }
     }
 
-    @objc private func segmentChanged() {
-        applyTheme()
-        channel.invokeMethod("valueChanged", arguments: ["index": segmentedControl.selectedSegmentIndex])
+    @objc private func valueChanged() {
+        channel.invokeMethod("valueChanged", arguments: ["index": control.selectedSegmentIndex])
     }
 
-    private func handleMethodCall(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-        switch call.method {
-        case "setSelectedIndex":
-            if let args = call.arguments as? [String: Any],
-               let index = args["index"] as? Int {
-                if index >= 0 && index < segmentedControl.numberOfSegments {
-                    segmentedControl.selectedSegmentIndex = index
-                } else if index == -1 {
-                    segmentedControl.selectedSegmentIndex = UISegmentedControl.noSegment
-                }
-            }
-            result(nil)
+    private static func color(_ argb: Int) -> UIColor {
+        UIColor(
+            red: CGFloat((argb >> 16) & 0xff) / 255,
+            green: CGFloat((argb >> 8) & 0xff) / 255,
+            blue: CGFloat(argb & 0xff) / 255,
+            alpha: CGFloat((argb >> 24) & 0xff) / 255)
+    }
 
-        case "setBrightness":
-            if let args = call.arguments as? [String: Any] {
-                if let dark = args["isDark"] as? Bool {
-                    isDark = dark
-                    if #available(iOS 13.0, *) {
-                        _view.overrideUserInterfaceStyle = dark ? .dark : .light
-                    }
-                }
-                if let tintColorValue = args["tintColor"] as? Int {
-                    tintColor = colorFromARGB(tintColorValue)
-                }
+    private struct Configuration: Equatable {
+        let labels: [String]
+        let symbols: [String]
+        let selectedIndex: Int
+        let enabled: Bool
+        let isDark: Bool
+        let tintColor: Int?
+        let textColor: Int?
+        let selectedTextColor: Int?
+        let iconSize: Double?
+        let iconColor: Int?
 
-                if let textColorValue = args["textColor"] as? Int {
-                    textColor = colorFromARGB(textColorValue)
-                }
-                if let selectedTextColorValue = args["selectedTextColor"] as? Int {
-                    selectedTextColor = colorFromARGB(selectedTextColorValue)
-                }
-
-                applyTheme()
-            }
-            result(nil)
-
-        default:
-            result(FlutterMethodNotImplemented)
+        init(_ values: [String: Any]) {
+            labels = values["labels"] as? [String] ?? []
+            symbols = values["sfSymbols"] as? [String] ?? []
+            selectedIndex = values["selectedIndex"] as? Int ?? UISegmentedControl.noSegment
+            enabled = values["enabled"] as? Bool ?? true
+            isDark = values["isDark"] as? Bool ?? false
+            tintColor = (values["tintColor"] as? NSNumber)?.intValue
+            textColor = (values["textColor"] as? NSNumber)?.intValue
+            selectedTextColor = (values["selectedTextColor"] as? NSNumber)?.intValue
+            iconSize = (values["iconSize"] as? NSNumber)?.doubleValue
+            iconColor = (values["iconColor"] as? NSNumber)?.intValue
         }
-    }
-}
 
-/// A segmented control that takes a new size at once. Resized, its Liquid
-/// Glass selection springs to its new place over about a third of a second.
-/// In UIKit a resize happens inside the animation that caused it, such as a
-/// rotation, and the spring ends with it; Flutter resizes its native views
-/// in a frame of its own, half way through a rotation, so the selection was
-/// still sliding once everything around it had come to rest. A tap that
-/// moves the selection leaves the size alone, and still slides.
-private final class FlutterSizedSegmentedControl: UISegmentedControl {
-    private var laidOutSize: CGSize?
+        var itemCount: Int { symbols.isEmpty ? labels.count : symbols.count }
 
-    override func layoutSubviews() {
-        let resized = laidOutSize != nil && laidOutSize != bounds.size
-        laidOutSize = bounds.size
-        guard resized else { return super.layoutSubviews() }
-        UIView.performWithoutAnimation { super.layoutSubviews() }
+        func title(at index: Int) -> String {
+            labels.indices.contains(index) ? labels[index] : ""
+        }
+
+        func image(at index: Int) -> UIImage? {
+            guard symbols.indices.contains(index), var image = UIImage(systemName: symbols[index]) else { return nil }
+            if let iconSize, iconSize.isFinite, iconSize > 0 {
+                image = image.withConfiguration(UIImage.SymbolConfiguration(pointSize: CGFloat(iconSize)))
+            }
+            if let iconColor { image = image.withTintColor(iOS26SegmentedControlView.color(iconColor), renderingMode: .alwaysOriginal) }
+            return image
+        }
     }
 }

@@ -18,6 +18,7 @@ library;
 // Platform utilities
 export 'src/core/platform_info.dart';
 export 'src/core/adaptive_style.dart';
+export 'src/devices/duo/duo_layout.dart' show DuoPose, DuoPoseScope;
 
 // Animation utilities
 export 'src/core/animation.dart';

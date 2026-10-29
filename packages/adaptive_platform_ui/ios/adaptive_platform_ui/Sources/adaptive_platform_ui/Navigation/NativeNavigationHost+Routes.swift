@@ -184,6 +184,10 @@ extension NativeNavigationHost {
             restoreAppearance()
             layout()
             result(true)
+            if managedRoutes.count == 1, let selection = selectionAfterReturnToRoot {
+                selectionAfterReturnToRoot = nil
+                DispatchQueue.main.async(execute: selection)
+            }
             return
         }
         result(false)
@@ -274,7 +278,7 @@ extension NativeNavigationHost {
             }
             return
         }
-        let hidden = controller !== managedRoutes.first?.content
+        let hidden = controller !== managedRoutes.first?.content && (managedRoutes.last?.backButtonVisible ?? true)
         guard tabs.isTabBarHidden != hidden else { return }
         tabs.setTabBarHidden(hidden, animated: true)
         navigation.transitionCoordinator?.animate(alongsideTransition: nil) { [weak tabs] context in

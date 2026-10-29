@@ -8,26 +8,161 @@ import 'package:native_widgets_on_duo/core/widgets/label.dart';
 import 'package:native_widgets_on_duo/core/widgets/sheet_frame.dart';
 import 'package:native_widgets_on_duo/features/activity/models/activity_filter.dart';
 import 'package:native_widgets_on_duo/features/investment/data/demo_assets.dart';
-import 'package:native_widgets_on_duo/core/widgets/window_segmented_control.dart';
 
-/// A native sheet that follows the height of the widget it is given. Choosing
-/// the date line opens a second native sheet on top, holding another widget:
-/// the native wheel date picker.
+/// A real UIKit sheet (`UISheetPresentationController`) of native controls:
+/// a `UISegmentedControl` for the kind, chips for the symbols, and behind a
+/// disclosure row a `UIDatePicker`, period chips and a `UISlider`. The sheet
+/// fits its content and reports a live count. Off iOS the same controls draw
+/// in a Material bottom sheet.
+/// Build 12: when set, the filter opens as a stock Material bottom sheet
+/// drawn by Flutter, with Flutter widgets only.
+bool useFlutterSheet = false;
+
 Future<ActivityFilter?> showActivityFilterSheet(
+  BuildContext context,
+  ActivityFilter current,
+) async {
+  if (useFlutterSheet) {
+    // Build 19: Flutter's own stock `showModalBottomSheet` (no package
+    // sheet code), with adaptive native controls inside it, opened expanded.
+    final draft = ValueNotifier(current);
+    final more = ValueNotifier(true);
+    return showModalBottomSheet<ActivityFilter>(
+      context: context,
+      useRootNavigator: true,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(36)),
+      ),
+      showDragHandle: true,
+      builder: (_) => SingleChildScrollView(
+        child: ActivityFilterContent(draft: draft, more: more),
+      ),
+    ).whenComplete(() {
+      draft.dispose();
+      more.dispose();
+    });
+  }
+  final values = await AdaptiveFilterSheet.show(
+    context: context,
+    title: 'Filters',
+    tint: red,
+    detents: AdaptiveFilterDetents.fit,
+    controls: [
+      const AdaptiveFilterChoices(
+        'kind',
+        [
+          AdaptiveFilterOption('all', 'All'),
+          AdaptiveFilterOption('bought', 'Bought'),
+          AdaptiveFilterOption('dividends', 'Dividends'),
+        ],
+        layout: AdaptiveFilterLayout.segmented,
+      ),
+      AdaptiveFilterChoices(
+        'symbols',
+        [
+          for (final a in assets)
+            AdaptiveFilterOption(
+              a.symbol,
+              a.symbol,
+              icon: const AdaptiveIcon(
+                sfSymbol: 'chart.line.uptrend.xyaxis',
+                icon: Icons.show_chart_rounded,
+              ),
+            ),
+        ],
+        multiple: true,
+      ),
+      AdaptiveFilterSection(
+        'more',
+        icon: const AdaptiveIcon(
+          sfSymbol: 'slider.horizontal.3',
+          icon: Icons.tune_rounded,
+        ),
+        controls: [
+          AdaptiveFilterDate(
+            'since',
+            icon: const AdaptiveIcon(
+              sfSymbol: 'calendar',
+              icon: Icons.event_rounded,
+            ),
+            firstDate: activityDate(11),
+            lastDate: activityDate(0),
+            anyLabel: 'Any date',
+          ),
+          const AdaptiveFilterChoices('period', [
+            AdaptiveFilterOption(
+              'all',
+              'Any time',
+              icon: AdaptiveIcon(
+                sfSymbol: 'infinity',
+                icon: Icons.all_inclusive_rounded,
+              ),
+            ),
+            AdaptiveFilterOption(
+              'week',
+              '7 days',
+              icon: AdaptiveIcon(
+                sfSymbol: 'calendar',
+                icon: Icons.calendar_month_outlined,
+              ),
+            ),
+            AdaptiveFilterOption(
+              'threeDays',
+              '3 days',
+              icon: AdaptiveIcon(sfSymbol: 'clock', icon: Icons.schedule_rounded),
+            ),
+          ]),
+          const AdaptiveFilterSlider(
+            'minAmount',
+            min: 0,
+            max: ActivityFilter.maxAmount,
+            prefix: r'$',
+            anyLabel: 'Any amount',
+          ),
+        ],
+      ),
+    ],
+    values: _encodeFilter(current),
+    cleared: _encodeFilter(const ActivityFilter()),
+    count: (values) => _decodeFilter(values).matching(assets).length,
+  );
+  return values == null ? null : _decodeFilter(values);
+}
+
+Map<String, Object> _encodeFilter(ActivityFilter f) => {
+  'kind': [f.kind.name],
+  'symbols': f.symbols.toList()..sort(),
+  'since': f.since == null ? '' : AdaptiveFilterDate.encodeDay(f.since!),
+  'period': [f.period.name],
+  'minAmount': f.minAmount,
+};
+
+ActivityFilter _decodeFilter(Map<String, Object> values) {
+  List<String> list(String id) =>
+      (values[id] as List<Object?>? ?? const []).cast<String>();
+  return ActivityFilter(
+    kind: ActivityKind.values.byName(list('kind').firstOrNull ?? 'all'),
+    symbols: list('symbols').toSet(),
+    since: AdaptiveFilterDate.decodeDay(values['since']),
+    period: ActivityPeriod.values.byName(list('period').firstOrNull ?? 'all'),
+    minAmount: (values['minAmount'] as num?)?.toDouble() ?? 0,
+  );
+}
+
+/// Build 7 comparison: the same filter as a sheet drawn by Flutter, with
+/// Flutter chips and a Flutter slider only, opened with its lower section
+/// expanded so the sheet is tall enough to cross the 402 pt line.
+Future<ActivityFilter?> showActivityFlutterSheet(
   BuildContext context,
   ActivityFilter current,
 ) {
   final draft = ValueNotifier(current);
-  final more = ValueNotifier(
-    current.period != ActivityPeriod.all ||
-        current.minAmount > 0 ||
-        current.since != null,
-  );
+  final more = ValueNotifier(true);
   return AdaptiveNativeSheet.show<ActivityFilter>(
     context: context,
-    route: 'activity',
-    arguments: NativeSheetCodec.encode(current),
-    decodeResult: NativeSheetCodec.activity,
     builder: (_) => ActivityFilterContent(draft: draft, more: more),
   ).whenComplete(() {
     draft.dispose();
@@ -35,6 +170,8 @@ Future<ActivityFilter?> showActivityFilterSheet(
   });
 }
 
+/// The widget of the dormant engine-hosted sheet (`nativeSheetMain`), and of
+/// the build 7 Flutter-drawn comparison sheet. Flutter widgets only.
 class ActivityFilterContent extends StatelessWidget {
   const ActivityFilterContent({
     super.key,
@@ -64,7 +201,8 @@ class ActivityFilterContent extends StatelessWidget {
           : () => draft.value = const ActivityFilter(),
       onApply: () => AdaptiveNativeSheet.pop(context, draft.value),
       children: [
-        WindowSegmentedControl(
+        AdaptiveSegmentedControl(
+          color: red,
           labels: const ['All', 'Bought', 'Dividends'],
           selectedIndex: filter.kind.index,
           onValueChanged: (index) =>
@@ -116,9 +254,10 @@ class ActivityFilterContent extends StatelessWidget {
                 size: 28,
                 weight: FontWeight.w600,
               ),
-              Slider(
+              AdaptiveSlider(
                 value: filter.minAmount,
                 max: ActivityFilter.maxAmount,
+                activeColor: red,
                 onChanged: (v) => draft.value = filter.copyWith(minAmount: v),
               ),
             ],

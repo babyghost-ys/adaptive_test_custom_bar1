@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:native_widgets_on_duo/app/theme/palette.dart';
 import 'package:native_widgets_on_duo/core/formatting/money.dart';
@@ -12,8 +13,12 @@ import 'package:native_widgets_on_duo/core/widgets/section.dart';
 import 'package:native_widgets_on_duo/features/investment/bloc/investment_bloc.dart';
 import 'package:native_widgets_on_duo/features/investment/data/demo_assets.dart';
 import 'package:native_widgets_on_duo/features/investment/widgets/asset_row.dart';
+import 'package:native_widgets_on_duo/features/investment/models/asset.dart';
+import 'package:native_widgets_on_duo/features/asset_detail/view/asset_details_page.dart';
 import 'package:native_widgets_on_duo/features/portfolio/models/holdings_filter.dart';
+import 'package:native_widgets_on_duo/features/portfolio/portfolio_selection.dart';
 import 'package:native_widgets_on_duo/features/portfolio/view/holdings_filter_sheet.dart';
+import 'package:native_widgets_on_duo/features/portfolio/view/portfolio_columns.dart';
 
 class PortfolioTab extends StatelessWidget {
   const PortfolioTab({super.key});
@@ -25,29 +30,91 @@ class PortfolioTab extends StatelessWidget {
 }
 
 class Portfolio extends StatefulWidget {
-  const Portfolio({super.key, required this.state});
+  const Portfolio({
+    super.key,
+    required this.state,
+    this.origin,
+    this.columnSymbol,
+    this.onColumnSelect,
+  });
   final InvestmentState state;
+  final PortfolioAssetOrigin? origin;
+  final String? columnSymbol;
+  final ValueChanged<Asset>? onColumnSelect;
   @override
   State<Portfolio> createState() => _PortfolioState();
 }
 
 class _PortfolioState extends State<Portfolio> {
-  HoldingsFilter filter = const HoldingsFilter();
+  late final ValueNotifier<HoldingsFilter> filterState;
+  late final ScrollController scrollController;
+  String? selectedSymbol;
+
+  @override
+  void initState() {
+    super.initState();
+    filterState =
+        widget.origin?.filter ?? ValueNotifier(const HoldingsFilter());
+    filterState.addListener(_filterChanged);
+    scrollController = ScrollController(
+      initialScrollOffset: widget.origin?.scrollOffset ?? 0,
+    );
+  }
+
+  void _filterChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    filterState.removeListener(_filterChanged);
+    if (widget.origin == null) filterState.dispose();
+    scrollController.dispose();
+    super.dispose();
+  }
 
   InvestmentState get state => widget.state;
 
   Future<void> openFilters() async {
     final result = await showHoldingsFilterSheet(
       context,
-      filter,
+      filterState.value,
       scale: state.accountScale,
     );
-    if (result != null && mounted) setState(() => filter = result);
+    if (result != null && mounted) filterState.value = result;
   }
 
   @override
-  Widget build(BuildContext context) => PageScroll(
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final holdings = filterState.value.apply(assets, state.accountScale);
+      if (widget.onColumnSelect != null) {
+        final selected = holdings
+            .where((asset) => asset.symbol == widget.columnSymbol)
+            .firstOrNull;
+        return portfolioContent(holdings, true, selected);
+      }
+      final split = constraints.maxWidth >= 540;
+      final selected = holdings
+          .where((asset) => asset.symbol == selectedSymbol)
+          .firstOrNull;
+      if (!split || selected == null)
+        return portfolioContent(holdings, split, null);
+
+      return PortfolioColumns(
+        portfolio: portfolioContent(holdings, true, selected),
+        detail: AssetDetails(asset: selected),
+      );
+    },
+  );
+
+  Widget portfolioContent(
+    List<Asset> holdings,
+    bool split,
+    Asset? selected,
+  ) => PageScroll(
     storageKey: 'portfolio',
+    controller: scrollController,
     children: [
       Row(
         children: [
@@ -141,18 +208,35 @@ class _PortfolioState extends State<Portfolio> {
       FilterSectionHeader(
         title: 'Holdings',
         onPressed: openFilters,
-        activeCount: filter.activeCount,
+        activeCount: filterState.value.activeCount,
       ),
       const SizedBox(height: 10),
-      ...filter
-          .apply(assets, state.accountScale)
-          .map(
-            (asset) => AssetRow(
-              asset: asset,
-              holding: true,
-              scale: state.accountScale,
-            ),
-          ),
+      ...holdings.map(
+        (asset) => AssetRow(
+          asset: asset,
+          holding: true,
+          scale: state.accountScale,
+          selected: selected?.symbol == asset.symbol,
+          onTap: () {
+            if (widget.onColumnSelect != null) {
+              widget.onColumnSelect!(asset);
+            } else if (split) {
+              setState(() => selectedSymbol = asset.symbol);
+            } else {
+              selectedSymbol = null;
+              context.push(
+                '/asset/${asset.symbol}',
+                extra: PortfolioAssetOrigin(
+                  filter: filterState,
+                  scrollOffset: scrollController.hasClients
+                      ? scrollController.offset
+                      : 0,
+                ),
+              );
+            }
+          },
+        ),
+      ),
       const SizedBox(height: 28),
       section('Allocation', ''),
       const SizedBox(height: 18),

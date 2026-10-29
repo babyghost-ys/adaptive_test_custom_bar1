@@ -28,9 +28,28 @@ private final class NativeFlutterScrollView: UIScrollView {
     }()
     override init(frame: CGRect) {
         super.init(frame: frame)
-        addSubview(viewport)
+        // The viewport is not a subview: it sits beside this scroll view in
+        // the page's view, so nothing that scrolls this view moves Flutter.
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    /// The viewport is pinned to the bounds the moment they move, not at the
+    /// next layout pass. While the screen turns UIKit shifts this scroll
+    /// view's offset as the bars change height; re-pinned only at layout, the
+    /// Flutter surface showed displaced for the frames in between.
+    override var bounds: CGRect {
+        didSet { if bounds != oldValue { pinViewport() } }
+    }
+    override var contentOffset: CGPoint {
+        didSet { if contentOffset != oldValue { pinViewport() } }
+    }
+    private func pinViewport() {
+        if viewport.superview === self {
+            viewport.frame = bounds
+        } else if let host = viewport.superview {
+            viewport.frame = host.bounds
+        }
+        viewport.subviews.first?.frame = viewport.bounds
+    }
     override func layoutSubviews() {
         super.layoutSubviews()
         if contentSize == .zero, !bounds.isEmpty {
@@ -39,8 +58,7 @@ private final class NativeFlutterScrollView: UIScrollView {
         }
         // Flutter draws its own list offset. Its actual surface stays stationary
         // within the native scroll viewport, where UIKit can filter real pixels.
-        viewport.frame = bounds
-        viewport.subviews.first?.frame = viewport.bounds
+        pinViewport()
         layoutLargeTitleBackdrop()
     }
     private func layoutLargeTitleBackdrop() {
@@ -144,7 +162,17 @@ final class NativeNavigationContent: UIViewController {
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     override func loadView() {
-        view = backingScroll
+        // The scroll view drives the bars; the Flutter surface sits beside
+        // it, not inside it, so the turn's offset changes never move it.
+        let container = UIView()
+        container.backgroundColor = .systemBackground
+        backingScroll.frame = container.bounds
+        backingScroll.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        container.addSubview(backingScroll)
+        backingScroll.viewport.frame = container.bounds
+        backingScroll.viewport.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        container.addSubview(backingScroll.viewport)
+        view = container
         backingScroll.backgroundColor = .systemBackground
         backingScroll.panGestureRecognizer.isEnabled = false
         // The native scroll view observes Flutter's position; it must not

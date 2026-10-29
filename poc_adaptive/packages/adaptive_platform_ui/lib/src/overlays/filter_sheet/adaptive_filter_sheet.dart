@@ -58,7 +58,9 @@ class AdaptiveFilterOption {
 
 /// A control in an [AdaptiveFilterSheet]. Its value is keyed by [id] in the
 /// sheet's values: a `List<String>` of chosen option ids for
-/// [AdaptiveFilterChoices], a `double` for [AdaptiveFilterSlider].
+/// [AdaptiveFilterChoices], a `double` for [AdaptiveFilterSlider], a
+/// `String` day for [AdaptiveFilterDate]. An [AdaptiveFilterSection] has no
+/// value of its own; its controls keep theirs.
 sealed class AdaptiveFilterControl {
   const AdaptiveFilterControl(this.id, {this.icon});
   final String id;
@@ -143,6 +145,69 @@ class AdaptiveFilterSlider extends AdaptiveFilterControl {
   };
 }
 
+/// One day, or none. Its value is the day as `yyyy-MM-dd` (see [encodeDay]
+/// and [decodeDay]), or an empty string for none. On iOS it is a compact
+/// `UIDatePicker` once a day is chosen.
+class AdaptiveFilterDate extends AdaptiveFilterControl {
+  const AdaptiveFilterDate(
+    super.id, {
+    super.icon,
+    this.firstDate,
+    this.lastDate,
+    this.anyLabel,
+  });
+
+  final DateTime? firstDate, lastDate;
+
+  /// The control shown while no day is chosen; tapping it chooses
+  /// [lastDate], or today.
+  final String? anyLabel;
+
+  static String _two(int n) => n.toString().padLeft(2, '0');
+
+  /// The sheet value for [day].
+  static String encodeDay(DateTime day) =>
+      '${day.year.toString().padLeft(4, '0')}-${_two(day.month)}-${_two(day.day)}';
+
+  /// The day a sheet value holds, or null for none.
+  static DateTime? decodeDay(Object? value) {
+    if (value is! String || value.isEmpty) return null;
+    final parts = value.split('-');
+    if (parts.length != 3) return null;
+    return DateTime(
+      int.parse(parts[0]),
+      int.parse(parts[1]),
+      int.parse(parts[2]),
+    );
+  }
+
+  @override
+  Map<String, Object?> _encode() => {
+    'type': 'date',
+    'id': id,
+    'symbol': icon?.sfSymbol,
+    'first': firstDate == null ? null : encodeDay(firstDate!),
+    'last': lastDate == null ? null : encodeDay(lastDate!),
+    'anyLabel': anyLabel,
+  };
+}
+
+/// Controls behind a disclosure row. It opens closed unless one of its
+/// [controls] holds a value other than its cleared one.
+class AdaptiveFilterSection extends AdaptiveFilterControl {
+  const AdaptiveFilterSection(super.id, {super.icon, required this.controls});
+
+  final List<AdaptiveFilterControl> controls;
+
+  @override
+  Map<String, Object?> _encode() => {
+    'type': 'section',
+    'id': id,
+    'symbol': icon?.sfSymbol,
+    'controls': [for (final c in controls) c._encode()],
+  };
+}
+
 /// A real UIKit sheet (`UISheetPresentationController`) of filter controls.
 ///
 /// It floats above the whole window, so it covers native navigation and tab
@@ -165,7 +230,8 @@ class AdaptiveFilterSheet {
   /// dismissed without applying.
   ///
   /// [values] and [cleared] map each control id to its value: the current
-  /// choice, and what the reset button restores.
+  /// choice, and what the reset button restores. With [dims] false the page
+  /// behind the sheet is not dimmed and stays interactive (iOS).
   static Future<Map<String, Object>?> show({
     required BuildContext context,
     required List<AdaptiveFilterControl> controls,
@@ -175,6 +241,7 @@ class AdaptiveFilterSheet {
     String title = '',
     Color? tint,
     AdaptiveFilterDetents detents = AdaptiveFilterDetents.halfAndFull,
+    bool dims = true,
   }) async {
     if (!isNative(context)) {
       return showMaterialFilterSheet(
@@ -197,6 +264,7 @@ class AdaptiveFilterSheet {
         'title': title,
         'tint': tint?.toARGB32(),
         'detents': detents.name,
+        'dims': dims,
         'controls': [for (final c in controls) c._encode()],
         'values': values,
         'cleared': cleared,

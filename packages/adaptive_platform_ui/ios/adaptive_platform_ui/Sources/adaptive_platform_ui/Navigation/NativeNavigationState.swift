@@ -12,6 +12,7 @@ final class NativeRouteState {
     let content: NativeNavigationContent
     weak var page: NativeNavigationPage?
     var popEnabled = true
+    var backButtonVisible = true
     init(identifier: String, content: NativeNavigationContent, page: NativeNavigationPage?) {
         self.identifier = identifier
         self.content = content
