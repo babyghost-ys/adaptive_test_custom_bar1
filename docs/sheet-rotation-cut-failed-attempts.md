@@ -2,7 +2,12 @@
 
 ## Attempt 18 (2026-10-30): UIKit sheet again, hidden while the screen turns
 
-**Status: seventh build installed 2026-10-31, not yet judged on the phone.** Signed Release
+**Status: seventh build judged 2026-10-31 (user: "visually, seems it's less obvious").** The
+sheet is gone from the turn. The user's slow-motion frame of the landscape to portrait turn shows
+no sheet; what still splits is the page itself: UIKit's old-screen picture (the top-left square
+of the old landscape page, tab bar and all) fading over the new portrait layout. That picture is
+the one attempts 1 to 10 could not remove, hide or fill from inside the process, and it is there
+on every turn with or without a sheet; at normal speed it reads as the crossfade. Signed Release
 build installed on the iPhone 18 Pro (iOS 27.2) without launching it. No simulator build or run
 was made for the seventh build (the cut only shows on the phone).
 
