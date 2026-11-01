@@ -12,6 +12,7 @@ import 'package:flutter/material.dart'
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/adaptive_style.dart';
 import '../../devices/duo/duo_layout.dart';
 import '../../devices/duo/system_vertical_bar.dart';
 import '../../navigation/app_bar/native_toolbar.dart';
@@ -22,16 +23,17 @@ import '../filter_sheet/adaptive_filter_sheet.dart';
 
 /// A sheet that hosts any widget, with native platform views inside it.
 ///
-/// On every platform the sheet is Flutter's own modal bottom sheet on the
-/// root navigator: the final shape after the iOS rotation cut could not be
-/// removed from any sheet UIKit took part in (see
-/// `docs/sheet-rotation-cut-failed-attempts.md`). [builder] supplies its content on every platform, in the caller's isolate,
-/// so the widget keeps its closures, notifiers and blocs.
+/// On iOS the sheet is a real UIKit sheet with its own Flutter engine: [show]
+/// sends [route] and codec-safe [arguments] to the app's `nativeSheetMain`
+/// entrypoint, which calls [bootstrap] and builds the route inside
+/// [AdaptiveNativeSheetContent]. UIKit owns the grabber, detents, dimming and
+/// drag dismissal, and hides the sheet while the screen turns (see
+/// `docs/sheet-rotation-cut-failed-attempts.md`). Widgets, closures and
+/// notifiers cannot cross engines, so [decodeResult] restores the result in
+/// the caller.
 ///
-/// The UIKit presentation (one Flutter engine per sheet, started through the
-/// app's `nativeSheetMain` entrypoint with [bootstrap] and
-/// [AdaptiveNativeSheetContent]) is not used while this is so; `route`,
-/// `arguments` and `decodeResult` only serve that presentation.
+/// Elsewhere, and for a [fullScreen] sheet on every platform, [builder]
+/// supplies the content in the caller's isolate as a Flutter route.
 class AdaptiveNativeSheet {
   AdaptiveNativeSheet._();
 
@@ -86,13 +88,13 @@ class AdaptiveNativeSheet {
     return configuration;
   }
 
-  /// Shows [builder]'s content in a sheet and completes after it has been
-  /// dismissed, with the value given to [pop], or null when it was dragged
-  /// away or tapped outside.
+  /// Shows the sheet and completes after it has been dismissed, with the
+  /// value given to [pop], or null when it was dragged away or tapped
+  /// outside.
   ///
   /// A [fullScreen] sheet covers the whole screen and, like an [isDismissible]
-  /// `false` sheet, only closes through [pop]. [route], [arguments] and
-  /// [decodeResult] are kept for the UIKit presentation, which is not in use.
+  /// `false` sheet, only closes through [pop]. On iOS [route] is required and
+  /// [arguments] must be StandardMessageCodec data.
   static Future<T?> show<T>({
     required BuildContext context,
     required WidgetBuilder builder,
@@ -124,11 +126,30 @@ class AdaptiveNativeSheet {
         ),
       );
     }
-    // On every platform, iOS included, the sheet is Flutter's own modal
-    // bottom sheet on the root navigator. On iOS that covers the page that
-    // holds the native tab bar, so the tab bar steps aside, and the native
-    // navigation bar dims over it. Nothing is handed to UIKit, so a rotation
-    // redraws the sheet like any page.
+    if (AdaptiveStyle.of(context) == AdaptiveStyle.native) {
+      if (route == null || route.isEmpty) {
+        throw ArgumentError(
+          'Native sheets require a route for nativeSheetMain.',
+        );
+      }
+      // The page stays mounted with its own engine, metrics and native
+      // controls. UIKit presents the sheet from a window of its own.
+      final value = await _channel.invokeMethod<Object?>('present', {
+        'route': route,
+        'arguments': arguments,
+        'detents': detents.name,
+        'dismissible': isDismissible,
+        'backgroundColor':
+            (backgroundColor ??
+                    CupertinoColors.systemBackground.resolveFrom(context))
+                .toARGB32(),
+        'brightness': CupertinoTheme.brightnessOf(context).name,
+      });
+      if (value == null) return null;
+      return decodeResult == null ? value as T : decodeResult(value);
+    }
+    // Elsewhere the sheet is Flutter's own modal bottom sheet on the root
+    // navigator.
     final fill =
         backgroundColor ??
         CupertinoColors.systemBackground.resolveFrom(context);

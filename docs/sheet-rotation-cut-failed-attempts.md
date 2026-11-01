@@ -1,5 +1,98 @@
 # Sheet rotation cut on a real phone: failed attempts
 
+## Attempt 18 (2026-10-30): UIKit sheet again, hidden while the screen turns
+
+**Status: seventh build installed 2026-10-31, not yet judged on the phone.** Signed Release
+build installed on the iPhone 18 Pro (iOS 27.2) without launching it. No simulator build or run
+was made for the seventh build (the cut only shows on the phone).
+
+What the user established before this attempt: the full-screen sheet always turns clean; every
+shorter sheet cuts. That fits one mechanism. On an iPhone in landscape (compact height)
+`UISheetPresentationController` offers only the large detent, so a partial sheet changes
+region during the turn while a full sheet keeps its region. UIKit's old-screen picture lies
+over the new layout for the fade; over a sheet that moved, its edge reads as a cut. Apple's
+own partial sheets vanish for the turn and come back after it.
+
+The change:
+
+- `AdaptiveNativeSheet.show` on iOS (`AdaptiveStyle.native`) goes back to the UIKit sheet with
+  one Flutter engine per sheet (`present` on `adaptive_platform_ui/widget_sheet`, attempt 11's
+  architecture, which was still in the tree). Detents, dimming, grabber and drag dismissal are
+  UIKit's. The full-screen sign-in stays a Flutter page route, the one path known clean.
+  Other platforms keep the stock `showModalBottomSheet`.
+- `NativeWidgetSheet.hideForTurn` sets every presented sheet's view
+  (`presentationController.presentedView`, the drop-shadow container with the corners and
+  grabber) hidden with `alpha = 0`, and `revealAfterTurn` shows it again with a 0.2 s fade.
+  The dimming view is UIKit's and stays. Only the page lies under the picture during the turn,
+  the case judged clean.
+- **First build (user: "I am still seeing it"):** the hide ran only from
+  `viewWillTransition` on the presented `SheetViewController`. Whether UIKit's live-resize
+  path reaches a presented controller in a separate window was never confirmed, so the
+  second build fires the hide from four places, any of which may be the first or the only
+  one to run: `viewWillTransition` on the sheet controller and on the sheet window's root
+  controller, `UIDevice.orientationDidChangeNotification` filtered to a portrait/landscape
+  pose the interface does not show yet, and KVO on `UIWindowScene.effectiveGeometry` when
+  its `interfaceOrientation` changes. The reveal runs from the coordinator's completion when
+  one exists, else 0.6 s after the last signal. Installed on the phone 2026-10-30, not judged.
+- **Second build (user: "the hiding is not fast enough, so I still see the cut"):** every
+  signal above runs after UIKit has laid out, and may have drawn, the first new-size frame.
+  The third build hides from the earliest synchronous point in the process after the
+  picture: the sheet window is a `SheetWindow` subclass whose `frame` and `bounds` setters
+  call `hideForTurn` when the width changes, before any layout pass; the window root's
+  `viewWillLayoutSubviews` does the same on a width change as a second early point. The
+  later signals stay for the reveal. Installed on the phone 2026-10-30, not judged.
+- **Third build (user: portrait to landscape is now fast enough, landscape to portrait is
+  not):** the asymmetry is the picture's geometry, not timing. The picture sits at the
+  window's origin, unscaled, clipped to the top-left 402 by 402 square of the new window.
+  Portrait to landscape shows only the top of the old portrait screen, so the partial sheet
+  at the bottom is clipped out, and hiding the new sheet is enough. Landscape to portrait
+  shows the left half of the old landscape screen at full height, which holds the left half
+  of the full-height landscape sheet, crisp, ending in a hard edge at 402 pt. That edge is
+  inside the picture and no hide can remove it. Fourth build, chosen by the user:
+  `SheetWindowRootController.supportedInterfaceOrientations` returns `.landscape` while the
+  scene is landscape (the sheet window is key, so its root decides), `.all` otherwise. A sheet
+  up in landscape holds landscape until dismissed; portrait to landscape stays free.
+  **Fourth build result (user's screenshot):** the sheet window held landscape, but the page
+  window beneath turned to portrait on its own, so the landscape sheet sat over a sideways
+  page. A window root's mask only governs its own window. Fifth build: the sheet manager
+  keeps `NativeWidgetSheet.supportedInterfaceOrientations` (`.landscape` while a sheet is up
+  in landscape, `.all` otherwise, recomputed on present, after each turn and on close), the
+  plugin exposes it as `AdaptivePlatformUiPlugin.supportedInterfaceOrientations`, and the
+  Runner's `AppDelegate` returns it from `application(_:supportedInterfaceOrientationsFor:)`,
+  which UIKit intersects with every window's root.
+  **Fifth build result (user: "it locks to horizontal"):** once the sheet went the mask opened
+  to `.all`, but UIKit only turns when the current orientation stops being allowed, so a page
+  left in landscape stayed there until the phone moved again. Sixth build: on release, when
+  the phone already lies portrait, the mask is `.portrait` for one turn and opens to `.all`
+  0.7 s later; the device pose is read before the orientation notifications stop. Installed
+  on the phone 2026-10-30, not judged.
+  **Sixth build result (user: "huge fail", session interrupted):** the orientation hold was
+  dropped altogether. The user restated the aim: keep the UIKit sheet, hide it when the
+  orientation changes, nothing else.
+- **Seventh build (2026-10-31): hide before the turn begins.** Builds 4 to 6 (the window
+  root's orientation mask, `NativeWidgetSheet.supportedInterfaceOrientations`, the plugin's
+  static property and the Runner `AppDelegate` override) are removed. Since the picture is
+  taken by the render server as the turn begins, the only way to keep the landscape sheet out
+  of it is to have hidden the sheet before the turn. UIKit turns from the accelerometer, at
+  about 45 degrees of tilt and only after the pose has held for a moment. The sheet manager
+  now reads `CMMotionManager` accelerometer updates (60 Hz, light low-pass, started with the
+  first sheet, stopped with the last) and, while the interface is landscape, calls
+  `hideForTurn` as soon as the phone has tilted within 30 degrees of the portrait axis
+  (`atan2(|x|, |y|)`, ignored while the phone lies flat). `hideForTurn` now also calls
+  `CATransaction.flush()` so the hide leaves for the render server at once instead of at the
+  end of the run loop turn. The reveal is unchanged: the coordinator's completion, else 0.6 s
+  after the last signal; while the tilted pose holds the hide is re-signalled every sample,
+  and if no turn has come after 1.5 s the sheets come back and stay until the pose returns past
+  60 degrees (orientation lock, or a pose the app does not turn to). Portrait keeps the frame-
+  setter hide of the third build only, judged fast enough, and gets no early hide, so a locked
+  phone never blinks its sheet. Raw accelerometer access needs no usage string.
+- What no app code can do: the old-screen picture is taken by the render server before
+  anything in the process runs, so it always holds whatever was on screen at that moment.
+  The sheet therefore has to be gone before the turn, not merely hidden during it.
+
+Not changed: the fit detent and its deferred replacement (attempt 13), the separate
+presentation window per sheet, the page engine and native bars.
+
 ## Final state (2026-10-29): stock Flutter sheet, given up on the cut
 
 **Not fixed. Closed by the user as "trying too much, I gave up".** After 17 attempts in the main
