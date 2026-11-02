@@ -198,7 +198,10 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         } else {
             controller.modalPresentationStyle = .pageSheet
             controller.modalPresentationCapturesStatusBarAppearance = false
-            controller.isModalInPresentation = !level.dismissible
+            // A sheet that only closes through its own controls is refused in
+            // [presentationControllerShouldDismiss] rather than marked modal
+            // in presentation, so UIKit presents and turns every sheet alike.
+            controller.isModalInPresentation = false
             if let sheet = controller.sheetPresentationController {
                 switch level.detents {
                 case "full": sheet.detents = [.large()]
@@ -382,6 +385,12 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         }
     }
 
+    func presentationControllerShouldDismiss(_ presentationController: UIPresentationController) -> Bool {
+        guard let level = levels.last,
+              level.controller === presentationController.presentedViewController else { return true }
+        return level.dismissible
+    }
+
     func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
         guard let level = levels.last,
               level.controller === presentationController.presentedViewController else { return }
@@ -434,6 +443,7 @@ private final class SheetViewController: FlutterViewController {
                                      with coordinator: UIViewControllerTransitionCoordinator) {
         onTransition?(coordinator)
         onTurn?(coordinator)
+        FlutterTurnPinning.pinOverlays(in: view)
         super.viewWillTransition(to: size, with: coordinator)
     }
 

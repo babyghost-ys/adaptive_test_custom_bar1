@@ -204,6 +204,12 @@ final class NativeNavigationContent: UIViewController {
             flutterAppeared = false
         }
     }
+    override func viewWillTransition(to size: CGSize,
+                                     with coordinator: UIViewControllerTransitionCoordinator) {
+        // Before UIKit lays the turn out, so no overlay follows the bounds.
+        if let flutter { FlutterTurnPinning.pinOverlays(in: flutter.view) }
+        super.viewWillTransition(to: size, with: coordinator)
+    }
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
         finishSearchTransitionGlass()
@@ -236,6 +242,7 @@ final class NativeNavigationContent: UIViewController {
         // bounds; the band the view grows by shows the page colour.
         controller.view.contentMode = .topLeft
         controller.view.backgroundColor = backingScroll.backgroundColor
+        FlutterTurnPinning.pinOverlays(in: controller.view)
         setNeedsStatusBarAppearanceUpdate()
         backingScroll.setNeedsLayout()
         backingScroll.layoutIfNeeded()
@@ -284,5 +291,24 @@ final class NativeNavigationContent: UIViewController {
         backingScroll.backgroundColor = UIColor.systemBackground.resolvedColor(
             with: UITraitCollection(userInterfaceStyle: style))
         flutter?.view.backgroundColor = backingScroll.backgroundColor
+    }
+}
+
+/// Keeps every Flutter-drawn layer of a Flutter view still while the view's
+/// bounds animate through a turn. The view's own layer is pinned with
+/// `contentMode`; this pins the overlay views Flutter's compositor adds for
+/// pixels drawn over a native control (a segmented control on a page, say),
+/// which the engine creates with flexible autoresizing, so they would
+/// stretch with the bounds and part from UIKit's picture of the old screen.
+/// The compositor sets their frames on every frame it draws, so they need
+/// no autoresizing.
+enum FlutterTurnPinning {
+    static func pinOverlays(in view: UIView) {
+        for subview in view.subviews
+        where NSStringFromClass(type(of: subview)).contains("FlutterOverlayView") {
+            subview.autoresizingMask = []
+            subview.contentMode = .topLeft
+            pinOverlays(in: subview)
+        }
     }
 }
