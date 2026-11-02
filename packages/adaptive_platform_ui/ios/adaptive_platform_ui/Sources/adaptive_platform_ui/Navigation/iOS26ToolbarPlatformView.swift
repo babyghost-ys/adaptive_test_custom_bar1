@@ -59,6 +59,7 @@ class iOS26ToolbarPlatformView: NSObject, FlutterPlatformView, NativeNavigationP
     private var configuredActions: NSArray?
     private var lastInset: CGFloat?
     private var lastBarBottom: CGFloat?
+    private var lastViewSize: CGSize?
     private var metricsGeneration = -1
 
     var nativeNavigationItem: UINavigationItem { navigationItem }
@@ -97,14 +98,25 @@ class iOS26ToolbarPlatformView: NSObject, FlutterPlatformView, NativeNavigationP
 
     func nativeNavigationLayout(contentInset: CGFloat, barBottom: CGFloat) {
         guard contentInset > 0, barBottom > 0 else { return }
-        if metricsGeneration != scrollGeneration || lastInset != contentInset || lastBarBottom != barBottom {
+        // The size of the Flutter view the bar was measured against. While
+        // the screen turns UIKit measures the new size before Flutter draws
+        // it; Dart holds the reading until it does.
+        let viewSize = NativeNavigationHost.installed?.flutter.view.bounds.size ?? .zero
+        if metricsGeneration != scrollGeneration || lastInset != contentInset
+            || lastBarBottom != barBottom || lastViewSize != viewSize {
             metricsGeneration = scrollGeneration
             lastInset = contentInset
             lastBarBottom = barBottom
-            channel.invokeMethod("onNavigationMetrics", arguments: [
+            lastViewSize = viewSize
+            var arguments: [String: Any] = [
                 "contentInset": Double(contentInset), "barBottom": Double(barBottom),
                 "generation": scrollGeneration
-            ])
+            ]
+            if viewSize.width > 0, viewSize.height > 0 {
+                arguments["viewWidth"] = Double(viewSize.width)
+                arguments["viewHeight"] = Double(viewSize.height)
+            }
+            channel.invokeMethod("onNavigationMetrics", arguments: arguments)
         }
     }
 

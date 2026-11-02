@@ -54,7 +54,6 @@ class AdaptiveNativeSheet {
 
   static void _watchLeaving(TransitionRoute<Object?> route) {
     route.animation?.addStatusListener((status) {
-      debugPrint('TMP2 sheet status $status');
       switch (status) {
         case AnimationStatus.reverse:
           _leavingRoutes.add(route);

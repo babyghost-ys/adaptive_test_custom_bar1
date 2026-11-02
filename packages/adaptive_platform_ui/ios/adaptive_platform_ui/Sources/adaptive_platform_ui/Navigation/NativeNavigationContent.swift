@@ -229,6 +229,13 @@ final class NativeNavigationContent: UIViewController {
             controller.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
             controller.didMove(toParent: self)
         }
+        // While the screen turns, UIKit animates this view's bounds but
+        // Flutter keeps drawing the old size until half way through the turn.
+        // Keep that frame unscaled at the top left, where UIKit's picture of
+        // the old screen shows it, instead of stretching it to the moving
+        // bounds; the band the view grows by shows the page colour.
+        controller.view.contentMode = .topLeft
+        controller.view.backgroundColor = backingScroll.backgroundColor
         setNeedsStatusBarAppearanceUpdate()
         backingScroll.setNeedsLayout()
         backingScroll.layoutIfNeeded()
@@ -276,5 +283,6 @@ final class NativeNavigationContent: UIViewController {
         // the scroll view that contains Flutter's appearance observer.
         backingScroll.backgroundColor = UIColor.systemBackground.resolvedColor(
             with: UITraitCollection(userInterfaceStyle: style))
+        flutter?.view.backgroundColor = backingScroll.backgroundColor
     }
 }

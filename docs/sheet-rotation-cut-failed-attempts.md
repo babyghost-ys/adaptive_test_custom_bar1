@@ -1,5 +1,57 @@
 # Sheet rotation cut on a real phone: failed attempts
 
+## Attempt 19 (2026-11-02): nothing hidden; the old frame stays where the picture shows it
+
+**Status: installed on the iPhone 18 Pro (iOS 27.2) as a signed Release build, not launched,
+not judged.** Built on Flutter main (3.50.0-1.0.pre, engine `eede6c7e`), to which the user
+had moved the project. Attempt 18's hide is removed; nothing is hidden or covered.
+
+The reading of all earlier recordings behind this attempt: on the phone the old-screen
+picture is a layer the size of the new window at the window's origin, holding the old screen
+unscaled, fading over the first 0.1 to 0.2 s of the turn. It is invisible wherever what lies
+under it is the same pixels. A native view qualifies at the start of the turn (it animates
+from its old frame). Flutter's view did not: `FlutterMetalLayer` has the default
+`contentsGravity` (`resize`), so the old frame was *stretched* to the view's animating
+bounds from the first frame, and the picture's edge at 402 pt showed as old above, stretched
+below. A UIKit sheet did not either: UIKit moved it towards its new frame from the first
+frame. POC build 9 set `contentsGravity = .topLeft` on the layer, which on iOS pins to the
+*bottom* left (the gravity constants are named for macOS's flipped axis), so that build
+pinned the wrong corner and looked "really bad"; the idea itself was never tested.
+
+The change, all public API, no snapshots, no timers on the engine:
+
+- **Page:** `NativeNavigationContent.attachFlutter` sets the Flutter view's
+  `contentMode = .topLeft` (UIKit picks the right gravity for iOS) and gives it the page
+  background colour. While the screen turns the last frame stays unscaled at the top left,
+  where the picture shows it; the engine's own half-way metrics hold is untouched, so the new
+  layout arrives at the half-way point as before, now without the stretch before it. The band
+  the view grows by shows the page colour instead of smeared pixels.
+- **Bar metrics in the same frame as the size:** `iOS26ToolbarPlatformView` tags every
+  `onNavigationMetrics` reading with the size of the Flutter view it was measured against;
+  `_NativeToolbarState` (now a `WidgetsBindingObserver`) holds a reading measured for a size
+  the view is not drawing yet and applies it in `didChangeMetrics`, when that size arrives.
+  The page is laid out once per turn, size and bar together: no frame at the old size under
+  the new bar (attempt 16's frames 89 to 92), no title wrap.
+- **Sheet (UIKit, one engine per sheet, unchanged):** `NativeWidgetSheet.freezeForTurn`
+  pauses the presented view's layer (`speed = 0`, `timeOffset` = now) from the sheet window
+  root's and the sheet controller's `viewWillTransition`, before UIKit adds the turn's
+  animations, so the sheet lies exactly where the picture shows it while the picture fades.
+  At `transitionDuration / 2` plus a frame (when the sheet engine draws its new size)
+  `snapAfterTurn` runs the layer clock past the animations' end (`speed = 1`, `timeOffset`
+  moved ahead by the duration, never reset, so later animations are undisturbed): the sheet
+  takes its new frame at once, together with its new Flutter layout. The coordinator's
+  completion, a dismissal and a startup failure also snap, so no paused animation can block
+  a dismissal. The sheet's Flutter view gets `contentMode = .topLeft` too. The dimming view
+  and the window keep UIKit's animation.
+- Removed: `SheetWindow` (frame-setter hide), `CMMotionManager` pose watching, the device
+  orientation and scene geometry observers, `hideForTurn` / `revealAfterTurn`.
+
+What the turn should look like: the old screen (page, bars in the picture, sheet) turns
+rigidly with the window for the first half while UIKit's picture fades over an identical
+image; at the half-way point page and sheet take their new layout in one step; the UIKit
+bars animate throughout, as native bars do. Not covered: Flutter overlay views (Flutter
+content drawn above a platform view on the page) still autoresize with the view.
+
 ## Attempt 18 (2026-10-30): UIKit sheet again, hidden while the screen turns
 
 **Status: seventh build judged 2026-10-31 (user: "visually, seems it's less obvious").** The

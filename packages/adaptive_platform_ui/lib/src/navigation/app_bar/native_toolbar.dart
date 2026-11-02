@@ -91,7 +91,8 @@ class NativeToolbar extends StatefulWidget {
   State<NativeToolbar> createState() => _NativeToolbarState();
 }
 
-class _NativeToolbarState extends State<NativeToolbar> {
+class _NativeToolbarState extends State<NativeToolbar>
+    with WidgetsBindingObserver {
   MethodChannel? _channel;
   int _channelGeneration = 0;
   int _propertyRevision = 0;
@@ -105,6 +106,14 @@ class _NativeToolbarState extends State<NativeToolbar> {
   bool? _lastNavigationBarShadow;
   bool? _lastHidesNavigationButtonBackground;
   List<AdaptiveAppBarAction>? _lastActions;
+
+  /// A bar reading UIKit measured for a size this view is not drawing yet.
+  ///
+  /// As the screen turns, UIKit lays the bar out for the new size at once,
+  /// while Flutter keeps the old size until half way through the turn. The
+  /// reading waits for that size, so the page is laid out once, with the
+  /// size and the bar together, and never at the old size under the new bar.
+  Map<Object?, Object?>? _pendingMetrics;
 
   bool get _isDark => CupertinoTheme.of(context).brightness == Brightness.dark;
 
@@ -127,7 +136,47 @@ class _NativeToolbarState extends State<NativeToolbar> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     widget.scrollController?.addListener(_syncScroll);
+  }
+
+  @override
+  void didChangeMetrics() {
+    final pending = _pendingMetrics;
+    if (pending == null || !mounted || !_measuredAtViewSize(pending)) return;
+    _pendingMetrics = null;
+    _applyNavigationMetrics(pending);
+  }
+
+  /// Whether [args] were measured at the size this view draws now. Readings
+  /// without a size are taken as measured at the current size.
+  bool _measuredAtViewSize(Map<Object?, Object?> args) {
+    final width = (args['viewWidth'] as num?)?.toDouble();
+    final height = (args['viewHeight'] as num?)?.toDouble();
+    if (width == null || height == null) return true;
+    final view = View.of(context);
+    final size = view.physicalSize / view.devicePixelRatio;
+    return (size.width - width).abs() < 1 && (size.height - height).abs() < 1;
+  }
+
+  void _applyNavigationMetrics(Map<Object?, Object?> args) {
+    final inset = (args['contentInset'] as num?)?.toDouble();
+    final bottom = (args['barBottom'] as num?)?.toDouble();
+    if (!mounted ||
+        args['generation'] != _scrollGeneration ||
+        inset == null ||
+        bottom == null ||
+        !inset.isFinite ||
+        !bottom.isFinite ||
+        inset <= 0 ||
+        bottom <= 0) {
+      return;
+    }
+    nativeNavigationBarBottom.value = bottom;
+    final controller = widget.scrollController;
+    controller?.contentTopInset.value = inset;
+    controller?.navigationBarBottom.value = bottom;
+    setState(() {});
   }
 
   void _syncScroll() {
@@ -141,6 +190,7 @@ class _NativeToolbarState extends State<NativeToolbar> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     widget.scrollController?.removeListener(_syncScroll);
     final channel = _channel;
     _channel = null;
@@ -595,22 +645,13 @@ class _NativeToolbarState extends State<NativeToolbar> {
   Future<dynamic> _handleMethodCall(MethodCall call) async {
     switch (call.method) {
       case 'onNavigationMetrics':
-        final args = call.arguments as Map?;
-        final inset = (args?['contentInset'] as num?)?.toDouble();
-        final bottom = (args?['barBottom'] as num?)?.toDouble();
-        if (mounted &&
-            args?['generation'] == _scrollGeneration &&
-            inset != null &&
-            bottom != null &&
-            inset.isFinite &&
-            bottom.isFinite &&
-            inset > 0 &&
-            bottom > 0) {
-          nativeNavigationBarBottom.value = bottom;
-          final controller = widget.scrollController;
-          controller?.contentTopInset.value = inset;
-          controller?.navigationBarBottom.value = bottom;
-          setState(() {});
+        final args = call.arguments;
+        if (args is! Map<Object?, Object?>) break;
+        if (_measuredAtViewSize(args)) {
+          _pendingMetrics = null;
+          _applyNavigationMetrics(args);
+        } else {
+          _pendingMetrics = args;
         }
         break;
       case 'onLeadingTapped':

@@ -1,4 +1,3 @@
-import CoreMotion
 import Flutter
 import UIKit
 
@@ -25,6 +24,12 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         var dismissing = false
         var closed = false
         var startupTimeout: DispatchWorkItem?
+        /// The sheet's UIKit animations are paused for the first half of a
+        /// turn (see [NativeWidgetSheet.freezeForTurn]).
+        var turning = false
+        /// How far the sheet view's layer clock has been run ahead to finish
+        /// paused animations at once; its `timeOffset` between turns.
+        var clockOffset: CFTimeInterval = 0
 
         init(engine: FlutterEngine, arguments: [String: Any], depth: Int,
              completion: @escaping FlutterResult) {
@@ -48,13 +53,6 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
     private var measuredHeights: [String: CGFloat] = [:]
     private var heightTransitions: Set<ObjectIdentifier> = []
     private var unqueuedHeightTransitions: Set<ObjectIdentifier> = []
-    private var turnReveal: DispatchWorkItem?
-    private var orientationObserver: NSObjectProtocol?
-    private let motion = CMMotionManager()
-    private var gravity: CMAcceleration?
-    private var poseHideStart: Date?
-    private var poseHideSuppressed = false
-    private var geometryObservation: NSKeyValueObservation?
 
     var pageController: FlutterViewController? {
         originalHost ?? hostProvider() as? FlutterViewController
@@ -144,8 +142,7 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         // A separate transparent presenter keeps the page's view visible and
         // its real appearance lifecycle unchanged, even in compact landscape.
         // UIKit still owns the sheet, grabber, dimming and all drag gestures.
-        let window = SheetWindow(windowScene: scene)
-        window.onWidthChange = { [weak self] in self?.hideForTurn() }
+        let window = UIWindow(windowScene: scene)
         window.windowLevel = UIWindow.Level(below.windowLevel.rawValue + 1)
         window.backgroundColor = .clear
         let root = SheetWindowRootController()
@@ -157,6 +154,10 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         controller.loadViewIfNeeded()
         controller.view.backgroundColor = (args["backgroundColor"] as? NSNumber)
             .map { UIColor(argb: $0.intValue) } ?? .systemBackground
+        // Flutter draws the sheet's new size half way through a turn; until
+        // then its last frame stays unscaled at the top left of the view
+        // rather than stretching to the view's new bounds.
+        controller.view.contentMode = .topLeft
         switch args["brightness"] as? String {
         case "dark": controller.overrideUserInterfaceStyle = .dark
         case "light": controller.overrideUserInterfaceStyle = .light
@@ -168,14 +169,14 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         controller.onLayout = { [weak self] in
             self?.flushPendingHeights()
         }
-        controller.onTurn = { [weak self] coordinator in
-            self?.hideForTurn(until: coordinator)
+        controller.onTurn = { [weak self, weak level] coordinator in
+            guard let self, let level else { return }
+            self.freezeForTurn(level, coordinator: coordinator)
         }
-        root.onTurn = { [weak self] coordinator in
-            self?.hideForTurn(until: coordinator)
+        root.onTurn = { [weak self, weak level] coordinator in
+            guard let self, let level else { return }
+            self.freezeForTurn(level, coordinator: coordinator)
         }
-        root.onWidthChange = { [weak self] in self?.hideForTurn() }
-        watchTurns(in: scene)
         let timeout = DispatchWorkItem { [weak self, weak level] in
             guard let self, let level, !level.ready, !level.closed, !level.dismissing else { return }
             self.failStartup(level)
@@ -304,27 +305,12 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         }
     }
 
-    // MARK: Hiding the sheets while the screen turns
+    // MARK: Turning with the screen
 
-    /// How long the sheets take to come back once the turn has finished.
-    private static let returnDuration: TimeInterval = 0.2
-
-    /// How long after the last turn signal the sheets come back when no
-    /// transition coordinator reported the end of the turn.
-    private static let turnFallback: TimeInterval = 0.6
-
-    /// How long the sheets stay hidden for a pose that announces a turn which
-    /// never comes (orientation lock, a pose UIKit does not turn to).
-    private static let poseHideLimit: TimeInterval = 1.5
-
-    /// A landscape interface hides its sheets once the phone has tilted this
-    /// far towards portrait, measured from the landscape axis. UIKit turns at
-    /// about 45 degrees, and only after the pose has held for a moment, so
-    /// the hide reaches the render server before the picture is taken.
-    private static let poseHideTilt: Double = 30
-
-    /// The pose has returned to the landscape axis past this tilt.
-    private static let poseRestoredTilt: Double = 60
+    /// Lag after Flutter's half-way redraw before the sheet's frame follows
+    /// it: the new frame reaches the screen a frame or two after the engine
+    /// takes the new size.
+    private static let turnSnapLag: TimeInterval = 1.0 / 30
 
     /// The view UIKit animates for a level: the drop-shadow container that
     /// holds the content, corners and grabber, or the content view alone.
@@ -333,153 +319,45 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
     }
 
     /// On iOS 26+ a rotation lays a picture of the old screen over the new
-    /// layout and fades it. A partial sheet changes region during the turn
-    /// (compact height only offers the large detent), so the picture's edge
-    /// cut across it. With every sheet gone for the turn only the page lies
-    /// under the picture, which turns clean; the sheets come back once the
-    /// turn has finished, as Apple's own sheets do.
-    ///
-    /// The picture is taken by the render server as the turn begins, before
-    /// anything in the process runs, so it always holds whatever was on
-    /// screen. Portrait to landscape clips the partial sheet out of it (only
-    /// the top 402 pt square of the old screen is kept), so hiding from the
-    /// window's frame setter is early enough there. Landscape to portrait
-    /// keeps the left half of the full-height landscape sheet, so the sheet
-    /// must already be gone when the turn begins: the accelerometer reports
-    /// the phone tilting towards portrait before UIKit turns, and
-    /// [poseChanged] hides from there.
-    ///
-    /// The turn is signalled from several places, since each may be the first
-    /// or the only one to run: the window's frame, both controllers in every
-    /// sheet window, the device orientation, and the scene's geometry. Repeats
-    /// are harmless.
-    private func hideForTurn(until coordinator: UIViewControllerTransitionCoordinator? = nil) {
-        guard levels.contains(where: { $0.presented && !$0.closed }) else { return }
-        turnReveal?.cancel()
-        for level in levels where level.presented && !level.closed {
-            let view = sheetView(of: level)
-            view.layer.removeAllAnimations()
-            view.alpha = 0
-            view.isHidden = true
+    /// layout and fades it out. Flutter (the page and this sheet) keeps its
+    /// old frame for the first half of the turn, unscaled at the top left,
+    /// which is where that picture shows it; UIKit, though, would move the
+    /// sheet to its new frame from the first frame of the turn, so the
+    /// picture's edge cut across it. The sheet's animations are paused at
+    /// their start instead, so the sheet too lies where the picture shows it
+    /// while the picture fades, then jump to their end at the half-way point,
+    /// as Flutter's new layout arrives. Nothing is hidden or covered.
+    private func freezeForTurn(_ level: Level, coordinator: UIViewControllerTransitionCoordinator) {
+        guard level.presented, !level.closed, !level.dismissing, !level.presenting,
+              !level.turning else { return }
+        let duration = coordinator.transitionDuration
+        guard duration > 0 else { return }
+        let layer = sheetView(of: level).layer
+        level.turning = true
+        let now = layer.convertTime(CACurrentMediaTime(), from: nil)
+        layer.speed = 0
+        layer.timeOffset = now
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration / 2 + Self.turnSnapLag) {
+            [weak self, weak level] in
+            guard let self, let level else { return }
+            self.snapAfterTurn(level, duration: duration)
         }
-        // Commit now rather than at the end of the run loop turn, so the hide
-        // is on its way to the render server at once.
-        CATransaction.flush()
-        let reveal = DispatchWorkItem { [weak self] in self?.revealAfterTurn() }
-        turnReveal = reveal
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.turnFallback, execute: reveal)
-        coordinator?.animate(alongsideTransition: nil) { [weak self] _ in
-            self?.revealAfterTurn()
+        coordinator.animate(alongsideTransition: nil) { [weak self, weak level] _ in
+            guard let self, let level else { return }
+            self.snapAfterTurn(level, duration: duration)
         }
     }
 
-    private func revealAfterTurn() {
-        turnReveal?.cancel()
-        turnReveal = nil
-        poseHideStart = nil
-        for level in levels where level.presented && !level.closed {
-            let view = sheetView(of: level)
-            guard view.isHidden else { continue }
-            view.isHidden = false
-            UIView.animate(withDuration: Self.returnDuration) { view.alpha = 1 }
-        }
-    }
-
-    private func watchTurns(in scene: UIWindowScene) {
-        if motion.isAccelerometerAvailable, !motion.isAccelerometerActive {
-            gravity = nil
-            poseHideStart = nil
-            poseHideSuppressed = false
-            motion.accelerometerUpdateInterval = 1.0 / 60
-            motion.startAccelerometerUpdates(to: .main) { [weak self] data, _ in
-                guard let data else { return }
-                self?.poseChanged(data.acceleration)
-            }
-        }
-        if orientationObserver == nil {
-            UIDevice.current.beginGeneratingDeviceOrientationNotifications()
-            orientationObserver = NotificationCenter.default.addObserver(
-                forName: UIDevice.orientationDidChangeNotification, object: nil, queue: .main
-            ) { [weak self] _ in
-                self?.deviceOrientationChanged()
-            }
-        }
-        if #available(iOS 16.0, *), geometryObservation == nil {
-            // Fires as the scene takes its new size, inside UIKit's layout.
-            geometryObservation = scene.observe(\.effectiveGeometry, options: [.old, .new]) {
-                [weak self] _, change in
-                guard let old = change.oldValue, let new = change.newValue,
-                      old.interfaceOrientation != new.interfaceOrientation else { return }
-                self?.hideForTurn()
-            }
-        }
-    }
-
-    private func stopWatchingTurns() {
-        turnReveal?.cancel()
-        turnReveal = nil
-        if motion.isAccelerometerActive { motion.stopAccelerometerUpdates() }
-        gravity = nil
-        poseHideStart = nil
-        geometryObservation = nil
-        if let observer = orientationObserver {
-            NotificationCenter.default.removeObserver(observer)
-            orientationObserver = nil
-            UIDevice.current.endGeneratingDeviceOrientationNotifications()
-        }
-    }
-
-    /// The phone is tilting away from the landscape the interface shows, so a
-    /// turn to portrait is about to follow. Hide before it begins, so the
-    /// picture UIKit takes of the old screen holds the page alone. Portrait
-    /// needs no early hide (see [hideForTurn]), and hiding there would blink
-    /// the sheet for anyone with the orientation lock on.
-    ///
-    /// The sheets stay hidden while the pose holds, up to [poseHideLimit];
-    /// if no turn has come by then they come back and stay until the pose has
-    /// returned to the landscape axis.
-    private func poseChanged(_ raw: CMAcceleration) {
-        var g = raw
-        if let last = gravity {
-            g = CMAcceleration(x: last.x * 0.6 + raw.x * 0.4,
-                               y: last.y * 0.6 + raw.y * 0.4,
-                               z: last.z * 0.6 + raw.z * 0.4)
-        }
-        gravity = g
-        // Lying flat, the pose says nothing about a turn.
-        guard hypot(g.x, g.y) > 0.4,
-              levels.contains(where: { $0.presented && !$0.closed }),
-              let scene = levels.last?.window?.windowScene else { return }
-        // 0 along the portrait axis, 90 along the landscape axis.
-        let tilt = atan2(abs(g.x), abs(g.y)) * 180 / .pi
-        guard scene.interfaceOrientation.isLandscape else {
-            poseHideSuppressed = false
-            return
-        }
-        if poseHideSuppressed {
-            if tilt > Self.poseRestoredTilt { poseHideSuppressed = false }
-            return
-        }
-        guard tilt < Self.poseHideTilt else { return }
-        let now = Date()
-        if let start = poseHideStart, now.timeIntervalSince(start) > Self.poseHideLimit {
-            poseHideSuppressed = true
-            revealAfterTurn()
-            return
-        }
-        if poseHideStart == nil { poseHideStart = now }
-        hideForTurn()
-    }
-
-    /// The device has turned to a portrait or landscape pose the interface
-    /// does not show yet, so a turn of the interface is about to follow.
-    private func deviceOrientationChanged() {
-        let device = UIDevice.current.orientation
-        guard device.isPortrait || device.isLandscape,
-              let scene = levels.last?.window?.windowScene else { return }
-        if device.isLandscape != scene.interfaceOrientation.isLandscape {
-            hideForTurn()
-        }
+    /// Runs the paused animations past their end, so the sheet takes its new
+    /// frame at once. The layer clock is moved ahead rather than reset, so
+    /// nothing added to the layer since is disturbed.
+    private func snapAfterTurn(_ level: Level, duration: TimeInterval) {
+        level.turning = false
+        let layer = sheetView(of: level).layer
+        guard layer.speed == 0 else { return }
+        level.clockOffset += duration + 1
+        layer.speed = 1
+        layer.timeOffset = level.clockOffset
     }
 
     private func dismiss(_ source: Level?, value: Any?, result: @escaping FlutterResult) {
@@ -490,6 +368,8 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         guard !level.dismissing else { result(nil); return }
         level.dismissing = true
         level.startupTimeout?.cancel()
+        // A paused layer would never finish the dismissal animation.
+        snapAfterTurn(level, duration: 0)
         let complete = { [weak self] in
             // Reply to the closing engine before destroying it.
             result(nil)
@@ -510,6 +390,7 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
 
     private func failStartup(_ level: Level) {
         level.dismissing = true
+        snapAfterTurn(level, duration: 0)
         let failure = FlutterError(code: "startup_timeout",
                                    message: "The sheet did not finish starting", details: level.arguments["route"])
         if level.presented {
@@ -527,7 +408,6 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         levels.removeLast()
         flushPendingHeights()
         level.window?.isHidden = true
-        if levels.isEmpty { stopWatchingTurns() }
         (levels.last?.window ?? originalHost?.view.window)?.makeKey()
         level.completion(value)
         // Wait until both channel replies leave their callbacks. Each engine
@@ -563,35 +443,10 @@ private final class SheetViewController: FlutterViewController {
     }
 }
 
-/// The sheet's window. A turn reaches the window's frame before any layout
-/// pass or controller callback, so this is the earliest point in the process
-/// at which the sheets can be hidden. Only the width changes with a turn; a
-/// detent change leaves the window alone.
-private final class SheetWindow: UIWindow {
-    var onWidthChange: (() -> Void)?
-
-    override var frame: CGRect {
-        didSet { if frame.width != oldValue.width { onWidthChange?() } }
-    }
-
-    override var bounds: CGRect {
-        didSet { if bounds.width != oldValue.width { onWidthChange?() } }
-    }
-}
-
 private final class SheetWindowRootController: UIViewController {
     var statusBarStyle: UIStatusBarStyle = .default
     var onTurn: ((UIViewControllerTransitionCoordinator) -> Void)?
-    var onWidthChange: (() -> Void)?
-    private var laidOutWidth: CGFloat?
     override var preferredStatusBarStyle: UIStatusBarStyle { statusBarStyle }
-
-    override func viewWillLayoutSubviews() {
-        super.viewWillLayoutSubviews()
-        let width = view.bounds.width
-        if let laidOutWidth, laidOutWidth != width { onWidthChange?() }
-        laidOutWidth = width
-    }
 
     override func viewWillTransition(to size: CGSize,
                                      with coordinator: UIViewControllerTransitionCoordinator) {
