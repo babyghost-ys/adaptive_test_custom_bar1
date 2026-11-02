@@ -24,12 +24,9 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         var dismissing = false
         var closed = false
         var startupTimeout: DispatchWorkItem?
-        /// The sheet's UIKit animations are paused for the first half of a
-        /// turn (see [NativeWidgetSheet.freezeForTurn]).
-        var turning = false
-        /// How far the sheet view's layer clock has been run ahead to finish
-        /// paused animations at once; its `timeOffset` between turns.
-        var clockOffset: CFTimeInterval = 0
+        /// Holds the sheet still for the first half of a turn (see
+        /// [NativeWidgetSheet.freezeForTurn]).
+        let turnHold: TurnHold
 
         init(engine: FlutterEngine, arguments: [String: Any], depth: Int,
              completion: @escaping FlutterResult) {
@@ -40,9 +37,15 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
             detents = arguments["detents"] as? String ?? "fit"
             dismissible = arguments["dismissible"] as? Bool ?? true
             fitHeight = CGFloat((arguments["height"] as? NSNumber)?.doubleValue ?? 320)
-            controller = SheetViewController(engine: engine, nibName: nil, bundle: nil)
+            let controller = SheetViewController(engine: engine, nibName: nil, bundle: nil)
+            self.controller = controller
             channel = FlutterMethodChannel(name: "adaptive_platform_ui/widget_sheet",
                                            binaryMessenger: engine.binaryMessenger)
+            // The view UIKit animates: the drop-shadow container that holds
+            // the content, corners and grabber, or the content view alone.
+            turnHold = TurnHold { [weak controller] in
+                controller.map { ($0.presentationController?.presentedView ?? $0.view).layer }
+            }
         }
     }
 
@@ -142,7 +145,11 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         // A separate transparent presenter keeps the page's view visible and
         // its real appearance lifecycle unchanged, even in compact landscape.
         // UIKit still owns the sheet, grabber, dimming and all drag gestures.
-        let window = UIWindow(windowScene: scene)
+        let window = SheetWindow(windowScene: scene)
+        window.onWidthChange = { [weak self, weak level] in
+            guard let self, let level else { return }
+            self.freezeForTurn(level, coordinator: nil)
+        }
         window.windowLevel = UIWindow.Level(below.windowLevel.rawValue + 1)
         window.backgroundColor = .clear
         let root = SheetWindowRootController()
@@ -310,57 +317,20 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
 
     // MARK: Turning with the screen
 
-    /// Lag after Flutter's half-way redraw before the sheet's frame follows
-    /// it: the new frame reaches the screen a frame or two after the engine
-    /// takes the new size.
-    private static let turnSnapLag: TimeInterval = 1.0 / 30
-
-    /// The view UIKit animates for a level: the drop-shadow container that
-    /// holds the content, corners and grabber, or the content view alone.
-    private func sheetView(of level: Level) -> UIView {
-        level.controller.presentationController?.presentedView ?? level.controller.view
-    }
-
     /// On iOS 26+ a rotation lays a picture of the old screen over the new
-    /// layout and fades it out. Flutter (the page and this sheet) keeps its
-    /// old frame for the first half of the turn, unscaled at the top left,
-    /// which is where that picture shows it; UIKit, though, would move the
-    /// sheet to its new frame from the first frame of the turn, so the
-    /// picture's edge cut across it. The sheet's animations are paused at
-    /// their start instead, so the sheet too lies where the picture shows it
-    /// while the picture fades, then jump to their end at the half-way point,
-    /// as Flutter's new layout arrives. Nothing is hidden or covered.
-    private func freezeForTurn(_ level: Level, coordinator: UIViewControllerTransitionCoordinator) {
-        guard level.presented, !level.closed, !level.dismissing, !level.presenting,
-              !level.turning else { return }
-        let duration = coordinator.transitionDuration
-        guard duration > 0 else { return }
-        let layer = sheetView(of: level).layer
-        level.turning = true
-        let now = layer.convertTime(CACurrentMediaTime(), from: nil)
-        layer.speed = 0
-        layer.timeOffset = now
-        DispatchQueue.main.asyncAfter(deadline: .now() + duration / 2 + Self.turnSnapLag) {
-            [weak self, weak level] in
-            guard let self, let level else { return }
-            self.snapAfterTurn(level, duration: duration)
-        }
-        coordinator.animate(alongsideTransition: nil) { [weak self, weak level] _ in
-            guard let self, let level else { return }
-            self.snapAfterTurn(level, duration: duration)
-        }
-    }
-
-    /// Runs the paused animations past their end, so the sheet takes its new
-    /// frame at once. The layer clock is moved ahead rather than reset, so
-    /// nothing added to the layer since is disturbed.
-    private func snapAfterTurn(_ level: Level, duration: TimeInterval) {
-        level.turning = false
-        let layer = sheetView(of: level).layer
-        guard layer.speed == 0 else { return }
-        level.clockOffset += duration + 1
-        layer.speed = 1
-        layer.timeOffset = level.clockOffset
+    /// layout and fades it out. The page keeps its old frame for the first
+    /// half of the turn (see [TurnHold]); UIKit, though, would move the sheet
+    /// to its new frame from the first frame, so the picture's edge cut
+    /// across it. The sheet is held still too, and jumps to its new frame at
+    /// the half-way point, as its engine draws the new size.
+    ///
+    /// The hold must be in place before UIKit adds the turn's animations. A
+    /// turn reaches the sheet window's frame before any layout pass, so the
+    /// window's frame setter holds (no coordinator yet); the controllers'
+    /// `viewWillTransition` supplies the coordinator for the snap's timing.
+    private func freezeForTurn(_ level: Level, coordinator: UIViewControllerTransitionCoordinator?) {
+        guard level.presented, !level.closed, !level.dismissing, !level.presenting else { return }
+        level.turnHold.hold(coordinator: coordinator)
     }
 
     private func dismiss(_ source: Level?, value: Any?, result: @escaping FlutterResult) {
@@ -371,8 +341,8 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
         guard !level.dismissing else { result(nil); return }
         level.dismissing = true
         level.startupTimeout?.cancel()
-        // A paused layer would never finish the dismissal animation.
-        snapAfterTurn(level, duration: 0)
+        // A held layer would never finish the dismissal animation.
+        level.turnHold.snap(duration: 0)
         let complete = { [weak self] in
             // Reply to the closing engine before destroying it.
             result(nil)
@@ -399,7 +369,7 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
 
     private func failStartup(_ level: Level) {
         level.dismissing = true
-        snapAfterTurn(level, duration: 0)
+        level.turnHold.snap(duration: 0)
         let failure = FlutterError(code: "startup_timeout",
                                    message: "The sheet did not finish starting", details: level.arguments["route"])
         if level.presented {
@@ -450,6 +420,22 @@ private final class SheetViewController: FlutterViewController {
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         onLayout?()
+    }
+}
+
+/// The sheet's window. A turn reaches the window's frame before any layout
+/// pass or controller callback, so this is the earliest point in the process
+/// at which the sheet can be held still. Only the width changes with a turn;
+/// a detent change leaves the window alone.
+private final class SheetWindow: UIWindow {
+    var onWidthChange: (() -> Void)?
+
+    override var frame: CGRect {
+        didSet { if frame.width != oldValue.width { onWidthChange?() } }
+    }
+
+    override var bounds: CGRect {
+        didSet { if bounds.width != oldValue.width { onWidthChange?() } }
     }
 }
 

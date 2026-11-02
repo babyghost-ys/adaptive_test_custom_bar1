@@ -47,6 +47,7 @@ class _NativeSheetAppState extends State<_NativeSheetApp> {
     _content = switch (widget.configuration['route']) {
       'watchlist' => _watchlist(argument as Object),
       'activity' => _activity(argument as Object),
+      'activityShort' => _activity(argument as Object, short: true),
       'date' => DateSheetContent(
         chosen: _own(NativeSheetCodec.date(argument!)),
       ),
@@ -67,9 +68,9 @@ class _NativeSheetAppState extends State<_NativeSheetApp> {
     return WatchlistFilterContent(draft: _own(current));
   }
 
-  Widget _activity(Object argument) {
+  Widget _activity(Object argument, {bool short = false}) {
     final current = NativeSheetCodec.activity(argument);
-    return ActivityFilterContent(draft: _own(current));
+    return ActivityFilterContent(draft: _own(current), short: short);
   }
 
   Widget _accounts(Object argument) {

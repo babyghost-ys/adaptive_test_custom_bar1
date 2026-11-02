@@ -25,7 +25,6 @@ Future<WatchlistFilter?> showWatchlistFilterSheet(
     route: 'watchlist',
     arguments: NativeSheetCodec.encode(current),
     decodeResult: NativeSheetCodec.watchlist,
-    isDismissible: false,
     builder: (_) => WatchlistFilterContent(draft: draft),
   ).whenComplete(draft.dispose);
 }
@@ -40,7 +39,9 @@ class WatchlistFilterContent extends StatelessWidget {
     valueListenable: draft,
     builder: (context, filter, _) => SheetFrame(
       count: assets.where(filter.allows).length,
-      onClose: () => AdaptiveNativeSheet.pop<WatchlistFilter>(context),
+      onReset: filter == const WatchlistFilter()
+          ? null
+          : () => draft.value = const WatchlistFilter(),
       onApply: () => AdaptiveNativeSheet.pop(context, draft.value),
       children: [
         AdaptiveSegmentedControl(

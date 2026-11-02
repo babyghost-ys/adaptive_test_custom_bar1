@@ -60,9 +60,19 @@ final class NativeNavigationHost {
                                                            UINavigationBarAppearance?, UINavigationBarAppearance?)] = [:]
     var rootContent: UIViewController { tabs ?? content }
 
+    /// Holds the page window's content still for the first half of a turn
+    /// (see [TurnHold]); every navigation controller in the window calls it
+    /// from `viewWillTransition`, before UIKit adds the turn's animations.
+    lazy var pageTurnHold = TurnHold { [weak self] in
+        self?.window?.rootViewController?.view.layer
+    }
+
     init(flutter: FlutterViewController, window: UIWindow) {
         self.flutter = flutter
         self.window = window
+        // While the content is held at its old size, the band the window
+        // grows by shows the window itself.
+        window.backgroundColor = .systemBackground
         content = NativeNavigationContent(flutter: flutter)
         navigation = NativeNavigationController(rootViewController: content)
         navigation.interactivePopGestureRecognizer?.isEnabled = false

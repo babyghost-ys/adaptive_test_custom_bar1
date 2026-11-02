@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 
 import 'package:native_widgets_on_duo/core/widgets/filter_section_header.dart';
+import 'package:native_widgets_on_duo/features/activity/view/activity_page.dart';
 import 'package:native_widgets_on_duo/core/widgets/page_scroll.dart';
 import 'package:native_widgets_on_duo/features/investment/bloc/investment_bloc.dart';
 import 'package:native_widgets_on_duo/features/investment/data/demo_assets.dart';
@@ -12,11 +11,9 @@ import 'package:native_widgets_on_duo/features/watchlist/view/watchlist_filter_s
 
 class WatchlistTab extends StatelessWidget {
   const WatchlistTab({super.key});
+  // Rotation test: the Activity page, unchanged, under the Watchlist tab.
   @override
-  Widget build(BuildContext context) =>
-      BlocBuilder<InvestmentBloc, InvestmentState>(
-        builder: (context, state) => Watchlist(state: state),
-      );
+  Widget build(BuildContext context) => const Activity(shortSheet: true);
 }
 
 class Watchlist extends StatefulWidget {
@@ -41,12 +38,6 @@ class _WatchlistState extends State<Watchlist> {
   Widget build(BuildContext context) => PageScroll(
     storageKey: 'watchlist',
     children: [
-      AdaptiveSegmentedControl(
-        labels: const ['Following', 'Discover'],
-        selectedIndex: selectedSection,
-        onValueChanged: (index) => setState(() => selectedSection = index),
-      ),
-      const SizedBox(height: 24),
       FilterSectionHeader(
         title: selectedSection == 0 ? 'Following' : 'Discover',
         onPressed: openFilters,

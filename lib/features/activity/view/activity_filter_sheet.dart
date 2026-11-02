@@ -14,22 +14,30 @@ import 'package:native_widgets_on_duo/features/investment/data/demo_assets.dart'
 /// the native wheel date picker.
 Future<ActivityFilter?> showActivityFilterSheet(
   BuildContext context,
-  ActivityFilter current,
-) {
+  ActivityFilter current, {
+  bool short = false,
+}) {
   final draft = ValueNotifier(current);
   return AdaptiveNativeSheet.show<ActivityFilter>(
     context: context,
-    route: 'activity',
+    route: short ? 'activityShort' : 'activity',
     arguments: NativeSheetCodec.encode(current),
     decodeResult: NativeSheetCodec.activity,
-    builder: (_) => ActivityFilterContent(draft: draft),
+    builder: (_) => ActivityFilterContent(draft: draft, short: short),
   ).whenComplete(draft.dispose);
 }
 
 class ActivityFilterContent extends StatelessWidget {
-  const ActivityFilterContent({super.key, required this.draft});
+  const ActivityFilterContent({
+    super.key,
+    required this.draft,
+    this.short = false,
+  });
 
   final ValueNotifier<ActivityFilter> draft;
+
+  /// Only the kind control and the amount slider: a short sheet.
+  final bool short;
 
   /// Opens the date picker as a second sheet over this one.
   Future<void> _pickDate(BuildContext context) async {
@@ -57,30 +65,33 @@ class ActivityFilterContent extends StatelessWidget {
               draft.value = filter.copyWith(kind: ActivityKind.values[i]),
         ),
         const SizedBox(height: 8),
-        for (final a in assets)
-          SwitchLine(
-            icon: Icons.show_chart_rounded,
-            text: a.symbol,
-            value: filter.symbols.contains(a.symbol),
-            onChanged: (on) => draft.value = filter.copyWith(
-              symbols: on
-                  ? {...filter.symbols, a.symbol}
-                  : ({...filter.symbols}..remove(a.symbol)),
+        if (!short)
+          for (final a in assets)
+            SwitchLine(
+              icon: Icons.show_chart_rounded,
+              text: a.symbol,
+              value: filter.symbols.contains(a.symbol),
+              onChanged: (on) => draft.value = filter.copyWith(
+                symbols: on
+                    ? {...filter.symbols, a.symbol}
+                    : ({...filter.symbols}..remove(a.symbol)),
+              ),
             ),
+        if (!short) ...[
+          _DateLine(
+            since: filter.since,
+            onTap: () => _pickDate(context),
+            onClear: () => draft.value = filter.copyWith(clearSince: true),
           ),
-        _DateLine(
-          since: filter.since,
-          onTap: () => _pickDate(context),
-          onClear: () => draft.value = filter.copyWith(clearSince: true),
-        ),
-        const SizedBox(height: 12),
-        AdaptiveSegmentedControl(
-          labels: const ['Any time', '7 days', '3 days'],
-          selectedIndex: filter.period.index,
-          onValueChanged: (i) =>
-              draft.value = filter.copyWith(period: ActivityPeriod.values[i]),
-        ),
-        const SizedBox(height: 16),
+          const SizedBox(height: 12),
+          AdaptiveSegmentedControl(
+            labels: const ['Any time', '7 days', '3 days'],
+            selectedIndex: filter.period.index,
+            onValueChanged: (i) =>
+                draft.value = filter.copyWith(period: ActivityPeriod.values[i]),
+          ),
+          const SizedBox(height: 16),
+        ],
         label(
           filter.minAmount <= 0
               ? 'Any amount'

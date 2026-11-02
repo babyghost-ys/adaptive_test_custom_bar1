@@ -48,6 +48,13 @@ final class NativeNavigationController: UINavigationController, UINavigationCont
         delegate = self
         updatePopGestures()
     }
+    override func viewWillTransition(to size: CGSize,
+                                     with coordinator: UIViewControllerTransitionCoordinator) {
+        // Before super forwards the turn to the page's Flutter controller,
+        // and before UIKit lays the new size out with animation.
+        NativeNavigationHost.installed?.pageTurnHold.hold(coordinator: coordinator)
+        super.viewWillTransition(to: size, with: coordinator)
+    }
     override var childForStatusBarStyle: UIViewController? { topViewController }
     override var childForStatusBarHidden: UIViewController? { topViewController }
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask {

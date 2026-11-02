@@ -10,7 +10,10 @@ import 'package:native_widgets_on_duo/features/activity/view/activity_filter_she
 import 'package:native_widgets_on_duo/features/investment/data/demo_assets.dart';
 
 class Activity extends StatefulWidget {
-  const Activity({super.key});
+  const Activity({super.key, this.shortSheet = false});
+
+  /// Opens the short filter sheet (kind and amount only).
+  final bool shortSheet;
   @override
   State<Activity> createState() => _ActivityState();
 }
@@ -19,7 +22,11 @@ class _ActivityState extends State<Activity> {
   ActivityFilter filter = const ActivityFilter();
 
   Future<void> openFilters() async {
-    final result = await showActivityFilterSheet(context, filter);
+    final result = await showActivityFilterSheet(
+      context,
+      filter,
+      short: widget.shortSheet,
+    );
     if (result != null && mounted) setState(() => filter = result);
   }
 
