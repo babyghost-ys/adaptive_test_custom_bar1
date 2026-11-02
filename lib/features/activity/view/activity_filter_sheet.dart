@@ -17,32 +17,19 @@ Future<ActivityFilter?> showActivityFilterSheet(
   ActivityFilter current,
 ) {
   final draft = ValueNotifier(current);
-  final more = ValueNotifier(
-    current.period != ActivityPeriod.all ||
-        current.minAmount > 0 ||
-        current.since != null,
-  );
   return AdaptiveNativeSheet.show<ActivityFilter>(
     context: context,
     route: 'activity',
     arguments: NativeSheetCodec.encode(current),
     decodeResult: NativeSheetCodec.activity,
-    builder: (_) => ActivityFilterContent(draft: draft, more: more),
-  ).whenComplete(() {
-    draft.dispose();
-    more.dispose();
-  });
+    builder: (_) => ActivityFilterContent(draft: draft),
+  ).whenComplete(draft.dispose);
 }
 
 class ActivityFilterContent extends StatelessWidget {
-  const ActivityFilterContent({
-    super.key,
-    required this.draft,
-    required this.more,
-  });
+  const ActivityFilterContent({super.key, required this.draft});
 
   final ValueNotifier<ActivityFilter> draft;
-  final ValueNotifier<bool> more;
 
   /// Opens the date picker as a second sheet over this one.
   Future<void> _pickDate(BuildContext context) async {
@@ -63,68 +50,49 @@ class ActivityFilterContent extends StatelessWidget {
           : () => draft.value = const ActivityFilter(),
       onApply: () => AdaptiveNativeSheet.pop(context, draft.value),
       children: [
-        ChipGroup<ActivityKind>(
-          options: const [
-            (ActivityKind.all, Icons.all_inclusive_rounded, 'All'),
-            (ActivityKind.bought, Icons.add_circle_outline_rounded, 'Bought'),
-            (ActivityKind.dividends, Icons.south_west_rounded, 'Dividends'),
-          ],
-          isSelected: (k) => filter.kind == k,
-          onTap: (k) => draft.value = filter.copyWith(kind: k),
+        AdaptiveSegmentedControl(
+          labels: const ['All', 'Bought', 'Dividends'],
+          selectedIndex: filter.kind.index,
+          onValueChanged: (i) =>
+              draft.value = filter.copyWith(kind: ActivityKind.values[i]),
+        ),
+        const SizedBox(height: 8),
+        for (final a in assets)
+          SwitchLine(
+            icon: Icons.show_chart_rounded,
+            text: a.symbol,
+            value: filter.symbols.contains(a.symbol),
+            onChanged: (on) => draft.value = filter.copyWith(
+              symbols: on
+                  ? {...filter.symbols, a.symbol}
+                  : ({...filter.symbols}..remove(a.symbol)),
+            ),
+          ),
+        _DateLine(
+          since: filter.since,
+          onTap: () => _pickDate(context),
+          onClear: () => draft.value = filter.copyWith(clearSince: true),
+        ),
+        const SizedBox(height: 12),
+        AdaptiveSegmentedControl(
+          labels: const ['Any time', '7 days', '3 days'],
+          selectedIndex: filter.period.index,
+          onValueChanged: (i) =>
+              draft.value = filter.copyWith(period: ActivityPeriod.values[i]),
         ),
         const SizedBox(height: 16),
-        ChipGroup<String>(
-          options: [
-            for (final a in assets)
-              (a.symbol, Icons.show_chart_rounded, a.symbol),
-          ],
-          isSelected: filter.symbols.contains,
-          onTap: (s) => draft.value = filter.copyWith(
-            symbols: filter.symbols.contains(s)
-                ? ({...filter.symbols}..remove(s))
-                : {...filter.symbols, s},
-          ),
+        label(
+          filter.minAmount <= 0
+              ? 'Any amount'
+              : 'Over ${money(filter.minAmount)}',
+          size: 28,
+          weight: FontWeight.w600,
         ),
-        OpenSection(
-          open: more,
-          icon: Icons.tune_rounded,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _DateLine(
-                since: filter.since,
-                onTap: () => _pickDate(context),
-                onClear: () => draft.value = filter.copyWith(clearSince: true),
-              ),
-              const SizedBox(height: 12),
-              ChipGroup<ActivityPeriod>(
-                options: const [
-                  (ActivityPeriod.all, Icons.all_inclusive_rounded, 'Any time'),
-                  (
-                    ActivityPeriod.week,
-                    Icons.calendar_month_outlined,
-                    '7 days',
-                  ),
-                  (ActivityPeriod.threeDays, Icons.schedule_rounded, '3 days'),
-                ],
-                isSelected: (p) => filter.period == p,
-                onTap: (p) => draft.value = filter.copyWith(period: p),
-              ),
-              const SizedBox(height: 16),
-              label(
-                filter.minAmount <= 0
-                    ? 'Any amount'
-                    : 'Over ${money(filter.minAmount)}',
-                size: 28,
-                weight: FontWeight.w600,
-              ),
-              Slider(
-                value: filter.minAmount,
-                max: ActivityFilter.maxAmount,
-                onChanged: (v) => draft.value = filter.copyWith(minAmount: v),
-              ),
-            ],
-          ),
+        AdaptiveSlider(
+          value: filter.minAmount,
+          max: ActivityFilter.maxAmount,
+          activeColor: red,
+          onChanged: (v) => draft.value = filter.copyWith(minAmount: v),
         ),
       ],
     ),

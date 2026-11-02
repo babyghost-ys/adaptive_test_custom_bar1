@@ -4,13 +4,11 @@ import 'package:flutter/material.dart';
 
 import 'package:native_widgets_on_duo/app/native_sheet_codec.dart';
 import 'package:native_widgets_on_duo/app/theme/palette.dart';
-import 'package:native_widgets_on_duo/features/activity/models/activity_filter.dart';
 import 'package:native_widgets_on_duo/features/activity/view/activity_filter_sheet.dart';
 import 'package:native_widgets_on_duo/features/markets/view/market_filter_sheet.dart';
 import 'package:native_widgets_on_duo/features/orders/models/order.dart';
 import 'package:native_widgets_on_duo/features/orders/view/orders_filter_sheet.dart';
 import 'package:native_widgets_on_duo/features/sign_in/view/sign_in_sheet.dart';
-import 'package:native_widgets_on_duo/features/watchlist/models/watchlist_filter.dart';
 import 'package:native_widgets_on_duo/features/watchlist/view/watchlist_filter_sheet.dart';
 
 Future<void> runNativeSheetApp() async {
@@ -66,24 +64,12 @@ class _NativeSheetAppState extends State<_NativeSheetApp> {
 
   Widget _watchlist(Object argument) {
     final current = NativeSheetCodec.watchlist(argument);
-    return WatchlistFilterContent(
-      draft: _own(current),
-      more: _own(
-        current.maxPrice < WatchlistFilter.ceiling || current.types.isNotEmpty,
-      ),
-    );
+    return WatchlistFilterContent(draft: _own(current));
   }
 
   Widget _activity(Object argument) {
     final current = NativeSheetCodec.activity(argument);
-    return ActivityFilterContent(
-      draft: _own(current),
-      more: _own(
-        current.period != ActivityPeriod.all ||
-            current.minAmount > 0 ||
-            current.since != null,
-      ),
-    );
+    return ActivityFilterContent(draft: _own(current));
   }
 
   Widget _accounts(Object argument) {

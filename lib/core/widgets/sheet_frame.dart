@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 
 import 'package:native_widgets_on_duo/app/theme/palette.dart';
 import 'package:native_widgets_on_duo/core/widgets/label.dart';
@@ -80,81 +81,32 @@ class SheetFrame extends StatelessWidget {
   );
 }
 
-/// A row of single-choice or multi-choice chips.
-class ChipGroup<T> extends StatelessWidget {
-  const ChipGroup({
+/// An icon and title with a native switch at the trailing edge. One fixed
+/// row at any width, so a sheet holding it keeps its height when the screen
+/// turns.
+class SwitchLine extends StatelessWidget {
+  const SwitchLine({
     super.key,
-    required this.options,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  final List<(T, IconData, String)> options;
-  final bool Function(T value) isSelected;
-  final ValueChanged<T> onTap;
-
-  @override
-  Widget build(BuildContext context) => Wrap(
-    spacing: 8,
-    runSpacing: 8,
-    children: [
-      for (final (value, icon, text) in options)
-        ChoiceChip(
-          avatar: Icon(icon, size: 18),
-          label: Text(text),
-          selected: isSelected(value),
-          showCheckmark: false,
-          onSelected: (_) => onTap(value),
-        ),
-    ],
-  );
-}
-
-/// A titled section that opens and closes, animating its height. The open
-/// state belongs to the caller, so the widget can stay stateless.
-class OpenSection extends StatelessWidget {
-  const OpenSection({
-    super.key,
-    required this.open,
     required this.icon,
-    required this.child,
+    required this.text,
+    required this.value,
+    required this.onChanged,
   });
 
-  final ValueNotifier<bool> open;
   final IconData icon;
-  final Widget child;
+  final String text;
+  final bool value;
+  final ValueChanged<bool> onChanged;
 
   @override
-  Widget build(BuildContext context) => ValueListenableBuilder<bool>(
-    valueListenable: open,
-    builder: (context, isOpen, _) => Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 6),
+    child: Row(
       children: [
-        InkWell(
-          onTap: () => open.value = !isOpen,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Row(
-              children: [
-                Icon(icon, color: muted),
-                const Spacer(),
-                AnimatedRotation(
-                  turns: isOpen ? 0.5 : 0,
-                  duration: const Duration(milliseconds: 200),
-                  child: const Icon(Icons.expand_more_rounded, color: muted),
-                ),
-              ],
-            ),
-          ),
-        ),
-        AnimatedSize(
-          duration: const Duration(milliseconds: 260),
-          curve: Curves.easeOutCubic,
-          alignment: Alignment.topCenter,
-          child: isOpen
-              ? Padding(padding: const EdgeInsets.only(bottom: 8), child: child)
-              : const SizedBox(width: double.infinity),
-        ),
+        Icon(icon, color: muted),
+        const SizedBox(width: 14),
+        Expanded(child: label(text, size: 17)),
+        AdaptiveSwitch(value: value, activeColor: red, onChanged: onChanged),
       ],
     ),
   );
