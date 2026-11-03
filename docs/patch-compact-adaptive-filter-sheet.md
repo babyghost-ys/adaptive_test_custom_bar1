@@ -277,3 +277,42 @@ show the original phone-only cut.
 Reference implementation: `lib/features/markets/view/market_filter_sheet.dart`,
 `lib/core/widgets/sheet_frame.dart`, `lib/app/native_sheet_app.dart`, and
 `packages/adaptive_platform_ui/ios/adaptive_platform_ui/Sources/adaptive_platform_ui/Overlays/NativeWidgetSheet.swift`.
+
+## Warning to the next AI: mistakes you must not repeat
+
+The rotation fix above took 22 recorded attempts and a second AI to find,
+because the first AI made the following errors. Do not make them.
+
+1. **You must not hold a layer without checking that it holds.** The first
+   AI paused the presented sheet view's layer and took "hiding that view makes
+   the sheet vanish" as proof that its layer carried the rotation animation.
+   Hiding proves containment, not where the animation lives. For the page
+   window it held the root view, the top of the tree; for the sheet window it
+   held a child and let the parent animate "because the dimming is harmless".
+   That guess was the bug. Hold the top of the tree, not the node you believe
+   is right.
+2. **You must not reason past the fact that discriminates your hypotheses.**
+   A tall sheet's top edge moves about 50 pt between orientations; a short
+   one about 470 pt. Only a leaking hold produces exactly "tall is clean,
+   short cuts". The first AI wrote that down, then chose a navigation-bar
+   theory because it implicated UIKit rather than its own code, and spent
+   three builds on it. Keep the hypothesis that implicates your own code ahead
+   of the one that implicates the platform.
+3. **You must not read "no change" as "wrong timing".** When pausing from the
+   window's frame setter changed nothing, the right conclusion was that the
+   pause acted on the wrong object. When a build fails, first ask whether the
+   fix acted on the right object, before moving to a different theory.
+4. **You must not judge rotation builds by eye.** Six builds were judged at
+   normal speed with no recording. The notes from October already said timing
+   changes need a frame-by-frame recording. The second AI asked the owner for
+   one, read frame 241, saw the sheet itself split against the picture, and
+   changed one line. Before any build that depends on "this layer is the one
+   that moves", get a recording and name the frame.
+5. **You must not leave a test rig in the tree.** Test scaffolding (the
+   Watchlist tab showing another page with a short sheet) was committed to
+   the main branch and left there. Restore it in the same session, before
+   you report.
+
+The retry prompt written for this bug already contained every one of these
+rules; the AI that wrote it did not follow them itself. Having a rule written
+down is not the same as applying it to your own next build.
