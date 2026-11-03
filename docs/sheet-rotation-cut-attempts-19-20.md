@@ -1,4 +1,4 @@
-# Sheet rotation cut: attempts 19 to 21 (2026-11-02)
+# Sheet rotation cut: attempts 19 to 22 (2026-11-02)
 
 Continues [sheet-rotation-cut-failed-attempts.md](sheet-rotation-cut-failed-attempts.md)
 (attempts 1 to 18). Read that first for the bug, the old-screen picture iOS 26+
@@ -24,10 +24,16 @@ Every build here was a signed Release build on Flutter `main`
   removes the cut, but the user rejected it as a workaround: in landscape the
   sheet then covers the navigation bar even when the content is short. Its
   resolver is removed again; it stays the proven fallback.
-- **Attempt 21, installed, not judged:** the page window's content is held
-  still for the first half of a turn the way the sheet already is, so the
-  navigation bar no longer grows under the picture. Short sheets are short
-  again in landscape.
+- **Attempt 21 (user: "the cut is still here for that page"):** the page
+  window's content is held still for the first half of a turn the way the
+  sheet already is, so the navigation bar no longer grows under the picture.
+  Short sheets are short again in landscape. Kept in; not enough on its own.
+- **Attempt 22 (user: "still has the issues"):** the bar-coloured strip the
+  package keeps above the navigation bar is no longer added and removed in
+  layout, which no hold can pause; it stays in place and only its frame
+  changes. Kept in; not the cause, or not the only one.
+- **Open.** The short-sheet cut is not fixed. The next session starts from
+  [sheet-rotation-retry-prompt.md](sheet-rotation-retry-prompt.md).
 
 ## Attempt 19 (commit `801e350`): nothing hidden, old frame held where the picture shows it
 
@@ -181,13 +187,60 @@ This is the discrete resize iOS offers single-surface apps, done for the
 whole window, page and sheet alike: old screen rigid under the fading
 picture, one snap, rotation completes. Nothing is hidden or copied.
 
-If it fails: the page's top under the picture is then not the bar either.
-Check first whether the root view really paused (a one-frame leak of the bar
-would show as a 2 to 3 pt edge), then whether the status bar region (system
-drawn, outside the app's layers) is what the user sees.
+**Result (user): "the cut is still here for that page."** Committed as
+`e8c9bbc` together with the test rig. The hold stays in: the discrete turn
+is right in principle, and it pauses everything that is an animation. It
+cannot pause what is not one, which is where attempt 22 looks.
 
-If it works: restore the Watchlist page and sheet (see the working tree
-section), keep `TurnHold`, and re-judge the plain page and the Duo.
+## Attempt 22 (2026-11-02): no view is added or removed as a turn begins. FAILED
+
+A layer hold pauses animations. Adding or removing a view is not an
+animation: a view added during the first layout of a turn is on screen at
+its final frame from the first frame, under the picture. The package did
+exactly that in the page's top region.
+
+`NativeNavigationController.layoutNavigationSafeAreaBackground` keeps a
+bar-coloured strip above the navigation bar (for the Duo's vertical layout,
+where UIKit's opaque bar background can leave a safe-area gap). On an
+iPhone it is inserted whenever the bar's `minY` is above the view's top, that
+is in portrait (59 pt, under the status bar), and removed in landscape, where
+the bar starts at 0. It runs from `viewDidLayoutSubviews`, which UIKit calls
+with the new geometry at the start of the turn:
+
+- Landscape to portrait: the strip is inserted at frame 1, 59 pt tall and
+  red, below the bar, which the hold keeps at its landscape height of 32 pt.
+  The band from 32 to 59 pt is red at once, where the picture shows dimmed
+  page content. A short sheet in landscape starts at about 100 pt, so that
+  band is in view; a full-height sheet covers it. That is the one condition
+  every build in the table shares.
+- Portrait to landscape: the strip is removed at frame 1, but UIKit's own bar
+  background, held at its portrait geometry, still covers the status bar
+  area, so nothing changes there. The user described the cut in terms of the
+  landscape sheet, which fits.
+
+The change: the strip stays in the hierarchy and only its frame changes
+(height 0 when the bar is hidden or starts at the top), so the change is an
+animation, paused by the hold and finished at the snap with everything else.
+It is inserted once, below the bar, and only while the bar is in the
+hierarchy (UIKit removes a hidden bar). The drawer cover still finds it
+through `safeAreaBackground`; a 0 pt frame masks nothing.
+
+Other add-or-remove work in the same layout paths was checked and does not
+run during a plain turn: `transitionHeaderBackdrop` (route transitions with
+a Flutter header only), `largeTitleBackdrop` (large-title pages only), the
+search transition glass (search only), the Duo strip shadow mask (Duo only).
+
+**Result (user): "still has the issues."** Not committed at the time of
+writing (working tree on top of `e8c9bbc`). The change is correct on its own
+and stays.
+
+What has never been measured in this series: whether the holds take effect
+on the phone at all (the pause of the sheet view, of the page root view),
+and what exactly moves in the page's top region during the first frames of
+a landscape-to-portrait turn with a short sheet. Every build since attempt
+19 was judged by eye at normal speed. A slow-motion recording of that turn,
+read frame by frame, is the missing evidence; the retry prompt asks for it
+first.
 
 ## Test scaffolding left in the tree
 
@@ -204,8 +257,55 @@ be undone before shipping:
   with a reset icon (was `isDismissible: false` with a close icon).
 
 Package changes that should stay: delegate-based refusal, overlay pinning,
-`SheetWindow` hold, `TurnHold`, the page root hold. Attempt 20's detent
+`SheetWindow` hold, `TurnHold`, the page root hold, the persistent safe-area
+strip. Attempt 20's detent
 resolver is removed; its code is in this document's history if needed.
 
 To restore the Watchlist page: `git checkout 49ea038 -- lib/features/watchlist/view/watchlist_page.dart`
 and revert the `short` plumbing in the three Activity files and the sheet app.
+
+## Attempt 23: start the page hold at the tab controller
+
+The owner asked to proceed without a new recording. `SearchTabsController`
+now starts the existing page-root `TurnHold` in `viewWillTransition` before
+calling `super`, ahead of forwarding the transition to the selected navigation
+controller. The navigation controller's existing hook remains for pages
+without tabs. This does not change the sheet height, cover anything or add a
+timer.
+
+This is an unverified timing hypothesis: the earlier callback may still occur
+after the relevant UIKit layout, and there is no frame-by-frame evidence that
+the page hold is the cause of the remaining cut.
+
+**Result: failed.** The signed Release build was installed on the iPhone 18
+Pro without launching it; the owner reported that the cut remains and supplied
+`GZPJ2967.MP4` and `IMG_0342.PNG`.
+
+## Attempt 24: hold the sheet presentation container
+
+The recording is a 60 fps screen recording. Frame numbers below are zero-based.
+Landscape is intact at frame 240. At frame 241, as the landscape-to-portrait
+turn starts, a sharp edge splits the sheet at the old picture's boundary: its
+top edge, segmented control, slider and apply button are displaced together on
+the two sides. The difference grows through frames 242–244, and the bar title
+also splits. Frames 245–251 show the old sheet fading against the moving live
+sheet; portrait has settled by about frame 257. The opposite turn begins around
+frame 127, with the landscape layout settling around frame 143.
+
+The visible cut is therefore not confined to the page's top region, contrary to
+the stronger claim under attempt 20 above. The video shows that the sheet and
+old picture do not stay aligned; it does not identify which UIKit layer moves,
+whether the hold fires early enough, or whether the motion is a pausable layer
+animation.
+
+The sheet's existing `TurnHold` now targets the presentation controller's
+`containerView` layer, an ancestor of the presented sheet, instead of the
+presented view alone. This can also pause animations applied to that container,
+which includes the dimming view. `TurnHold` retains a weak reference to the
+layer it actually paused, so it resumes that same layer if presentation changes.
+The existing timing hooks and sheet detents are unchanged. This remains a
+hypothesis: an ancestor outside the container or a non-animated layout change
+would not be held.
+
+**Status: installed, not judged.** The signed Release build was installed on
+the iPhone 18 Pro without launching it; configuration was returned to Debug.

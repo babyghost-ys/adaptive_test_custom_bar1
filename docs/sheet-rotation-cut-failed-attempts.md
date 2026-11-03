@@ -1,6 +1,6 @@
 # Sheet rotation cut on a real phone: failed attempts
 
-Attempts 19 to 21 (2026-11-02), and the builds that narrowed the remaining cut
+Attempts 19 to 22 (2026-11-02), and the builds that narrowed the remaining cut
 down to sheets shorter than the screen in landscape, are in
 [sheet-rotation-cut-attempts-19-20.md](sheet-rotation-cut-attempts-19-20.md).
 

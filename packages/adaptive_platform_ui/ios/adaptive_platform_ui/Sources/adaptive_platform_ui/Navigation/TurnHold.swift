@@ -23,6 +23,9 @@ final class TurnHold {
     private static let fallback: TimeInterval = 0.5
 
     private let layer: () -> CALayer?
+    /// Resume the same layer that was paused even if the presentation changes
+    /// while a turn or dismissal is in progress.
+    private weak var heldLayer: CALayer?
     /// How far the layer clock has been run ahead to finish paused
     /// animations at once; its `timeOffset` between turns. Moved ahead, never
     /// reset, so nothing added to the layer since is disturbed.
@@ -41,9 +44,10 @@ final class TurnHold {
     /// scheduled from its duration (half way, plus a frame) and again from
     /// its completion; without one the fallback ends the hold.
     func hold(coordinator: UIViewControllerTransitionCoordinator?) {
-        guard let layer = layer() else { return }
+        guard let layer = holding ? heldLayer : layer() else { return }
         if !holding {
             holding = true
+            heldLayer = layer
             snapScheduled = false
             let now = layer.convertTime(CACurrentMediaTime(), from: nil)
             layer.speed = 0
@@ -76,7 +80,9 @@ final class TurnHold {
         snapScheduled = false
         fallbackWork?.cancel()
         fallbackWork = nil
-        guard let layer = layer(), layer.speed == 0 else { return }
+        let pausedLayer = heldLayer
+        heldLayer = nil
+        guard let layer = pausedLayer, layer.speed == 0 else { return }
         clockOffset += duration + 1
         layer.speed = 1
         layer.timeOffset = clockOffset

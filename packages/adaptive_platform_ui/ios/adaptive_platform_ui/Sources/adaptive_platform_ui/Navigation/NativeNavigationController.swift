@@ -129,19 +129,26 @@ final class NativeNavigationController: UINavigationController, UINavigationCont
         // The vertical navigation layout can leave a safe-area strip above
         // UIKit's opaque bar background. Continue only its colour to the edge;
         // UIKit retains full ownership of bar height, title and side controls.
-        guard !isNavigationBarHidden,
-              let color = topViewController?.navigationItem.standardAppearance?.backgroundColor
-                ?? sharedBarColor,
-              navigationBar.frame.minY > view.bounds.minY else {
-            navigationSafeAreaBackground.removeFromSuperview()
-            return
-        }
-        navigationSafeAreaBackground.backgroundColor = color
+        //
+        // The strip stays in the hierarchy and only its frame changes, so the
+        // change is animated with the bar and held with it through a turn
+        // (see [TurnHold]). Adding or removing it is not animated: under the
+        // picture iOS 26+ lays over a turn, with the bar still at its old
+        // height, the strip appeared at once as a band of bar colour over
+        // page content (landscape to portrait) and showed as a cut.
+        let color = isNavigationBarHidden
+            ? nil
+            : topViewController?.navigationItem.standardAppearance?.backgroundColor ?? sharedBarColor
+        if let color { navigationSafeAreaBackground.backgroundColor = color }
         navigationSafeAreaBackground.frame = CGRect(
             x: view.bounds.minX, y: view.bounds.minY,
             width: view.bounds.width,
-            height: navigationBar.frame.minY - view.bounds.minY)
-        view.insertSubview(navigationSafeAreaBackground, belowSubview: navigationBar)
+            height: color == nil ? 0 : max(0, navigationBar.frame.minY - view.bounds.minY))
+        // UIKit takes a hidden bar out of the hierarchy; the strip can only
+        // be placed below the bar while the bar is there.
+        if navigationSafeAreaBackground.superview !== view, navigationBar.superview === view {
+            view.insertSubview(navigationSafeAreaBackground, belowSubview: navigationBar)
+        }
     }
     private func layoutTransitionBackdrop() {
         guard let content = backdropContent,

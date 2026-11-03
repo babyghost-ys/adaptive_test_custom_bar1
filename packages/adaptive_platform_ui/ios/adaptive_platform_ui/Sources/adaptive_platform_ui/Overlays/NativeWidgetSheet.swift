@@ -41,10 +41,11 @@ final class NativeWidgetSheet: NSObject, UIAdaptivePresentationControllerDelegat
             self.controller = controller
             channel = FlutterMethodChannel(name: "adaptive_platform_ui/widget_sheet",
                                            binaryMessenger: engine.binaryMessenger)
-            // The view UIKit animates: the drop-shadow container that holds
-            // the content, corners and grabber, or the content view alone.
+            // Hold the presentation container rather than just the presented
+            // view, so animations applied above the sheet also pause. This
+            // container includes UIKit's dimming view as well as the sheet.
             turnHold = TurnHold { [weak controller] in
-                controller.map { ($0.presentationController?.presentedView ?? $0.view).layer }
+                controller?.presentationController?.containerView?.layer
             }
         }
     }

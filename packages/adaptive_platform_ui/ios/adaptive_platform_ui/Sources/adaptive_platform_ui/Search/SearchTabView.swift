@@ -23,6 +23,15 @@ private final class SearchTabsContainer: UIView {
 
 private final class SearchTabsController: UITabBarController {
     var layoutChanged: (() -> Void)?
+    override func viewWillTransition(to size: CGSize,
+                                     with coordinator: UIViewControllerTransitionCoordinator) {
+        // Hold the page before the tab controller forwards the transition to
+        // its children. Non-tabbed pages retain the navigation controller hook.
+        if let host = NativeNavigationHost.installed, host.tabs === self {
+            host.pageTurnHold.hold(coordinator: coordinator)
+        }
+        super.viewWillTransition(to: size, with: coordinator)
+    }
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
         selectedViewController?.supportedInterfaceOrientations ?? super.supportedInterfaceOrientations
     }
