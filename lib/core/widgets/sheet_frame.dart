@@ -47,15 +47,34 @@ class SheetFrame extends StatelessWidget {
                   alignment: Alignment.centerLeft,
                   child: label('Filters', size: 22, weight: FontWeight.w600),
                 ),
-                IconButton(
-                  onPressed: onClose ?? onReset,
-                  icon: Icon(
-                    onClose == null
-                        ? Icons.restart_alt_rounded
-                        : Icons.close_rounded,
+                if (onClose != null &&
+                    AdaptiveStyle.of(context) == AdaptiveStyle.native)
+                  Semantics(
+                    label: 'Close',
+                    button: true,
+                    child: SizedBox(
+                      width: 44,
+                      height: 44,
+                      child: AdaptiveButton.sfSymbol(
+                        onPressed: onClose,
+                        sfSymbol: const SFSymbol('xmark', size: 15, color: ink),
+                        color: ink,
+                        style: AdaptiveButtonStyle.plain,
+                        useSmoothRectangleBorder: false,
+                      ),
+                    ),
+                  )
+                else
+                  IconButton(
+                    tooltip: onClose == null ? 'Reset' : 'Close',
+                    onPressed: onClose ?? onReset,
+                    icon: Icon(
+                      onClose == null
+                          ? Icons.restart_alt_rounded
+                          : Icons.close_rounded,
+                    ),
+                    color: ink,
                   ),
-                  color: ink,
-                ),
               ],
             ),
             const SizedBox(height: 16),
